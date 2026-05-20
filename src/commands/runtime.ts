@@ -4,7 +4,7 @@ import {
 	removeNode,
 	updateNode,
 } from "../ir-mutations.js";
-import { findNode, isGroupNode, parentOf } from "../ir-walkers.js";
+import { findNode, parentOf } from "../ir-walkers.js";
 import type {
 	CanvasGroupNode,
 	CanvasImageNode,
@@ -486,7 +486,3 @@ export function applyCommand(
 	}
 }
 
-// Internal helper exported for downstream tests / debugging only.
-export const __internal = {
-	isGroupNode,
-};
