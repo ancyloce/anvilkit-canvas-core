@@ -1,0 +1,145 @@
+import { describe, expect, it } from "vitest";
+import {
+	createCanvasIR,
+	createEllipse,
+	createGroup,
+	createImage,
+	createLine,
+	createPage,
+	createRect,
+	createText,
+} from "../ir-builders.js";
+import {
+	CanvasEllipseNodeSchema,
+	CanvasGroupNodeSchema,
+	CanvasIRSchema,
+	CanvasImageNodeSchema,
+	CanvasLineNodeSchema,
+	CanvasPageSchema,
+	CanvasRectNodeSchema,
+	CanvasTextNodeSchema,
+} from "../ir-validators.js";
+
+describe("createCanvasIR", () => {
+	it("returns a schema-valid IR with no args", () => {
+		const ir = createCanvasIR();
+		expect(CanvasIRSchema.safeParse(ir).success).toBe(true);
+		expect(ir.version).toBe("1");
+		expect(ir.pages).toHaveLength(1);
+		expect(ir.title).toBe("Untitled");
+	});
+
+	it("uses the injected clock", () => {
+		const ir = createCanvasIR({ now: () => "2026-01-01T00:00:00.000Z" });
+		expect(ir.metadata.createdAt).toBe("2026-01-01T00:00:00.000Z");
+		expect(ir.metadata.updatedAt).toBe("2026-01-01T00:00:00.000Z");
+	});
+
+	it("produces unique ids across successive calls", () => {
+		const a = createCanvasIR();
+		const b = createCanvasIR();
+		expect(a.id).not.toBe(b.id);
+		expect(a.pages[0]?.id).not.toBe(b.pages[0]?.id);
+	});
+
+	it("accepts a user-supplied page list", () => {
+		const customPage = createPage({ name: "Hero" });
+		const ir = createCanvasIR({ pages: [customPage] });
+		expect(ir.pages).toHaveLength(1);
+		expect(ir.pages[0]?.name).toBe("Hero");
+	});
+});
+
+describe("createPage", () => {
+	it("returns a schema-valid page with default size + background + root group", () => {
+		const page = createPage();
+		expect(CanvasPageSchema.safeParse(page).success).toBe(true);
+		expect(page.size).toEqual({ width: 1080, height: 1080, unit: "px" });
+		expect(page.background).toEqual({ kind: "solid", value: "#ffffff" });
+		expect(page.root.type).toBe("group");
+		expect(page.root.bounds).toEqual({ width: 1080, height: 1080 });
+	});
+});
+
+describe("createGroup", () => {
+	it("returns a schema-valid empty group with default transform", () => {
+		const g = createGroup({ bounds: { width: 100, height: 100 } });
+		expect(CanvasGroupNodeSchema.safeParse(g).success).toBe(true);
+		expect(g.transform).toEqual({
+			x: 0,
+			y: 0,
+			rotation: 0,
+			scaleX: 1,
+			scaleY: 1,
+		});
+		expect(g.children).toEqual([]);
+		expect(g.zIndex).toBe(0);
+	});
+
+	it("merges partial transforms with the identity default", () => {
+		const g = createGroup({ transform: { x: 10, rotation: 45 } });
+		expect(g.transform).toEqual({
+			x: 10,
+			y: 0,
+			rotation: 45,
+			scaleX: 1,
+			scaleY: 1,
+		});
+	});
+});
+
+describe("createRect / createEllipse", () => {
+	it("createRect returns a schema-valid rect", () => {
+		const r = createRect({ bounds: { width: 50, height: 30 }, fill: "#abc" });
+		expect(CanvasRectNodeSchema.safeParse(r).success).toBe(true);
+		expect(r.fill).toBe("#abc");
+		expect(r.transform.scaleX).toBe(1);
+	});
+
+	it("createEllipse returns a schema-valid ellipse", () => {
+		const e = createEllipse({ bounds: { width: 40, height: 40 } });
+		expect(CanvasEllipseNodeSchema.safeParse(e).success).toBe(true);
+	});
+});
+
+describe("createLine", () => {
+	it("derives bounds from points and defaults stroke", () => {
+		const l = createLine({ points: [0, 0, 100, 50] });
+		expect(CanvasLineNodeSchema.safeParse(l).success).toBe(true);
+		expect(l.bounds).toEqual({ width: 100, height: 50 });
+		expect(l.stroke).toBe("#000000");
+	});
+
+	it("honors a caller-provided bounds override", () => {
+		const l = createLine({
+			points: [0, 0, 100, 50],
+			bounds: { width: 200, height: 200 },
+		});
+		expect(l.bounds).toEqual({ width: 200, height: 200 });
+	});
+});
+
+describe("createText", () => {
+	it("defaults fontFamily, fontSize, and fill", () => {
+		const t = createText({
+			bounds: { width: 100, height: 24 },
+			text: "Hello",
+		});
+		expect(CanvasTextNodeSchema.safeParse(t).success).toBe(true);
+		expect(t.fontFamily).toBe("Inter");
+		expect(t.fontSize).toBe(16);
+		expect(t.fill).toBe("#000000");
+		expect(t.text).toBe("Hello");
+	});
+});
+
+describe("createImage", () => {
+	it("returns a schema-valid image with just bounds + assetId", () => {
+		const i = createImage({
+			bounds: { width: 300, height: 200 },
+			assetId: "asset-1",
+		});
+		expect(CanvasImageNodeSchema.safeParse(i).success).toBe(true);
+		expect(i.assetId).toBe("asset-1");
+	});
+});
