@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+	createCanvasIR,
+	createGroup,
+	createPage,
+	createRect,
+	createText,
+} from "../ir-builders.js";
+import {
 	CanvasIRDepthError,
 	findNode,
 	isGroupNode,
@@ -10,13 +17,6 @@ import {
 	parentOf,
 	walk,
 } from "../ir-walkers.js";
-import {
-	createCanvasIR,
-	createGroup,
-	createPage,
-	createRect,
-	createText,
-} from "../ir-builders.js";
 import type { CanvasGroupNode, CanvasNode } from "../types.js";
 
 function buildSampleIR() {
@@ -166,13 +166,15 @@ describe("CanvasIRDepthError", () => {
 		const page = createPage({ id: "p1" });
 		page.root = leaf;
 		const ir = createCanvasIR({ pages: [page] });
-		expect(() => walk(ir, () => {
-			// no-op visitor; depth assertion is in walkSubtree
-		})).toThrow(CanvasIRDepthError);
+		expect(() =>
+			walk(ir, () => {
+				// no-op visitor; depth assertion is in walkSubtree
+			}),
+		).toThrow(CanvasIRDepthError);
 		try {
 			walk(ir, () => {
-			// no-op visitor; depth assertion is in walkSubtree
-		});
+				// no-op visitor; depth assertion is in walkSubtree
+			});
 		} catch (err) {
 			expect(err).toBeInstanceOf(CanvasIRDepthError);
 			expect((err as CanvasIRDepthError).idChain.length).toBeGreaterThan(0);

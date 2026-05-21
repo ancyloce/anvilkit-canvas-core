@@ -24,8 +24,8 @@ import {
 import { findNode } from "../ir-walkers.js";
 import type {
 	CanvasGroupNode,
-	CanvasIR,
 	CanvasImageNode,
+	CanvasIR,
 	CanvasRectNode,
 } from "../types.js";
 

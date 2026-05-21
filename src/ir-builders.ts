@@ -2,9 +2,9 @@ import type {
 	CanvasBounds,
 	CanvasEllipseNode,
 	CanvasGroupNode,
-	CanvasIR,
 	CanvasImageCrop,
 	CanvasImageNode,
+	CanvasIR,
 	CanvasLineNode,
 	CanvasNode,
 	CanvasPage,
@@ -37,9 +37,7 @@ const DEFAULT_PAGE_BACKGROUND: CanvasPageBackground = {
 };
 
 function generateId(): string {
-	const c = (
-		globalThis as { crypto?: { randomUUID?: () => string } }
-	).crypto;
+	const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
 	if (c && typeof c.randomUUID === "function") {
 		return c.randomUUID();
 	}

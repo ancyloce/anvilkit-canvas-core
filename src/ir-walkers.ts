@@ -118,10 +118,7 @@ export function parentOf(ir: CanvasIR, id: string): ParentOfResult | null {
 	return null;
 }
 
-function parentOfInPage(
-	page: CanvasPage,
-	id: string,
-): ParentOfResult | null {
+function parentOfInPage(page: CanvasPage, id: string): ParentOfResult | null {
 	let result: ParentOfResult | null = null;
 	walkPage(page, ({ node }) => {
 		if (result) return;

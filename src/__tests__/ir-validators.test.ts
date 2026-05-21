@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
 	CanvasGroupNodeSchema,
-	CanvasIRSchema,
 	CanvasImageNodeSchema,
+	CanvasIRSchema,
 	CanvasLineNodeSchema,
 	CanvasNodeSchema,
 	CanvasPageSchema,
@@ -12,8 +12,8 @@ import {
 } from "../ir-validators.js";
 import type {
 	CanvasGroupNode,
-	CanvasIR,
 	CanvasImageNode,
+	CanvasIR,
 	CanvasNode,
 	CanvasPage,
 	CanvasRectNode,

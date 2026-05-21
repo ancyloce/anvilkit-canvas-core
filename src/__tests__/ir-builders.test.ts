@@ -12,8 +12,8 @@ import {
 import {
 	CanvasEllipseNodeSchema,
 	CanvasGroupNodeSchema,
-	CanvasIRSchema,
 	CanvasImageNodeSchema,
+	CanvasIRSchema,
 	CanvasLineNodeSchema,
 	CanvasPageSchema,
 	CanvasRectNodeSchema,

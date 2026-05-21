@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CANVAS_CORE_VERSION, CanvasIRSchema } from "../index.js";
 import type { CanvasIR } from "../index.js";
+import { CANVAS_CORE_VERSION, CanvasIRSchema } from "../index.js";
 
 const FIXED_TS = "2026-05-20T00:00:00.000Z";
 

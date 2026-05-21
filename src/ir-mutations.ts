@@ -1,9 +1,4 @@
-import {
-	findNode,
-	isGroupNode,
-	parentOf,
-	walkPage,
-} from "./ir-walkers.js";
+import { findNode, isGroupNode, parentOf, walkPage } from "./ir-walkers.js";
 import type {
 	CanvasGroupNode,
 	CanvasIR,
@@ -142,10 +137,7 @@ export interface InsertNodeOptions extends NowOption {
 	index?: number;
 }
 
-export function insertNode(
-	ir: CanvasIR,
-	options: InsertNodeOptions,
-): CanvasIR {
+export function insertNode(ir: CanvasIR, options: InsertNodeOptions): CanvasIR {
 	const parentInfo = findNode(ir, options.parentId);
 	if (!parentInfo) {
 		throw new CanvasIRMutationError(
@@ -185,10 +177,7 @@ export interface RemoveNodeOptions extends NowOption {
 	id: string;
 }
 
-export function removeNode(
-	ir: CanvasIR,
-	options: RemoveNodeOptions,
-): CanvasIR {
+export function removeNode(ir: CanvasIR, options: RemoveNodeOptions): CanvasIR {
 	if (isPageRoot(ir, options.id)) {
 		throw new CanvasIRMutationError(
 			"cannot-remove-page-root",
