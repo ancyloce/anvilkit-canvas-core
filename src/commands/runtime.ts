@@ -25,6 +25,7 @@ import type {
 	CanvasNodeRotateCommand,
 	CanvasPageCreateCommand,
 	CanvasPageDeleteCommand,
+	CanvasPageRenameCommand,
 	CanvasPageReorderCommand,
 	CommandApplyOptions,
 	CommandApplyResult,
@@ -70,13 +71,13 @@ function expectPage(ir: CanvasIR, pageId: string): CanvasPage {
 	return page;
 }
 
-function expectNode(ir: CanvasIR, id: string): { node: CanvasNode; page: CanvasPage } {
+function expectNode(
+	ir: CanvasIR,
+	id: string,
+): { node: CanvasNode; page: CanvasPage } {
 	const found = findNode(ir, id);
 	if (!found) {
-		throw new CanvasCommandError(
-			"node-not-found",
-			`Node id "${id}" not found`,
-		);
+		throw new CanvasCommandError("node-not-found", `Node id "${id}" not found`);
 	}
 	return found;
 }
@@ -110,10 +111,7 @@ function resolveParentId(
 	return parentId ?? page.root.id;
 }
 
-function locateSiblingIndex(
-	parent: CanvasGroupNode,
-	childId: string,
-): number {
+function locateSiblingIndex(parent: CanvasGroupNode, childId: string): number {
 	const idx = parent.children.findIndex((c) => c.id === childId);
 	if (idx < 0) {
 		throw new CanvasCommandError(
@@ -413,6 +411,50 @@ function applyPageDelete(
 	return { ir: next, inverse };
 }
 
+function applyPageRename(
+	ir: CanvasIR,
+	cmd: CanvasPageRenameCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const idx = ir.pages.findIndex((p) => p.id === cmd.pageId);
+	if (idx < 0) {
+		throw new CanvasCommandError(
+			"page-not-found",
+			`Page id "${cmd.pageId}" not found`,
+		);
+	}
+	const current = ir.pages[idx];
+	if (!current) {
+		throw new CanvasCommandError(
+			"page-not-found",
+			`Page id "${cmd.pageId}" not found`,
+		);
+	}
+	const priorName = current.name;
+	if (priorName !== cmd.from) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Page "${cmd.pageId}" name "${priorName ?? ""}" does not match expected "from" "${cmd.from ?? ""}"`,
+		);
+	}
+	const renamed: CanvasPage =
+		cmd.to === undefined
+			? (() => {
+					const { name: _omit, ...rest } = current;
+					return rest as CanvasPage;
+				})()
+			: { ...current, name: cmd.to };
+	const newPages = ir.pages.map((p, i) => (i === idx ? renamed : p));
+	const next = bumpMetadata({ ...ir, pages: newPages }, options);
+	const inverse: CanvasPageRenameCommand = {
+		type: "page.rename",
+		pageId: cmd.pageId,
+		from: cmd.to,
+		to: priorName,
+	};
+	return { ir: next, inverse };
+}
+
 function applyPageReorder(
 	ir: CanvasIR,
 	cmd: CanvasPageReorderCommand,
@@ -483,6 +525,7 @@ export function applyCommand(
 			return applyPageDelete(ir, cmd, options);
 		case "page.reorder":
 			return applyPageReorder(ir, cmd, options);
+		case "page.rename":
+			return applyPageRename(ir, cmd, options);
 	}
 }
-

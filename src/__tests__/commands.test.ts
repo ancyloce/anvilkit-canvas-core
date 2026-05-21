@@ -10,6 +10,7 @@ import type {
 	CanvasNodeRotateCommand,
 	CanvasPageCreateCommand,
 	CanvasPageDeleteCommand,
+	CanvasPageRenameCommand,
 	CanvasPageReorderCommand,
 } from "../commands/types.js";
 import {
@@ -655,6 +656,128 @@ describe("applyCommand: page.reorder", () => {
 			});
 		} catch (err) {
 			expect((err as CanvasCommandError).code).toBe("page-not-found");
+		}
+	});
+});
+
+describe("applyCommand: page.rename", () => {
+	it("renames a page from undefined to a string and returns swapped inverse", () => {
+		const ir = buildFixture();
+		expect(ir.pages[0]?.name).toBeUndefined();
+		const cmd: CanvasPageRenameCommand = {
+			type: "page.rename",
+			pageId: "page-1",
+			from: undefined,
+			to: "Cover",
+		};
+		const result = applyCommand(ir, cmd, { now });
+		expect(result.ir.pages[0]?.name).toBe("Cover");
+		expect(result.inverse).toEqual({
+			type: "page.rename",
+			pageId: "page-1",
+			from: "Cover",
+			to: undefined,
+		});
+	});
+
+	it("renames a page from a string to a new string", () => {
+		const fixture = buildFixture();
+		const seeded = applyCommand(
+			fixture,
+			{
+				type: "page.rename",
+				pageId: "page-1",
+				from: undefined,
+				to: "Cover",
+			},
+			{ now },
+		).ir;
+		const result = applyCommand(
+			seeded,
+			{
+				type: "page.rename",
+				pageId: "page-1",
+				from: "Cover",
+				to: "Hero",
+			},
+			{ now },
+		);
+		expect(result.ir.pages[0]?.name).toBe("Hero");
+		expect(result.inverse).toEqual({
+			type: "page.rename",
+			pageId: "page-1",
+			from: "Hero",
+			to: "Cover",
+		});
+	});
+
+	it("clears the name when to is undefined", () => {
+		const fixture = buildFixture();
+		const seeded = applyCommand(
+			fixture,
+			{
+				type: "page.rename",
+				pageId: "page-1",
+				from: undefined,
+				to: "Cover",
+			},
+			{ now },
+		).ir;
+		const result = applyCommand(
+			seeded,
+			{
+				type: "page.rename",
+				pageId: "page-1",
+				from: "Cover",
+				to: undefined,
+			},
+			{ now },
+		);
+		expect(result.ir.pages[0]?.name).toBeUndefined();
+	});
+
+	it("round-trips back to the original IR", () => {
+		const ir = buildFixture();
+		const before = snapshot(ir);
+		const apply = applyCommand(
+			ir,
+			{
+				type: "page.rename",
+				pageId: "page-2",
+				from: undefined,
+				to: "Outro",
+			},
+			{ now },
+		);
+		const undo = applyCommand(apply.ir, apply.inverse, { now });
+		expect(snapshot(undo.ir)).toBe(before);
+	});
+
+	it("throws page-not-found for unknown id", () => {
+		const ir = buildFixture();
+		try {
+			applyCommand(ir, {
+				type: "page.rename",
+				pageId: "ghost",
+				from: undefined,
+				to: "Boom",
+			});
+		} catch (err) {
+			expect((err as CanvasCommandError).code).toBe("page-not-found");
+		}
+	});
+
+	it("throws invariant-violated when cmd.from disagrees with the live name", () => {
+		const ir = buildFixture();
+		try {
+			applyCommand(ir, {
+				type: "page.rename",
+				pageId: "page-1",
+				from: "Wrong",
+				to: "Right",
+			});
+		} catch (err) {
+			expect((err as CanvasCommandError).code).toBe("invariant-violated");
 		}
 	});
 });

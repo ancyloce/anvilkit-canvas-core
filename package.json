@@ -37,7 +37,7 @@
 		"access": "public"
 	},
 	"dependencies": {
-		"zod": "^4.3.0"
+		"zod": "^4.4.3"
 	},
 	"scripts": {
 		"build": "rslib build",

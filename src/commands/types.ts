@@ -88,6 +88,13 @@ export interface CanvasPageDeleteCommand {
 	pageId: string;
 }
 
+export interface CanvasPageRenameCommand {
+	type: "page.rename";
+	pageId: string;
+	from: string | undefined;
+	to: string | undefined;
+}
+
 export type CanvasCommand =
 	| CanvasNodeCreateCommand
 	| CanvasNodeMoveCommand
@@ -98,6 +105,7 @@ export type CanvasCommand =
 	| CanvasImageReplaceCommand
 	| CanvasPageCreateCommand
 	| CanvasPageReorderCommand
+	| CanvasPageRenameCommand
 	| CanvasPageDeleteCommand;
 
 export type CanvasCommandKind = CanvasCommand["type"];
