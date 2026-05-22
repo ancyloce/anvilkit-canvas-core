@@ -2,6 +2,7 @@ import type {
 	CanvasAssetRef,
 	CanvasEllipseNode,
 	CanvasGroupNode,
+	CanvasImageNode,
 	CanvasIR,
 	CanvasLineNode,
 	CanvasNode,
@@ -80,6 +81,14 @@ export function escapeAttr(input: string): string {
  */
 export function escapeCssString(input: string): string {
 	return input.replace(/[<>"'\\\r\n]/g, "");
+}
+
+/**
+ * Strip only `<`, `>` and newlines from a CSS `src` value so it cannot break
+ * out of the `<style>` element while preserving `url(...)`/`format(...)` quotes.
+ */
+export function escapeCssUrl(input: string): string {
+	return input.replace(/[<>\r\n]/g, "");
 }
 
 // --- URI normalization -------------------------------------------------------
@@ -611,9 +620,10 @@ async function emitNode(
 		}
 		case "text":
 			return pad + emitText(node, ctx);
-		case "image":
-			// Reference/embed image emission is added in the images+fonts layer.
-			return "";
+		case "image": {
+			const image = await emitImage(node, ctx);
+			return image ? pad + image : "";
+		}
 		case "ai-placeholder":
 			warn(
 				ctx,
@@ -651,6 +661,169 @@ async function emitChildren(
 		if (svg) out.push(svg);
 	}
 	return out;
+}
+
+// --- image emission ----------------------------------------------------------
+
+function sanitizeMimeType(input: string): string {
+	return input.trim().replace(/[^a-zA-Z0-9/.+-]/g, "");
+}
+
+async function embedRemote(
+	uri: string,
+	fetchAsset: SvgFetchAsset,
+	ctx: SvgEmitContext,
+	nodeId: string,
+): Promise<string | undefined> {
+	try {
+		const { bytes, contentType } = await fetchAsset(uri);
+		const mime = sanitizeMimeType(contentType) || "application/octet-stream";
+		return `data:${mime};base64,${bytesToBase64(bytes)}`;
+	} catch {
+		warn(
+			ctx,
+			"MISSING_ASSET",
+			`Failed to fetch image "${uri}" for embedding; referencing instead.`,
+			nodeId,
+		);
+		return undefined;
+	}
+}
+
+/** Resolve an asset URI to a safe `href` value, embedding when requested. */
+async function resolveImageHref(
+	uri: string,
+	ctx: SvgEmitContext,
+	nodeId: string,
+): Promise<string | undefined> {
+	const trimmed = uri.trim();
+
+	if (trimmed.toLowerCase().startsWith("data:")) {
+		if (isSafeDataImageUrl(trimmed)) return trimmed;
+		warn(
+			ctx,
+			"UNSAFE_URI",
+			"Image data URI is not a permitted image type.",
+			nodeId,
+		);
+		return undefined;
+	}
+
+	const safe = normalizeUri(trimmed);
+	if (!safe) {
+		warn(ctx, "UNSAFE_URI", "Image URI uses a blocked scheme.", nodeId);
+		return undefined;
+	}
+
+	if (ctx.options.images === "embed") {
+		if (ctx.options.fetchAsset) {
+			const embedded = await embedRemote(
+				safe,
+				ctx.options.fetchAsset,
+				ctx,
+				nodeId,
+			);
+			if (embedded) return embedded;
+		} else {
+			warn(
+				ctx,
+				"EMBED_NO_FETCHER",
+				"Image embedding requested without a fetchAsset; referencing instead.",
+				nodeId,
+			);
+		}
+	}
+
+	return safe;
+}
+
+async function emitImage(
+	node: CanvasImageNode,
+	ctx: SvgEmitContext,
+): Promise<string> {
+	const asset = ctx.assets[node.assetId];
+	if (!asset) {
+		warn(
+			ctx,
+			"MISSING_ASSET",
+			`Image asset "${node.assetId}" was not found.`,
+			node.id,
+		);
+		return "";
+	}
+	if (node.maskAssetId) {
+		warn(
+			ctx,
+			"IMAGE_MASK_UNSUPPORTED",
+			"Image masks are not represented in SVG.",
+			node.id,
+		);
+	}
+	if (node.filters && node.filters.length > 0) {
+		warn(
+			ctx,
+			"IMAGE_FILTERS_UNSUPPORTED",
+			"Image filters are not represented in SVG.",
+			node.id,
+		);
+	}
+
+	const href = await resolveImageHref(asset.uri, ctx, node.id);
+	if (!href) return "";
+
+	const attrs = [
+		...commonAttrs(node, ctx),
+		`width="${fmt(node.bounds.width)}"`,
+		`height="${fmt(node.bounds.height)}"`,
+		'preserveAspectRatio="none"',
+	];
+
+	let defs = "";
+	if (node.crop) {
+		const clipId = `crop-${sanitizeId(node.id)}`;
+		defs = `<defs><clipPath id="${clipId}"><rect x="${fmt(node.crop.x)}" y="${fmt(node.crop.y)}" width="${fmt(node.crop.width)}" height="${fmt(node.crop.height)}" /></clipPath></defs>`;
+		attrs.push(`clip-path="url(#${clipId})"`);
+	}
+	attrs.push(`href="${escapeAttr(href)}"`);
+
+	return `${defs}<image ${attrs.join(" ")} />`;
+}
+
+// --- fonts -------------------------------------------------------------------
+
+function fontFaceRule(def: SvgFontFaceDef): string {
+	const parts = [
+		`font-family:"${escapeCssString(def.family)}"`,
+		`src:${escapeCssUrl(def.src)}`,
+	];
+	if (def.weight) parts.push(`font-weight:${escapeCssString(def.weight)}`);
+	if (def.style) parts.push(`font-style:${escapeCssString(def.style)}`);
+	return `@font-face{${parts.join(";")};}`;
+}
+
+/**
+ * Emit `<defs><style>` `@font-face` rules for fonts that are both used in the
+ * document and present in the manifest. Used families absent from the manifest
+ * are reported (one warning per family) and rely on system fallback.
+ */
+function renderFontDefs(ctx: SvgEmitContext): string {
+	const manifest = new Map(ctx.options.fonts.map((def) => [def.family, def]));
+	const rules: string[] = [];
+	for (const family of ctx.usedFonts) {
+		const def = manifest.get(family);
+		if (def) {
+			rules.push(fontFaceRule(def));
+		} else {
+			warn(
+				ctx,
+				"FONT_NOT_IN_MANIFEST",
+				`Font family "${family}" is not in the manifest; relying on system fallback.`,
+			);
+		}
+	}
+	return rules.length > 0
+		? `<defs><style>${rules.join("")}</style></defs>`
+		: "";
 }
 
 // --- page / document wrapper -------------------------------------------------
@@ -711,12 +884,19 @@ export async function serializePageToSvg(
 	const width = unitToPx(page.size.width, page.size.unit, page.size.dpi);
 	const height = unitToPx(page.size.height, page.size.unit, page.size.dpi);
 
-	const body: string[] = [];
+	const content: string[] = [];
 	const background = backgroundRect(page, width, height, ctx);
-	if (background) body.push(childPad + background);
+	if (background) content.push(childPad + background);
 	// The page root group is the page coordinate space; emit its children
 	// directly so the document isn't wrapped in a redundant <g>.
-	body.push(...(await emitChildren(page.root.children, ctx, 1)));
+	content.push(...(await emitChildren(page.root.children, ctx, 1)));
+
+	// Font `<defs>` is built after emission so it only covers fonts actually
+	// used, and is placed first so `@font-face` is declared before any glyphs.
+	const body: string[] = [];
+	const fontDefs = renderFontDefs(ctx);
+	if (fontDefs) body.push(childPad + fontDefs);
+	body.push(...content);
 
 	const open = `<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(width)}" height="${fmt(height)}" viewBox="0 0 ${fmt(width)} ${fmt(height)}">`;
 

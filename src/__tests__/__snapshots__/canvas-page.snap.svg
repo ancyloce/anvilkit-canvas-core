@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+	<defs><style>@font-face{font-family:"Inter";src:url(/fonts/inter-var.woff2) format("woff2-variations");font-weight:100 900;}</style></defs>
+	<rect x="0" y="0" width="240" height="160" fill="#0f172a" />
+	<rect transform="translate(16 16)" width="120" height="60" rx="8" ry="8" fill="#1e293b" stroke="#38bdf8" stroke-width="2" />
+	<ellipse transform="translate(176 24)" cx="20" cy="20" rx="20" ry="20" fill="#f472b6" />
+	<line transform="translate(16 96)" x1="0" y1="0" x2="208" y2="0" stroke="#475569" stroke-width="1" />
+	<text transform="translate(16 108)" x="0" y="19.2" font-family="Inter" font-size="24" font-weight="600" fill="#e2e8f0">Canvas → SVG</text>
+	<g transform="translate(140 28)" opacity="0.9">
+		<image width="28" height="28" preserveAspectRatio="none" href="https://cdn.example.com/logo.png" />
+	</g>
+</svg>

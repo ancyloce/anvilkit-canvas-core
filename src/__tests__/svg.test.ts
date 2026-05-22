@@ -21,8 +21,10 @@ import {
 	unitToPx,
 } from "../serialize/svg.js";
 import type {
+	CanvasAssetRef,
 	CanvasEllipseNode,
 	CanvasGroupNode,
+	CanvasImageNode,
 	CanvasIR,
 	CanvasLineNode,
 	CanvasNode,
@@ -381,6 +383,7 @@ function makeIR(
 	opts: {
 		size?: Partial<CanvasPageSize>;
 		background?: CanvasPageBackground;
+		assets?: Record<string, CanvasAssetRef>;
 	} = {},
 ): CanvasIR {
 	return {
@@ -400,8 +403,23 @@ function makeIR(
 				root,
 			},
 		],
-		assets: {},
+		assets: opts.assets ?? {},
 		metadata: { createdAt: "t0", updatedAt: "t0" },
+	};
+}
+
+function imageNode(
+	assetId: string,
+	over: Partial<CanvasImageNode> = {},
+): CanvasImageNode {
+	return {
+		id: "img1",
+		type: "image",
+		transform: identity,
+		bounds: { width: 50, height: 40 },
+		zIndex: 0,
+		assetId,
+		...over,
 	};
 }
 
@@ -509,5 +527,129 @@ describe("serializePageToSvg", () => {
 			pretty: true,
 		});
 		expect(svg).toContain("\n\t<rect");
+	});
+});
+
+const remoteAsset: Record<string, CanvasAssetRef> = {
+	a1: { id: "a1", uri: "https://cdn.example.com/x.png" },
+};
+
+describe("serializePageToSvg images", () => {
+	it("references a remote image by default (auto mode)", async () => {
+		const { svg } = await serializePageToSvg(
+			makeIR(group([imageNode("a1")]), { assets: remoteAsset }),
+			0,
+		);
+		expect(svg).toContain("<image ");
+		expect(svg).toContain('href="https://cdn.example.com/x.png"');
+		expect(svg).toContain('preserveAspectRatio="none"');
+		expect(svg).toContain('width="50" height="40"');
+	});
+
+	it("inlines an existing data: URI in auto mode", async () => {
+		const { svg } = await serializePageToSvg(
+			makeIR(group([imageNode("a1")]), {
+				assets: { a1: { id: "a1", uri: "data:image/png;base64,SGk=" } },
+			}),
+			0,
+		);
+		expect(svg).toContain('href="data:image/png;base64,SGk="');
+	});
+
+	it("embeds a remote image via fetchAsset in embed mode", async () => {
+		const fetchAsset = async () => ({
+			bytes: new Uint8Array([72, 105]),
+			contentType: "image/png",
+		});
+		const { svg } = await serializePageToSvg(
+			makeIR(group([imageNode("a1")]), { assets: remoteAsset }),
+			0,
+			{ images: "embed", fetchAsset },
+		);
+		expect(svg).toContain('href="data:image/png;base64,SGk="');
+	});
+
+	it("falls back to reference and warns when embed lacks a fetchAsset", async () => {
+		const { svg, warnings } = await serializePageToSvg(
+			makeIR(group([imageNode("a1")]), { assets: remoteAsset }),
+			0,
+			{ images: "embed" },
+		);
+		expect(warnings.map((w) => w.code)).toContain("EMBED_NO_FETCHER");
+		expect(svg).toContain('href="https://cdn.example.com/x.png"');
+	});
+
+	it("skips and warns on a missing asset", async () => {
+		const { svg, warnings } = await serializePageToSvg(
+			makeIR(group([imageNode("nope")])),
+			0,
+		);
+		expect(warnings.map((w) => w.code)).toContain("MISSING_ASSET");
+		expect(svg).not.toContain("<image");
+	});
+
+	it("skips and warns on a blocked URI scheme", async () => {
+		const { svg, warnings } = await serializePageToSvg(
+			makeIR(group([imageNode("a1")]), {
+				assets: { a1: { id: "a1", uri: "javascript:alert(1)" } },
+			}),
+			0,
+		);
+		expect(warnings.map((w) => w.code)).toContain("UNSAFE_URI");
+		expect(svg).not.toContain("<image");
+	});
+
+	it("emits a clipPath for a cropped image", async () => {
+		const { svg } = await serializePageToSvg(
+			makeIR(
+				group([
+					imageNode("a1", { crop: { x: 5, y: 5, width: 20, height: 20 } }),
+				]),
+				{
+					assets: remoteAsset,
+				},
+			),
+			0,
+		);
+		expect(svg).toContain('<clipPath id="crop-img1">');
+		expect(svg).toContain('clip-path="url(#crop-img1)"');
+	});
+
+	it("warns for unsupported masks and filters", async () => {
+		const { warnings } = await serializePageToSvg(
+			makeIR(
+				group([
+					imageNode("a1", { maskAssetId: "m1", filters: [{ kind: "blur" }] }),
+				]),
+				{ assets: remoteAsset },
+			),
+			0,
+		);
+		const codes = warnings.map((w) => w.code);
+		expect(codes).toContain("IMAGE_MASK_UNSUPPORTED");
+		expect(codes).toContain("IMAGE_FILTERS_UNSUPPORTED");
+	});
+});
+
+describe("serializePageToSvg fonts", () => {
+	it("emits @font-face for used fonts present in the manifest", async () => {
+		const { svg } = await serializePageToSvg(makeIR(group([text])), 0, {
+			fonts: [
+				{ family: "Inter", src: 'url(/fonts/inter.woff2) format("woff2")' },
+			],
+		});
+		expect(svg).toContain("<defs><style>");
+		expect(svg).toContain("@font-face{");
+		expect(svg).toContain('font-family:"Inter"');
+		expect(svg).toContain('src:url(/fonts/inter.woff2) format("woff2")');
+	});
+
+	it("warns for a used font absent from the manifest", async () => {
+		const { svg, warnings } = await serializePageToSvg(
+			makeIR(group([text])),
+			0,
+		);
+		expect(warnings.map((w) => w.code)).toContain("FONT_NOT_IN_MANIFEST");
+		expect(svg).not.toContain("@font-face");
 	});
 });
