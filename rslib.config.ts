@@ -28,6 +28,6 @@ export default defineConfig({
 	],
 	output: {
 		target: "web",
-		externals: ["zod"],
+		externals: ["zod", "pdf-lib"],
 	},
 });

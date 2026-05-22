@@ -4,6 +4,6 @@
 		"path": "dist/index.js",
 		"limit": "80 KB",
 		"gzip": true,
-		"ignore": ["zod"]
+		"ignore": ["zod", "pdf-lib"]
 	}
 ]
