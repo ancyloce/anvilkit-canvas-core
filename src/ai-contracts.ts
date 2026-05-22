@@ -29,11 +29,19 @@ export interface AiImageBgRemoveRequest {
 	sourceAssetId: string;
 }
 
+export interface AiImageUpscaleRequest {
+	kind: "upscale";
+	sourceAssetId: string;
+	/** Upscale factor (e.g. 2 or 4). The provider/route picks a default when omitted. */
+	scale?: number;
+}
+
 export type AiImageJobRequest =
 	| AiImageTextToImageRequest
 	| AiImageVariationRequest
 	| AiImageInpaintRequest
-	| AiImageBgRemoveRequest;
+	| AiImageBgRemoveRequest
+	| AiImageUpscaleRequest;
 
 export type AiImageJobKind = AiImageJobRequest["kind"];
 
