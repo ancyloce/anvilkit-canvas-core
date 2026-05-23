@@ -8,6 +8,7 @@ import type {
 	CanvasLineNode,
 	CanvasNode,
 	CanvasPage,
+	CanvasPathNode,
 	CanvasPageBackground,
 	CanvasPageSize,
 	CanvasRectNode,
@@ -215,6 +216,36 @@ export function createLine(options: CreateLineOptions): CanvasLineNode {
 		zIndex: options.zIndex ?? 0,
 		points: options.points,
 		stroke: options.stroke ?? "#000000",
+		...(options.strokeWidth !== undefined
+			? { strokeWidth: options.strokeWidth }
+			: {}),
+	};
+}
+
+export interface CreatePathOptions {
+	id?: string;
+	name?: string;
+	transform?: Partial<CanvasTransform>;
+	bounds: CanvasBounds;
+	zIndex?: number;
+	/** SVG path data. Must be non-empty (matches `CanvasPathNodeSchema`). */
+	d: string;
+	fill?: string;
+	stroke?: string;
+	strokeWidth?: number;
+}
+
+export function createPath(options: CreatePathOptions): CanvasPathNode {
+	return {
+		id: options.id ?? generateId(),
+		...(options.name !== undefined ? { name: options.name } : {}),
+		type: "path",
+		transform: clonePartialTransform(options.transform),
+		bounds: options.bounds,
+		zIndex: options.zIndex ?? 0,
+		d: options.d,
+		...(options.fill !== undefined ? { fill: options.fill } : {}),
+		...(options.stroke !== undefined ? { stroke: options.stroke } : {}),
 		...(options.strokeWidth !== undefined
 			? { strokeWidth: options.strokeWidth }
 			: {}),

@@ -6,6 +6,7 @@ import {
 	createImage,
 	createLine,
 	createPage,
+	createPath,
 	createRect,
 	createText,
 } from "../ir-builders.js";
@@ -16,6 +17,7 @@ import {
 	CanvasIRSchema,
 	CanvasLineNodeSchema,
 	CanvasPageSchema,
+	CanvasPathNodeSchema,
 	CanvasRectNodeSchema,
 	CanvasTextNodeSchema,
 } from "../ir-validators.js";
@@ -116,6 +118,48 @@ describe("createLine", () => {
 			bounds: { width: 200, height: 200 },
 		});
 		expect(l.bounds).toEqual({ width: 200, height: 200 });
+	});
+});
+
+describe("createPath", () => {
+	it("returns a schema-valid path with just bounds + d", () => {
+		const p = createPath({
+			bounds: { width: 50, height: 50 },
+			d: "M 0 0 L 10 10 Z",
+		});
+		expect(CanvasPathNodeSchema.safeParse(p).success).toBe(true);
+		expect(p.type).toBe("path");
+		expect(p.d).toBe("M 0 0 L 10 10 Z");
+		expect(p.transform).toEqual({
+			x: 0,
+			y: 0,
+			rotation: 0,
+			scaleX: 1,
+			scaleY: 1,
+		});
+	});
+
+	it("carries fill / stroke / strokeWidth when provided", () => {
+		const p = createPath({
+			id: "path-1",
+			bounds: { width: 20, height: 20 },
+			d: "M 0 0 L 5 5",
+			fill: "#ff0000",
+			stroke: "#00ff00",
+			strokeWidth: 3,
+		});
+		expect(CanvasPathNodeSchema.safeParse(p).success).toBe(true);
+		expect(p.id).toBe("path-1");
+		expect(p.fill).toBe("#ff0000");
+		expect(p.stroke).toBe("#00ff00");
+		expect(p.strokeWidth).toBe(3);
+	});
+
+	it("omits optional keys when not provided", () => {
+		const p = createPath({ bounds: { width: 10, height: 10 }, d: "M 0 0" });
+		expect("fill" in p).toBe(false);
+		expect("stroke" in p).toBe(false);
+		expect("strokeWidth" in p).toBe(false);
 	});
 });
 
