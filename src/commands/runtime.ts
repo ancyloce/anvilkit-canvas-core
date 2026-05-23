@@ -6,6 +6,7 @@ import {
 } from "../ir-mutations.js";
 import { findNode, parentOf } from "../ir-walkers.js";
 import type {
+	CanvasBounds,
 	CanvasGroupNode,
 	CanvasImageNode,
 	CanvasIR,
@@ -20,9 +21,11 @@ import type {
 	CanvasImageReplaceCommand,
 	CanvasNodeCreateCommand,
 	CanvasNodeDeleteCommand,
+	CanvasNodeGroupCommand,
 	CanvasNodeMoveCommand,
 	CanvasNodeResizeCommand,
 	CanvasNodeRotateCommand,
+	CanvasNodeUngroupCommand,
 	CanvasPageCreateCommand,
 	CanvasPageDeleteCommand,
 	CanvasPageRenameCommand,
@@ -354,6 +357,201 @@ function applyImageReplace(
 	return { ir: next, inverse };
 }
 
+function computeChildrenBounds(children: readonly CanvasNode[]): CanvasBounds {
+	let maxRight = 0;
+	let maxBottom = 0;
+	for (const child of children) {
+		maxRight = Math.max(maxRight, child.transform.x + child.bounds.width);
+		maxBottom = Math.max(maxBottom, child.transform.y + child.bounds.height);
+	}
+	return { width: maxRight, height: maxBottom };
+}
+
+interface GroupChildEntry {
+	id: string;
+	node: CanvasNode;
+	index: number;
+}
+
+function applyNodeGroup(
+	ir: CanvasIR,
+	cmd: CanvasNodeGroupCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	if (cmd.childIds.length === 0) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			"node.group requires at least one childId",
+		);
+	}
+	const uniqueIds = new Set(cmd.childIds);
+	if (uniqueIds.size !== cmd.childIds.length) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			"node.group childIds contains duplicates",
+		);
+	}
+	const page = expectPage(ir, cmd.pageId);
+	if (findNode(ir, cmd.groupId)) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Group id "${cmd.groupId}" already exists`,
+		);
+	}
+	let parent: CanvasGroupNode | undefined;
+	const entries: GroupChildEntry[] = [];
+	for (const id of cmd.childIds) {
+		const found = findNode(ir, id);
+		if (!found || found.page.id !== page.id) {
+			throw new CanvasCommandError(
+				"node-not-found",
+				`Node "${id}" not found on page "${cmd.pageId}"`,
+			);
+		}
+		const parentResult = parentOf(ir, id);
+		if (!parentResult) {
+			throw new CanvasCommandError(
+				"invariant-violated",
+				`Cannot group page-root node "${id}"`,
+			);
+		}
+		if (parent === undefined) {
+			parent = parentResult.parent;
+		} else if (parent.id !== parentResult.parent.id) {
+			throw new CanvasCommandError(
+				"invariant-violated",
+				"node.group requires all childIds to share the same parent",
+			);
+		}
+		const index = parentResult.parent.children.findIndex((c) => c.id === id);
+		entries.push({ id, node: found.node, index });
+	}
+	if (parent === undefined) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			"node.group could not resolve a parent",
+		);
+	}
+	entries.sort((a, b) => a.index - b.index);
+	const firstEntry = entries[0];
+	if (!firstEntry) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			"node.group resolved no children",
+		);
+	}
+	const minIndex = firstEntry.index;
+	const childNodes = entries.map((e) => e.node);
+	const groupNode: CanvasGroupNode = cmd.groupTemplate
+		? {
+				...cmd.groupTemplate,
+				id: cmd.groupId,
+				type: "group",
+				children: childNodes,
+			}
+		: {
+				id: cmd.groupId,
+				type: "group",
+				...(cmd.groupName !== undefined ? { name: cmd.groupName } : {}),
+				transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+				bounds: computeChildrenBounds(childNodes),
+				zIndex: 0,
+				children: childNodes,
+			};
+	const parentId = parent.id;
+	let next = ir;
+	try {
+		for (const id of cmd.childIds) {
+			next = removeNode(next, { id, now: options.now });
+		}
+		next = insertNode(next, {
+			parentId,
+			node: groupNode,
+			index: minIndex,
+			now: options.now,
+		});
+	} catch (err) {
+		rethrowMutationError(err);
+	}
+	const inverse: CanvasNodeUngroupCommand = {
+		type: "node.ungroup",
+		groupId: cmd.groupId,
+		restore: entries.map((e) => ({ id: e.id, index: e.index })),
+	};
+	return { ir: next, inverse };
+}
+
+function applyNodeUngroup(
+	ir: CanvasIR,
+	cmd: CanvasNodeUngroupCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const found = expectNode(ir, cmd.groupId);
+	if (found.node.type !== "group") {
+		throw new CanvasCommandError(
+			"kind-mismatch",
+			`Node "${cmd.groupId}" is of kind "${found.node.type}", not "group"`,
+		);
+	}
+	const group = found.node;
+	const parentResult = parentOf(ir, cmd.groupId);
+	if (!parentResult) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Cannot ungroup parentless group "${cmd.groupId}" (likely a page root)`,
+		);
+	}
+	const parent = parentResult.parent;
+	const groupIndex = parent.children.findIndex((c) => c.id === cmd.groupId);
+	const children = group.children;
+	const childIds = children.map((c) => c.id);
+	const { children: _children, ...groupTemplate } = group;
+	const parentId = parent.id;
+	let next = ir;
+	try {
+		next = removeNode(next, { id: cmd.groupId, now: options.now });
+		if (cmd.restore && cmd.restore.length > 0) {
+			const plan = [...cmd.restore].sort((a, b) => a.index - b.index);
+			for (const { id, index } of plan) {
+				const child = children.find((c) => c.id === id);
+				if (!child) {
+					throw new CanvasCommandError(
+						"invariant-violated",
+						`Restore id "${id}" is not a child of group "${cmd.groupId}"`,
+					);
+				}
+				next = insertNode(next, {
+					parentId,
+					node: child,
+					index,
+					now: options.now,
+				});
+			}
+		} else {
+			let index = groupIndex;
+			for (const child of children) {
+				next = insertNode(next, {
+					parentId,
+					node: child,
+					index,
+					now: options.now,
+				});
+				index += 1;
+			}
+		}
+	} catch (err) {
+		rethrowMutationError(err);
+	}
+	const inverse: CanvasNodeGroupCommand = {
+		type: "node.group",
+		pageId: found.page.id,
+		childIds,
+		groupId: cmd.groupId,
+		groupTemplate,
+	};
+	return { ir: next, inverse };
+}
+
 function applyPageCreate(
 	ir: CanvasIR,
 	cmd: CanvasPageCreateCommand,
@@ -519,6 +717,10 @@ export function applyCommand(
 			return applyNodeUpdate(ir, cmd, options);
 		case "image.replace":
 			return applyImageReplace(ir, cmd, options);
+		case "node.group":
+			return applyNodeGroup(ir, cmd, options);
+		case "node.ungroup":
+			return applyNodeUngroup(ir, cmd, options);
 		case "page.create":
 			return applyPageCreate(ir, cmd, options);
 		case "page.delete":

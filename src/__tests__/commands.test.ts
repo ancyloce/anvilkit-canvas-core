@@ -5,9 +5,11 @@ import type {
 	CanvasImageReplaceCommand,
 	CanvasNodeCreateCommand,
 	CanvasNodeDeleteCommand,
+	CanvasNodeGroupCommand,
 	CanvasNodeMoveCommand,
 	CanvasNodeResizeCommand,
 	CanvasNodeRotateCommand,
+	CanvasNodeUngroupCommand,
 	CanvasPageCreateCommand,
 	CanvasPageDeleteCommand,
 	CanvasPageRenameCommand,
@@ -778,6 +780,319 @@ describe("applyCommand: page.rename", () => {
 			});
 		} catch (err) {
 			expect((err as CanvasCommandError).code).toBe("invariant-violated");
+		}
+	});
+});
+
+// Fixture with four flat top-level siblings (a, b, c, d) for ordering tests.
+function buildFlatFixture(): CanvasIR {
+	const mk = (id: string) =>
+		createRect({ id, bounds: { width: 10, height: 10 } });
+	const page = createPage({ id: "page-1" });
+	page.root = createGroup({
+		id: "root",
+		bounds: page.root.bounds,
+		children: [mk("a"), mk("b"), mk("c"), mk("d")],
+	});
+	return createCanvasIR({ id: "ir-1", title: "Flat", pages: [page], now });
+}
+
+function childIdsOf(ir: CanvasIR, parentId: string): string[] {
+	const parent = findNode(ir, parentId)?.node as CanvasGroupNode;
+	return parent.children.map((c) => c.id);
+}
+
+describe("applyCommand: node.group", () => {
+	it("wraps contiguous siblings into a new group at the topmost slot", () => {
+		const ir = buildFlatFixture();
+		const cmd: CanvasNodeGroupCommand = {
+			type: "node.group",
+			pageId: "page-1",
+			childIds: ["b", "c"],
+			groupId: "g1",
+			groupName: "My Group",
+		};
+		const result = applyCommand(ir, cmd, { now });
+		expect(childIdsOf(result.ir, "root")).toEqual(["a", "g1", "d"]);
+		const group = findNode(result.ir, "g1")?.node as CanvasGroupNode;
+		expect(group.type).toBe("group");
+		expect(group.name).toBe("My Group");
+		expect(group.children.map((c) => c.id)).toEqual(["b", "c"]);
+		// identity transform — grouping never shifts children.
+		expect(group.transform).toEqual({
+			x: 0,
+			y: 0,
+			rotation: 0,
+			scaleX: 1,
+			scaleY: 1,
+		});
+	});
+
+	it("preserves sibling z-order regardless of childIds order", () => {
+		const ir = buildFlatFixture();
+		const result = applyCommand(
+			ir,
+			{
+				type: "node.group",
+				pageId: "page-1",
+				childIds: ["c", "a"],
+				groupId: "g1",
+			},
+			{ now },
+		);
+		// a is at index 0 so the group takes slot 0; children keep tree order.
+		expect(childIdsOf(result.ir, "root")).toEqual(["g1", "b", "d"]);
+		const group = findNode(result.ir, "g1")?.node as CanvasGroupNode;
+		expect(group.children.map((c) => c.id)).toEqual(["a", "c"]);
+	});
+
+	it("returns a node.ungroup inverse that round-trips a contiguous selection", () => {
+		const ir = buildFlatFixture();
+		const before = snapshot(ir);
+		const apply = applyCommand(
+			ir,
+			{
+				type: "node.group",
+				pageId: "page-1",
+				childIds: ["b", "c"],
+				groupId: "g1",
+			},
+			{ now },
+		);
+		expect(apply.inverse.type).toBe("node.ungroup");
+		const undo = applyCommand(apply.ir, apply.inverse, { now });
+		expect(snapshot(undo.ir)).toBe(before);
+	});
+
+	it("round-trips a NON-contiguous selection back to the exact original tree", () => {
+		const ir = buildFlatFixture();
+		const before = snapshot(ir);
+		const apply = applyCommand(
+			ir,
+			{
+				type: "node.group",
+				pageId: "page-1",
+				childIds: ["a", "c"],
+				groupId: "g1",
+			},
+			{ now },
+		);
+		expect(childIdsOf(apply.ir, "root")).toEqual(["g1", "b", "d"]);
+		const undo = applyCommand(apply.ir, apply.inverse, { now });
+		expect(childIdsOf(undo.ir, "root")).toEqual(["a", "b", "c", "d"]);
+		expect(snapshot(undo.ir)).toBe(before);
+	});
+
+	it("supports a full undo→redo cycle for a non-contiguous selection", () => {
+		const ir = buildFlatFixture();
+		const grouped = snapshot(
+			applyCommand(
+				ir,
+				{
+					type: "node.group",
+					pageId: "page-1",
+					childIds: ["a", "c"],
+					groupId: "g1",
+				},
+				{ now },
+			).ir,
+		);
+		const apply = applyCommand(
+			ir,
+			{
+				type: "node.group",
+				pageId: "page-1",
+				childIds: ["a", "c"],
+				groupId: "g1",
+			},
+			{ now },
+		);
+		const undo = applyCommand(apply.ir, apply.inverse, { now });
+		const redo = applyCommand(undo.ir, undo.inverse, { now });
+		expect(snapshot(redo.ir)).toBe(grouped);
+	});
+
+	it("throws on an empty selection", () => {
+		const ir = buildFlatFixture();
+		expect(() =>
+			applyCommand(
+				ir,
+				{ type: "node.group", pageId: "page-1", childIds: [], groupId: "g1" },
+				{ now },
+			),
+		).toThrowError(/at least one/);
+	});
+
+	it("throws invariant-violated for childIds spanning different parents", () => {
+		const ir = buildFixture();
+		try {
+			applyCommand(
+				ir,
+				{
+					type: "node.group",
+					pageId: "page-1",
+					childIds: ["rectA", "textA"],
+					groupId: "g1",
+				},
+				{ now },
+			);
+			throw new Error("expected throw");
+		} catch (err) {
+			expect((err as CanvasCommandError).code).toBe("invariant-violated");
+		}
+	});
+
+	it("throws invariant-violated on duplicate childIds", () => {
+		const ir = buildFlatFixture();
+		try {
+			applyCommand(
+				ir,
+				{
+					type: "node.group",
+					pageId: "page-1",
+					childIds: ["a", "a"],
+					groupId: "g1",
+				},
+				{ now },
+			);
+			throw new Error("expected throw");
+		} catch (err) {
+			expect((err as CanvasCommandError).code).toBe("invariant-violated");
+		}
+	});
+
+	it("throws invariant-violated when groupId already exists", () => {
+		const ir = buildFlatFixture();
+		try {
+			applyCommand(
+				ir,
+				{
+					type: "node.group",
+					pageId: "page-1",
+					childIds: ["a", "b"],
+					groupId: "root",
+				},
+				{ now },
+			);
+			throw new Error("expected throw");
+		} catch (err) {
+			expect((err as CanvasCommandError).code).toBe("invariant-violated");
+		}
+	});
+
+	it("throws node-not-found for an unknown childId", () => {
+		const ir = buildFlatFixture();
+		try {
+			applyCommand(
+				ir,
+				{
+					type: "node.group",
+					pageId: "page-1",
+					childIds: ["a", "ghost"],
+					groupId: "g1",
+				},
+				{ now },
+			);
+			throw new Error("expected throw");
+		} catch (err) {
+			expect((err as CanvasCommandError).code).toBe("node-not-found");
+		}
+	});
+});
+
+describe("applyCommand: node.ungroup", () => {
+	it("dissolves a group, spilling children contiguously at the group's slot", () => {
+		// root: [a, g(=[x,y]), d]
+		const x = createRect({ id: "x", bounds: { width: 10, height: 10 } });
+		const y = createRect({ id: "y", bounds: { width: 10, height: 10 } });
+		const g = createGroup({
+			id: "g",
+			name: "Grp",
+			bounds: { width: 20, height: 20 },
+			children: [x, y],
+		});
+		const a = createRect({ id: "a", bounds: { width: 10, height: 10 } });
+		const d = createRect({ id: "d", bounds: { width: 10, height: 10 } });
+		const page = createPage({ id: "page-1" });
+		page.root = createGroup({
+			id: "root",
+			bounds: page.root.bounds,
+			children: [a, g, d],
+		});
+		const ir = createCanvasIR({ id: "ir-1", title: "G", pages: [page], now });
+
+		const result = applyCommand(
+			ir,
+			{ type: "node.ungroup", groupId: "g" },
+			{ now },
+		);
+		expect(childIdsOf(result.ir, "root")).toEqual(["a", "x", "y", "d"]);
+		expect(findNode(result.ir, "g")).toBeNull();
+		expect(result.inverse.type).toBe("node.group");
+	});
+
+	it("round-trips: ungroup then undo restores the exact group (incl. custom fields)", () => {
+		const x = createRect({ id: "x", bounds: { width: 10, height: 10 } });
+		const g = createGroup({
+			id: "g",
+			name: "Keep Me",
+			transform: { x: 12, y: 34 },
+			bounds: { width: 99, height: 88 },
+			children: [x],
+		});
+		const page = createPage({ id: "page-1" });
+		page.root = createGroup({
+			id: "root",
+			bounds: page.root.bounds,
+			children: [g],
+		});
+		const ir = createCanvasIR({ id: "ir-1", title: "G", pages: [page], now });
+		const before = snapshot(ir);
+
+		const apply = applyCommand(
+			ir,
+			{ type: "node.ungroup", groupId: "g" },
+			{ now },
+		);
+		const undo = applyCommand(apply.ir, apply.inverse, { now });
+		expect(snapshot(undo.ir)).toBe(before);
+		const restored = findNode(undo.ir, "g")?.node as CanvasGroupNode;
+		expect(restored.name).toBe("Keep Me");
+		expect(restored.transform.x).toBe(12);
+		expect(restored.bounds).toEqual({ width: 99, height: 88 });
+	});
+
+	it("throws kind-mismatch when the target is not a group", () => {
+		const ir = buildFixture();
+		try {
+			applyCommand(ir, { type: "node.ungroup", groupId: "rectA" }, { now });
+			throw new Error("expected throw");
+		} catch (err) {
+			expect((err as CanvasCommandError).code).toBe("kind-mismatch");
+		}
+	});
+
+	it("throws invariant-violated when ungrouping a page root", () => {
+		const ir = buildFlatFixture();
+		try {
+			applyCommand(ir, { type: "node.ungroup", groupId: "root" }, { now });
+			throw new Error("expected throw");
+		} catch (err) {
+			expect((err as CanvasCommandError).code).toBe("invariant-violated");
+		}
+	});
+
+	it("throws node-not-found for an unknown group", () => {
+		const ir = buildFlatFixture();
+		const cmd: CanvasNodeUngroupCommand = {
+			type: "node.ungroup",
+			groupId: "ghost",
+		};
+		try {
+			applyCommand(ir, cmd, { now });
+			throw new Error("expected throw");
+		} catch (err) {
+			expect((err as CanvasCommandError).code).toBe("node-not-found");
 		}
 	});
 });

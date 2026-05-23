@@ -1,4 +1,5 @@
 import type {
+	CanvasGroupNode,
 	CanvasIR,
 	CanvasNode,
 	CanvasNodeByKind,
@@ -70,6 +71,40 @@ export interface CanvasImageReplaceCommand {
 	toAssetId: string;
 }
 
+/**
+ * Wrap one or more sibling nodes in a new group node. All `childIds` must share
+ * the same immediate parent group on `pageId`; they are wrapped in their current
+ * sibling z-order and the new group takes the slot of the topmost selected node.
+ * No child transforms are altered (the group is created with an identity
+ * transform), so grouping is visually a no-op and exactly reversible.
+ */
+export interface CanvasNodeGroupCommand {
+	type: "node.group";
+	pageId: string;
+	childIds: string[];
+	groupId: string;
+	groupName?: string;
+	/**
+	 * When present (e.g. as the inverse of `node.ungroup`), the created group is
+	 * reconstructed verbatim from these fields rather than as a canonical identity
+	 * group. `children` are always supplied from `childIds`.
+	 */
+	groupTemplate?: Omit<CanvasGroupNode, "children">;
+}
+
+/**
+ * Dissolve a group, lifting its children into the group's parent. By default the
+ * children spill out contiguously at the group's former slot. When `restore` is
+ * present (as produced by the inverse of `node.group`), each child is instead
+ * placed back at its recorded original index so the prior tree is reconstructed
+ * exactly even for non-contiguous selections.
+ */
+export interface CanvasNodeUngroupCommand {
+	type: "node.ungroup";
+	groupId: string;
+	restore?: Array<{ id: string; index: number }>;
+}
+
 export interface CanvasPageCreateCommand {
 	type: "page.create";
 	page: CanvasPage;
@@ -103,6 +138,8 @@ export type CanvasCommand =
 	| CanvasNodeDeleteCommand
 	| CanvasAnyNodeUpdateCommand
 	| CanvasImageReplaceCommand
+	| CanvasNodeGroupCommand
+	| CanvasNodeUngroupCommand
 	| CanvasPageCreateCommand
 	| CanvasPageReorderCommand
 	| CanvasPageRenameCommand
