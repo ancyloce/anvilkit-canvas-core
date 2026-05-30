@@ -55,7 +55,7 @@
 		"@anvilkit/biome-config": "workspace:*",
 		"@anvilkit/typescript-config": "workspace:*",
 		"@anvilkit/vitest-config": "workspace:*",
-		"@rslib/core": "^0.21.5",
+		"@rslib/core": "^0.22.0",
 		"@types/node": "^25.9.1",
 		"publint": "^0.3.21",
 		"typescript": "6.0.3",
