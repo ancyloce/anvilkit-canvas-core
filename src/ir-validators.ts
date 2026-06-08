@@ -2,6 +2,9 @@ import { z } from "zod";
 import type {
 	CanvasAssetRef,
 	CanvasBounds,
+	CanvasFill,
+	CanvasGradientFill,
+	CanvasGradientStop,
 	CanvasGroupNode,
 	CanvasImageCrop,
 	CanvasIR,
@@ -12,6 +15,7 @@ import type {
 	CanvasPage,
 	CanvasPageBackground,
 	CanvasPageSize,
+	CanvasShadow,
 	CanvasTransform,
 	ImageFilter,
 } from "./types.js";
@@ -97,7 +101,32 @@ export const CanvasNodeMetaSchema: z.ZodType<CanvasNodeMeta> = z.looseObject({
 	aiSource: CanvasAiSourceMetaSchema.optional(),
 });
 
-const CanvasNodeBaseShape = {
+export const CanvasGradientStopSchema: z.ZodType<CanvasGradientStop> =
+	z.looseObject({ offset: FiniteNumber, color: z.string() });
+
+export const CanvasGradientFillSchema: z.ZodType<CanvasGradientFill> =
+	z.looseObject({
+		kind: z.enum(["linear", "radial"]),
+		stops: z.array(CanvasGradientStopSchema),
+		from: z.looseObject({ x: FiniteNumber, y: FiniteNumber }),
+		to: z.looseObject({ x: FiniteNumber, y: FiniteNumber }),
+	});
+
+/** A fill is either a plain color string (back-compat) or a structured gradient. */
+export const CanvasFillSchema: z.ZodType<CanvasFill> = z.union([
+	z.string(),
+	CanvasGradientFillSchema,
+]);
+
+export const CanvasShadowSchema: z.ZodType<CanvasShadow> = z.looseObject({
+	color: z.string(),
+	blur: NonNegativeFiniteNumber,
+	offsetX: FiniteNumber,
+	offsetY: FiniteNumber,
+	opacity: FiniteNumber.optional(),
+});
+
+export const CanvasNodeBaseShape = {
 	id: z.string().min(1),
 	name: z.string().optional(),
 	transform: CanvasTransformSchema,
@@ -116,7 +145,8 @@ export const CanvasNodeBaseSchema: z.ZodType<CanvasNodeBase> =
 export const CanvasRectNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("rect"),
-	fill: z.string().optional(),
+	fill: CanvasFillSchema.optional(),
+	shadow: CanvasShadowSchema.optional(),
 	stroke: z.string().optional(),
 	strokeWidth: NonNegativeFiniteNumber.optional(),
 	radius: NonNegativeFiniteNumber.optional(),
@@ -125,7 +155,8 @@ export const CanvasRectNodeSchema = z.looseObject({
 export const CanvasEllipseNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("ellipse"),
-	fill: z.string().optional(),
+	fill: CanvasFillSchema.optional(),
+	shadow: CanvasShadowSchema.optional(),
 	stroke: z.string().optional(),
 	strokeWidth: NonNegativeFiniteNumber.optional(),
 });
@@ -142,7 +173,8 @@ export const CanvasPathNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("path"),
 	d: z.string().min(1),
-	fill: z.string().optional(),
+	fill: CanvasFillSchema.optional(),
+	shadow: CanvasShadowSchema.optional(),
 	stroke: z.string().optional(),
 	strokeWidth: NonNegativeFiniteNumber.optional(),
 });
@@ -154,7 +186,8 @@ export const CanvasTextNodeSchema = z.looseObject({
 	fontFamily: z.string().min(1),
 	fontSize: NonNegativeFiniteNumber,
 	fontWeight: z.string().optional(),
-	fill: z.string(),
+	fill: CanvasFillSchema,
+	shadow: CanvasShadowSchema.optional(),
 	align: z.enum(["left", "center", "right"]).optional(),
 });
 

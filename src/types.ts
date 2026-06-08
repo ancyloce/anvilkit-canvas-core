@@ -64,6 +64,34 @@ export interface ImageFilter {
 	params?: Record<string, number | string | boolean>;
 }
 
+export interface CanvasGradientStop {
+	/** Position along the gradient, 0..1. */
+	offset: number;
+	color: string;
+}
+
+/**
+ * A linear or radial gradient fill. `from`/`to` are normalized (0..1) points in
+ * the node's local box, so the gradient scales with the node.
+ */
+export interface CanvasGradientFill {
+	kind: "linear" | "radial";
+	stops: CanvasGradientStop[];
+	from: { x: number; y: number };
+	to: { x: number; y: number };
+}
+
+/** A node fill: a plain CSS color string (back-compat) or a structured gradient. */
+export type CanvasFill = string | CanvasGradientFill;
+
+export interface CanvasShadow {
+	color: string;
+	blur: number;
+	offsetX: number;
+	offsetY: number;
+	opacity?: number;
+}
+
 export interface CanvasIRMetadata {
 	createdAt: string;
 	updatedAt: string;
@@ -101,17 +129,19 @@ export interface CanvasGroupNode extends CanvasNodeBase {
 
 export interface CanvasRectNode extends CanvasNodeBase {
 	type: "rect";
-	fill?: string;
+	fill?: CanvasFill;
 	stroke?: string;
 	strokeWidth?: number;
 	radius?: number;
+	shadow?: CanvasShadow;
 }
 
 export interface CanvasEllipseNode extends CanvasNodeBase {
 	type: "ellipse";
-	fill?: string;
+	fill?: CanvasFill;
 	stroke?: string;
 	strokeWidth?: number;
+	shadow?: CanvasShadow;
 }
 
 export interface CanvasLineNode extends CanvasNodeBase {
@@ -124,9 +154,10 @@ export interface CanvasLineNode extends CanvasNodeBase {
 export interface CanvasPathNode extends CanvasNodeBase {
 	type: "path";
 	d: string;
-	fill?: string;
+	fill?: CanvasFill;
 	stroke?: string;
 	strokeWidth?: number;
+	shadow?: CanvasShadow;
 }
 
 export interface CanvasTextNode extends CanvasNodeBase {
@@ -135,8 +166,9 @@ export interface CanvasTextNode extends CanvasNodeBase {
 	fontFamily: string;
 	fontSize: number;
 	fontWeight?: string;
-	fill: string;
+	fill: CanvasFill;
 	align?: CanvasTextAlign;
+	shadow?: CanvasShadow;
 }
 
 export interface CanvasImageNode extends CanvasNodeBase {
