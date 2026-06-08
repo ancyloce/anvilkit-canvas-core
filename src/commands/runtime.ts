@@ -4,6 +4,7 @@ import {
 	CanvasIRMutationError,
 	insertNode,
 	removeNode,
+	reorderChildren,
 	replaceChildrenInParent,
 	updateNode,
 } from "../ir-mutations.js";
@@ -20,12 +21,14 @@ import type {
 } from "../types.js";
 import type {
 	CanvasAnyNodeUpdateCommand,
+	CanvasBatchCommand,
 	CanvasCommand,
 	CanvasImageReplaceCommand,
 	CanvasNodeCreateCommand,
 	CanvasNodeDeleteCommand,
 	CanvasNodeGroupCommand,
 	CanvasNodeMoveCommand,
+	CanvasNodeReorderCommand,
 	CanvasNodeResizeCommand,
 	CanvasNodeRotateCommand,
 	CanvasNodeUngroupCommand,
@@ -720,6 +723,75 @@ function applyPageReorder(
 	return { ir: next, inverse };
 }
 
+/**
+ * Apply a sequence of commands as one reversible unit. Folds `applyCommand`
+ * over a local working IR (never touching the caller's `ir`), so a throw from
+ * any sub-command leaves the input unchanged — all-or-nothing. The inverse is a
+ * `batch` of the sub-inverses in reverse order, replayable through this same
+ * `case "batch"` by undo/redo.
+ */
+function applyBatch(
+	ir: CanvasIR,
+	cmd: CanvasBatchCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	let working = ir;
+	const inverses: CanvasCommand[] = [];
+	for (const sub of cmd.commands) {
+		const result = applyCommand(working, sub, options);
+		working = result.ir;
+		inverses.push(result.inverse);
+	}
+	inverses.reverse();
+	const inverse: CanvasBatchCommand = {
+		type: "batch",
+		...(cmd.label !== undefined ? { label: cmd.label } : {}),
+		commands: inverses,
+	};
+	return { ir: working, inverse };
+}
+
+function applyNodeReorder(
+	ir: CanvasIR,
+	cmd: CanvasNodeReorderCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const parentResult = parentOf(ir, cmd.nodeId);
+	if (!parentResult) {
+		throw new CanvasCommandError(
+			"parent-not-found",
+			`Node "${cmd.nodeId}" has no parent (likely a page root)`,
+		);
+	}
+	const parent = parentResult.parent;
+	const fromIndex = parent.children.findIndex((c) => c.id === cmd.nodeId);
+	if (fromIndex < 0) {
+		throw new CanvasCommandError(
+			"node-not-found",
+			`Node "${cmd.nodeId}" not found under parent "${parent.id}"`,
+		);
+	}
+	const maxIndex = parent.children.length - 1;
+	const toIndex = Math.max(0, Math.min(maxIndex, cmd.toIndex));
+	let next: CanvasIR;
+	try {
+		next = reorderChildren(ir, {
+			parentId: parent.id,
+			fromIndex,
+			toIndex,
+			now: options.now,
+		});
+	} catch (err) {
+		rethrowMutationError(err);
+	}
+	const inverse: CanvasNodeReorderCommand = {
+		type: "node.reorder",
+		nodeId: cmd.nodeId,
+		toIndex: fromIndex,
+	};
+	return { ir: next, inverse };
+}
+
 export function applyCommand(
 	ir: CanvasIR,
 	cmd: CanvasCommand,
@@ -730,6 +802,8 @@ export function applyCommand(
 			return applyNodeCreate(ir, cmd, options);
 		case "node.delete":
 			return applyNodeDelete(ir, cmd, options);
+		case "node.reorder":
+			return applyNodeReorder(ir, cmd, options);
 		case "node.move":
 			return applyNodeMove(ir, cmd, options);
 		case "node.resize":
@@ -752,5 +826,7 @@ export function applyCommand(
 			return applyPageReorder(ir, cmd, options);
 		case "page.rename":
 			return applyPageRename(ir, cmd, options);
+		case "batch":
+			return applyBatch(ir, cmd, options);
 	}
 }
