@@ -1,4 +1,5 @@
 import { PDFDocument } from "pdf-lib";
+import { CanvasIRSchema } from "../ir-validators.js";
 import type { CanvasIR, CanvasPage, CanvasUnit } from "../types.js";
 import { DEFAULT_DPI } from "./svg.js";
 
@@ -210,6 +211,13 @@ export interface PdfSerializeOptions {
 	title?: string;
 	/** Written to the PDF document's author metadata. */
 	author?: string;
+	/**
+	 * Run {@link CanvasIRSchema} over `ir` before emitting and throw on failure
+	 * (default `false`). Independently of this flag, a page whose computed
+	 * dimensions are non-finite throws a `RangeError` rather than producing a
+	 * corrupt PDF (`pdf-lib` would otherwise receive `NaN` page bounds).
+	 */
+	validate?: boolean;
 }
 
 export type PdfWarningCode =
@@ -242,6 +250,7 @@ export async function serializeDocumentToPdf(
 	ir: CanvasIR,
 	options: PdfSerializeOptions,
 ): Promise<PdfSerializeResult> {
+	if (options.validate) CanvasIRSchema.parse(ir);
 	const pages = resolvePages(ir, options.pages);
 	if (pages.length === 0) {
 		throw new RangeError(
@@ -266,6 +275,11 @@ export async function serializeDocumentToPdf(
 		const dpi = page.size.dpi ?? fallbackDpi;
 		const widthPt = unitToPt(page.size.width, page.size.unit, dpi);
 		const heightPt = unitToPt(page.size.height, page.size.unit, dpi);
+		if (!Number.isFinite(widthPt) || !Number.isFinite(heightPt)) {
+			throw new RangeError(
+				`serializeDocumentToPdf: page "${page.id}" has non-finite dimensions (${widthPt}×${heightPt} pt); the source page size is invalid.`,
+			);
+		}
 		const pdfPage = doc.addPage([widthPt, heightPt]);
 
 		const raster = rastersByPage.get(page.id);

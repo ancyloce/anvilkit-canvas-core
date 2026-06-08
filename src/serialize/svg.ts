@@ -1,3 +1,6 @@
+import { type AffineMatrix, toAffineMatrix } from "../geometry.js";
+import { CanvasIRSchema } from "../ir-validators.js";
+import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir-walkers.js";
 import type {
 	CanvasAssetRef,
 	CanvasEllipseNode,
@@ -38,15 +41,15 @@ import type {
  *  - Image `maskAssetId` / `filters` are not represented (out of scope here).
  */
 
-// --- URL / scheme safety (mirrors plugin-export-html `normalizeUrl`) ---------
+// --- URL / scheme safety -----------------------------------------------------
 
-const BLOCKED_URI_SCHEMES = [
-	"javascript:",
-	"vbscript:",
-	"file:",
-	"blob:",
-	"filesystem:",
-] as const;
+// `<image href>` uses an ALLOWLIST (not a scheme blocklist), matching the
+// path-`d` discipline: only http(s), scheme-less relative/protocol-relative
+// refs, and — when explicitly permitted — safe raster `data:` URIs are emitted.
+// Any other scheme (javascript:, vbscript:, file:, blob:, filesystem:, ftp:,
+// mailto:, custom:, …) is dropped, so a novel dangerous scheme can't slip past.
+const ALLOWED_URI_SCHEMES: ReadonlySet<string> = new Set(["http", "https"]);
+const URI_SCHEME_RE = /^([a-z][a-z0-9+.-]*):/;
 
 const SAFE_DATA_IMAGE_RE =
 	/^data:image\/(?:png|jpe?g|gif|webp|avif)(?:;[^,]*)?,/i;
@@ -57,8 +60,6 @@ const BTOA_CHUNK_SIZE = 0x8000;
 
 /** px-per-inch used when a page size omits an explicit `dpi`. */
 export const DEFAULT_DPI = 96;
-
-const DEG_TO_RAD = Math.PI / 180;
 
 // --- escaping ----------------------------------------------------------------
 
@@ -84,11 +85,14 @@ export function escapeCssString(input: string): string {
 }
 
 /**
- * Strip only `<`, `>` and newlines from a CSS `src` value so it cannot break
- * out of the `<style>` element while preserving `url(...)`/`format(...)` quotes.
+ * Sanitize a CSS `src` value for a `@font-face` rule: strip `<`/`>`/newlines (so
+ * it cannot break out of the `<style>` element) and the structural CSS breakout
+ * characters `{`, `}`, `;` (so it cannot terminate the declaration/rule and
+ * inject arbitrary CSS — e.g. `url(x); } * { background: url(//evil) }`), while
+ * preserving the `url(...)`/`format(...)` quotes a font `src` legitimately needs.
  */
 export function escapeCssUrl(input: string): string {
-	return input.replace(/[<>\r\n]/g, "");
+	return input.replace(/[<>{};\r\n]/g, "");
 }
 
 // --- URI normalization -------------------------------------------------------
@@ -98,9 +102,10 @@ export interface NormalizeUriOptions {
 }
 
 /**
- * Returns a safe URI, or `undefined` when the scheme is blocked. Mirrors the
- * blocked-scheme list in plugin-export-html. `data:` URIs are only allowed when
- * `allowSafeDataImage` is set and the payload is a known raster image type.
+ * Returns a safe URI, or `undefined` when the scheme is not allowlisted.
+ * Scheme-less (relative or protocol-relative `//…`) refs and `http(s)` are
+ * allowed; `data:` URIs are allowed only when `allowSafeDataImage` is set and
+ * the payload is a known raster image type; everything else is dropped.
  */
 export function normalizeUri(
 	input: string,
@@ -110,16 +115,15 @@ export function normalizeUri(
 	if (!candidate) return undefined;
 
 	const collapsed = stripControlChars(candidate).toLowerCase();
-	for (const scheme of BLOCKED_URI_SCHEMES) {
-		if (collapsed.startsWith(scheme)) return undefined;
+
+	if (collapsed.startsWith("data:")) {
+		return options.allowSafeDataImage && isSafeDataImageUrl(candidate)
+			? candidate
+			: undefined;
 	}
 
-	if (
-		collapsed.startsWith("data:") &&
-		(!options.allowSafeDataImage || !isSafeDataImageUrl(candidate))
-	) {
-		return undefined;
-	}
+	const scheme = URI_SCHEME_RE.exec(collapsed)?.[1];
+	if (scheme && !ALLOWED_URI_SCHEMES.has(scheme)) return undefined;
 
 	return candidate;
 }
@@ -210,60 +214,9 @@ export function fmt(n: number): string {
 
 // --- affine transform --------------------------------------------------------
 
-/** SVG `matrix(a b c d e f)` tuple: point (x,y) → (a·x + c·y + e, b·x + d·y + f). */
-export type AffineMatrix = [number, number, number, number, number, number];
-
-function matrixTranslate(m: AffineMatrix, x: number, y: number): void {
-	m[4] += m[0] * x + m[2] * y;
-	m[5] += m[1] * x + m[3] * y;
-}
-
-function matrixRotate(m: AffineMatrix, rad: number): void {
-	const c = Math.cos(rad);
-	const s = Math.sin(rad);
-	const m11 = m[0] * c + m[2] * s;
-	const m12 = m[1] * c + m[3] * s;
-	const m21 = m[0] * -s + m[2] * c;
-	const m22 = m[1] * -s + m[3] * c;
-	m[0] = m11;
-	m[1] = m12;
-	m[2] = m21;
-	m[3] = m22;
-}
-
-function matrixScale(m: AffineMatrix, sx: number, sy: number): void {
-	m[0] *= sx;
-	m[1] *= sx;
-	m[2] *= sy;
-	m[3] *= sy;
-}
-
-function matrixSkew(m: AffineMatrix, kx: number, ky: number): void {
-	const m11 = m[0] + m[2] * ky;
-	const m12 = m[1] + m[3] * ky;
-	const m21 = m[2] + m[0] * kx;
-	const m22 = m[3] + m[1] * kx;
-	m[0] = m11;
-	m[1] = m12;
-	m[2] = m21;
-	m[3] = m22;
-}
-
-/**
- * Compose a transform into an affine matrix, replicating Konva's
- * `Node.getTransform` order exactly: translate → rotate → skew → scale.
- * (CanvasIR has no `offset`, so the trailing offset translate is always 0.)
- */
-export function toAffineMatrix(t: CanvasTransform): AffineMatrix {
-	const m: AffineMatrix = [1, 0, 0, 1, 0, 0];
-	if (t.x !== 0 || t.y !== 0) matrixTranslate(m, t.x, t.y);
-	if (t.rotation !== 0) matrixRotate(m, t.rotation * DEG_TO_RAD);
-	const skewX = t.skewX ?? 0;
-	const skewY = t.skewY ?? 0;
-	if (skewX !== 0 || skewY !== 0) matrixSkew(m, skewX, skewY);
-	if (t.scaleX !== 1 || t.scaleY !== 1) matrixScale(m, t.scaleX, t.scaleY);
-	return m;
-}
+// Matrix math lives in `../geometry.js` (shared with the command runtime);
+// re-exported here so `toAffineMatrix` / `AffineMatrix` keep their public path.
+export { type AffineMatrix, toAffineMatrix };
 
 /**
  * The value for an SVG `transform` attribute, or `""` for an identity
@@ -588,6 +541,14 @@ export interface SvgSerializeOptions {
 	skipInvisible?: boolean;
 	/** Newline-indent the output for readable/golden snapshots (default `false`). */
 	pretty?: boolean;
+	/**
+	 * Run {@link CanvasIRSchema} over `ir` before emitting and throw on failure
+	 * (default `false`). The serializer trusts its input and `fmt` coerces any
+	 * non-finite number to `"0"` to keep the output well-formed; enable this to
+	 * fail fast on a malformed/un-validated IR (NaN/Infinity, wrong types) instead
+	 * of silently emitting zeros.
+	 */
+	validate?: boolean;
 }
 
 export interface SvgSerializeResult {
@@ -602,6 +563,9 @@ async function emitNode(
 	ctx: SvgEmitContext,
 	depth: number,
 ): Promise<string> {
+	if (depth > MAX_TREE_DEPTH) {
+		throw new CanvasIRDepthError([node.id]);
+	}
 	if (shouldSkipNode(node, ctx.options.skipInvisible)) return "";
 	const pad = ctx.options.pretty ? "\t".repeat(depth) : "";
 
@@ -876,6 +840,7 @@ export async function serializePageToSvg(
 	pageSelector: string | number,
 	options: SvgSerializeOptions = {},
 ): Promise<SvgSerializeResult> {
+	if (options.validate) CanvasIRSchema.parse(ir);
 	const page = resolvePage(ir, pageSelector);
 	const ctx = createEmitContext(options, ir.assets);
 	const pretty = ctx.options.pretty;
@@ -891,14 +856,23 @@ export async function serializePageToSvg(
 	// directly so the document isn't wrapped in a redundant <g>.
 	content.push(...(await emitChildren(page.root.children, ctx, 1)));
 
+	// Accessible name: prefer the page name, fall back to the document title.
+	// `<title>` is emitted as the first child (screen readers announce it) and is
+	// paired with `role="img"` — role without a label is an a11y anti-pattern, so
+	// neither is added when there is no name to give.
+	const titleText = (page.name ?? ir.title ?? "").trim();
+	const hasTitle = titleText.length > 0;
+
+	const body: string[] = [];
+	if (hasTitle) body.push(`${childPad}<title>${escapeXml(titleText)}</title>`);
 	// Font `<defs>` is built after emission so it only covers fonts actually
 	// used, and is placed first so `@font-face` is declared before any glyphs.
-	const body: string[] = [];
 	const fontDefs = renderFontDefs(ctx);
 	if (fontDefs) body.push(childPad + fontDefs);
 	body.push(...content);
 
-	const open = `<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(width)}" height="${fmt(height)}" viewBox="0 0 ${fmt(width)} ${fmt(height)}">`;
+	const roleAttr = hasTitle ? ' role="img"' : "";
+	const open = `<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(width)}" height="${fmt(height)}" viewBox="0 0 ${fmt(width)} ${fmt(height)}"${roleAttr}>`;
 
 	let svg: string;
 	if (body.length === 0) {
