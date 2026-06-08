@@ -53,6 +53,16 @@ export interface CanvasNodeDeleteCommand {
 	nodeId: string;
 }
 
+/**
+ * Move a node to a new index among its siblings (same parent). `toIndex` is
+ * clamped to the sibling range; the inverse restores the prior index.
+ */
+export interface CanvasNodeReorderCommand {
+	type: "node.reorder";
+	nodeId: string;
+	toIndex: number;
+}
+
 export interface CanvasNodeUpdateCommand<K extends CanvasNodeKind> {
 	type: "node.update";
 	nodeId: string;
@@ -130,12 +140,25 @@ export interface CanvasPageRenameCommand {
 	to: string | undefined;
 }
 
+/**
+ * A composite, reversible command: applies its `commands` in order as a single
+ * undoable unit. Its inverse (produced by `applyCommand`) is another `batch`
+ * whose sub-commands are the reversed inverses, so history replays it like any
+ * other command with no special-casing. Nestable.
+ */
+export interface CanvasBatchCommand {
+	type: "batch";
+	label?: string;
+	commands: CanvasCommand[];
+}
+
 export type CanvasCommand =
 	| CanvasNodeCreateCommand
 	| CanvasNodeMoveCommand
 	| CanvasNodeResizeCommand
 	| CanvasNodeRotateCommand
 	| CanvasNodeDeleteCommand
+	| CanvasNodeReorderCommand
 	| CanvasAnyNodeUpdateCommand
 	| CanvasImageReplaceCommand
 	| CanvasNodeGroupCommand
@@ -143,7 +166,8 @@ export type CanvasCommand =
 	| CanvasPageCreateCommand
 	| CanvasPageReorderCommand
 	| CanvasPageRenameCommand
-	| CanvasPageDeleteCommand;
+	| CanvasPageDeleteCommand
+	| CanvasBatchCommand;
 
 export type CanvasCommandKind = CanvasCommand["type"];
 
