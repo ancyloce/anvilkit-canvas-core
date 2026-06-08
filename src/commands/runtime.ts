@@ -1,7 +1,10 @@
+import { resolveNow } from "../clock.js";
+import { transformedBoundsExtent } from "../geometry.js";
 import {
 	CanvasIRMutationError,
 	insertNode,
 	removeNode,
+	replaceChildrenInParent,
 	updateNode,
 } from "../ir-mutations.js";
 import { findNode, parentOf } from "../ir-walkers.js";
@@ -54,13 +57,11 @@ export class CanvasCommandError extends Error {
 	}
 }
 
-function nowIso(): string {
-	return new Date().toISOString();
-}
-
 function bumpMetadata(ir: CanvasIR, options: CommandApplyOptions): CanvasIR {
-	const now = options.now ?? nowIso;
-	return { ...ir, metadata: { ...ir.metadata, updatedAt: now() } };
+	return {
+		...ir,
+		metadata: { ...ir.metadata, updatedAt: resolveNow(options.now)() },
+	};
 }
 
 function expectPage(ir: CanvasIR, pageId: string): CanvasPage {
@@ -91,9 +92,12 @@ function rethrowMutationError(err: unknown): never {
 			case "node-not-found":
 				throw new CanvasCommandError("node-not-found", err.message);
 			case "parent-not-found":
+				throw new CanvasCommandError("parent-not-found", err.message);
+			// Removing/moving a page root is an invariant violation, not a missing
+			// parent — surface it distinctly so callers can tell the two apart.
 			case "cannot-remove-page-root":
 			case "cannot-move-page-root":
-				throw new CanvasCommandError("parent-not-found", err.message);
+				throw new CanvasCommandError("invariant-violated", err.message);
 			case "parent-not-group":
 				throw new CanvasCommandError("parent-not-group", err.message);
 			case "index-out-of-range":
@@ -358,13 +362,26 @@ function applyImageReplace(
 }
 
 function computeChildrenBounds(children: readonly CanvasNode[]): CanvasBounds {
-	let maxRight = 0;
-	let maxBottom = 0;
+	// Transform-aware AABB across all children (accounts for rotation/scale/skew,
+	// not just `x + width`), anchored to include the group origin (0,0). So
+	// positive-coord content still measures from 0, while rotated/scaled content
+	// that spills into negative coordinates is fully covered.
+	let minX = 0;
+	let minY = 0;
+	let maxX = 0;
+	let maxY = 0;
 	for (const child of children) {
-		maxRight = Math.max(maxRight, child.transform.x + child.bounds.width);
-		maxBottom = Math.max(maxBottom, child.transform.y + child.bounds.height);
+		const ext = transformedBoundsExtent(
+			child.transform,
+			child.bounds.width,
+			child.bounds.height,
+		);
+		if (ext.minX < minX) minX = ext.minX;
+		if (ext.minY < minY) minY = ext.minY;
+		if (ext.maxX > maxX) maxX = ext.maxX;
+		if (ext.maxY > maxY) maxY = ext.maxY;
 	}
-	return { width: maxRight, height: maxBottom };
+	return { width: maxX - minX, height: maxY - minY };
 }
 
 interface GroupChildEntry {
@@ -459,15 +476,18 @@ function applyNodeGroup(
 				children: childNodes,
 			};
 	const parentId = parent.id;
-	let next = ir;
+	const selectedIds = new Set(cmd.childIds);
+	let next: CanvasIR;
 	try {
-		for (const id of cmd.childIds) {
-			next = removeNode(next, { id, now: options.now });
-		}
-		next = insertNode(next, {
+		// Single tree rewrite: drop the selected siblings and splice the new group
+		// in at the topmost selected slot — one O(n) pass, not one per child.
+		next = replaceChildrenInParent(ir, {
 			parentId,
-			node: groupNode,
-			index: minIndex,
+			replace: (children) => {
+				const remaining = children.filter((c) => !selectedIds.has(c.id));
+				remaining.splice(minIndex, 0, groupNode);
+				return remaining;
+			},
 			now: options.now,
 		});
 	} catch (err) {
@@ -507,38 +527,41 @@ function applyNodeUngroup(
 	const childIds = children.map((c) => c.id);
 	const { children: _children, ...groupTemplate } = group;
 	const parentId = parent.id;
-	let next = ir;
-	try {
-		next = removeNode(next, { id: cmd.groupId, now: options.now });
-		if (cmd.restore && cmd.restore.length > 0) {
-			const plan = [...cmd.restore].sort((a, b) => a.index - b.index);
-			for (const { id, index } of plan) {
-				const child = children.find((c) => c.id === id);
-				if (!child) {
-					throw new CanvasCommandError(
-						"invariant-violated",
-						`Restore id "${id}" is not a child of group "${cmd.groupId}"`,
-					);
-				}
-				next = insertNode(next, {
-					parentId,
-					node: child,
-					index,
-					now: options.now,
-				});
-			}
-		} else {
-			let index = groupIndex;
-			for (const child of children) {
-				next = insertNode(next, {
-					parentId,
-					node: child,
-					index,
-					now: options.now,
-				});
-				index += 1;
+	const restore = cmd.restore;
+	// Pre-validate restore ids so the failure path is independent of the rewrite.
+	if (restore && restore.length > 0) {
+		for (const { id } of restore) {
+			if (!children.some((c) => c.id === id)) {
+				throw new CanvasCommandError(
+					"invariant-violated",
+					`Restore id "${id}" is not a child of group "${cmd.groupId}"`,
+				);
 			}
 		}
+	}
+	let next: CanvasIR;
+	try {
+		// Single tree rewrite: replace the group with its children spilled into the
+		// parent — at their recorded indices when restoring, else contiguously at
+		// the group's former slot.
+		next = replaceChildrenInParent(ir, {
+			parentId,
+			replace: (siblings) => {
+				const withoutGroup = siblings.filter((c) => c.id !== cmd.groupId);
+				const result = [...withoutGroup];
+				if (restore && restore.length > 0) {
+					const plan = [...restore].sort((a, b) => a.index - b.index);
+					for (const { id, index } of plan) {
+						const child = children.find((c) => c.id === id);
+						if (child) result.splice(index, 0, child);
+					}
+					return result;
+				}
+				result.splice(groupIndex, 0, ...children);
+				return result;
+			},
+			now: options.now,
+		});
 	} catch (err) {
 		rethrowMutationError(err);
 	}
