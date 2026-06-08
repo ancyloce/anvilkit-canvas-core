@@ -1,9 +1,16 @@
-import { type AffineMatrix, toAffineMatrix } from "../geometry.js";
+import type {
+	CanvasNodeKindRegistry,
+	CanvasSvgHookContext,
+	CanvasUnknownNode,
+} from "../extensions/node-kind-registry.js";
+import { toAffineMatrix } from "../geometry.js";
 import { CanvasIRSchema } from "../ir-validators.js";
 import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir-walkers.js";
 import type {
 	CanvasAssetRef,
 	CanvasEllipseNode,
+	CanvasFill,
+	CanvasGradientFill,
 	CanvasGroupNode,
 	CanvasImageNode,
 	CanvasIR,
@@ -13,6 +20,7 @@ import type {
 	CanvasPage,
 	CanvasPathNode,
 	CanvasRectNode,
+	CanvasShadow,
 	CanvasTextAlign,
 	CanvasTextNode,
 	CanvasTransform,
@@ -214,10 +222,6 @@ export function fmt(n: number): string {
 
 // --- affine transform --------------------------------------------------------
 
-// Matrix math lives in `../geometry.js` (shared with the command runtime);
-// re-exported here so `toAffineMatrix` / `AffineMatrix` keep their public path.
-export { type AffineMatrix, toAffineMatrix };
-
 /**
  * The value for an SVG `transform` attribute, or `""` for an identity
  * transform. Skewed nodes emit a composed `matrix(...)`; everything else emits
@@ -254,7 +258,9 @@ export type SvgWarningCode =
 	| "EMBED_NO_FETCHER"
 	| "IMAGE_MASK_UNSUPPORTED"
 	| "IMAGE_FILTERS_UNSUPPORTED"
-	| "BACKGROUND_UNSUPPORTED";
+	| "BACKGROUND_UNSUPPORTED"
+	| "UNKNOWN_KIND_SKIPPED"
+	| "CUSTOM_KIND";
 
 export interface SvgSerializeWarning {
 	code: SvgWarningCode;
@@ -269,6 +275,7 @@ export interface ResolvedSvgOptions {
 	pretty: boolean;
 	fonts: SvgFontFaceDef[];
 	fetchAsset?: SvgFetchAsset;
+	nodeKinds?: CanvasNodeKindRegistry;
 }
 
 /**
@@ -295,6 +302,7 @@ export function createEmitContext(
 		fonts: options.fonts ?? [],
 	};
 	if (options.fetchAsset) resolved.fetchAsset = options.fetchAsset;
+	if (options.nodeKinds) resolved.nodeKinds = options.nodeKinds;
 	return {
 		warnings: [],
 		usedFonts: new Set<string>(),
@@ -310,6 +318,21 @@ function warn(
 	nodeId?: string,
 ): void {
 	ctx.warnings.push(nodeId ? { code, message, nodeId } : { code, message });
+}
+
+/**
+ * Build the framework-free emit surface handed to a custom node kind's `toSvg`
+ * hook (the registry-driven path for non-built-in kinds).
+ */
+function makeSvgHookContext(ctx: SvgEmitContext): CanvasSvgHookContext {
+	return {
+		commonAttrs: (n) => commonAttrs(n, ctx).join(" "),
+		fmt,
+		escapeAttr,
+		escapeXml,
+		warn: (code, message, nodeId) =>
+			warn(ctx, "CUSTOM_KIND", `[${code}] ${message}`, nodeId),
+	};
 }
 
 // --- shared attribute helpers ------------------------------------------------
@@ -383,6 +406,63 @@ function paintAttrs(
 	return out;
 }
 
+/**
+ * SVG markup for a gradient fill. `gradientUnits="objectBoundingBox"` makes the
+ * 0..1 `from`/`to` coordinates map directly onto the node's box.
+ */
+function gradientMarkup(id: string, g: CanvasGradientFill): string {
+	const stops = g.stops
+		.map(
+			(s) =>
+				`<stop offset="${fmt(s.offset)}" stop-color="${escapeAttr(s.color)}" />`,
+		)
+		.join("");
+	if (g.kind === "radial") {
+		const r = Math.hypot(g.to.x - g.from.x, g.to.y - g.from.y);
+		return `<radialGradient id="${id}" gradientUnits="objectBoundingBox" cx="${fmt(g.from.x)}" cy="${fmt(g.from.y)}" r="${fmt(r)}">${stops}</radialGradient>`;
+	}
+	return `<linearGradient id="${id}" gradientUnits="objectBoundingBox" x1="${fmt(g.from.x)}" y1="${fmt(g.from.y)}" x2="${fmt(g.to.x)}" y2="${fmt(g.to.y)}">${stops}</linearGradient>`;
+}
+
+/** SVG `<filter>` markup for a drop shadow (stdDeviation ≈ Konva blur / 2). */
+function shadowMarkup(id: string, s: CanvasShadow): string {
+	return `<filter id="${id}"><feDropShadow dx="${fmt(s.offsetX)}" dy="${fmt(s.offsetY)}" stdDeviation="${fmt(s.blur / 2)}" flood-color="${escapeAttr(s.color)}" flood-opacity="${fmt(s.opacity ?? 1)}" /></filter>`;
+}
+
+/**
+ * Resolve a fillable/shadowable node's fill + shadow into inline `<defs>`, the
+ * `fill` value (a color, or `url(#id)` for a gradient), and an optional `filter`
+ * attribute. Ids derive from the node id (one fill + one shadow per node). A
+ * string/undefined fill with no shadow yields empty defs/filter, so the output
+ * is byte-identical to a plain shape.
+ */
+function decorate(
+	fill: CanvasFill | undefined,
+	shadow: CanvasShadow | undefined,
+	nodeId: string,
+): { defs: string; fill: string | undefined; filterAttr: string } {
+	const inner: string[] = [];
+	let fillValue: string | undefined;
+	if (fill === undefined || typeof fill === "string") {
+		fillValue = fill;
+	} else {
+		const id = `grad-${sanitizeId(nodeId)}`;
+		inner.push(gradientMarkup(id, fill));
+		fillValue = `url(#${id})`;
+	}
+	let filterAttr = "";
+	if (shadow) {
+		const id = `shadow-${sanitizeId(nodeId)}`;
+		inner.push(shadowMarkup(id, shadow));
+		filterAttr = ` filter="url(#${id})"`;
+	}
+	return {
+		defs: inner.length > 0 ? `<defs>${inner.join("")}</defs>` : "",
+		fill: fillValue,
+		filterAttr,
+	};
+}
+
 function textAnchor(
 	align: CanvasTextAlign | undefined,
 ): "start" | "middle" | "end" {
@@ -411,6 +491,7 @@ export function shouldSkipNode(
 // --- shape emitters (synchronous; image emission is async, added later) ------
 
 export function emitRect(node: CanvasRectNode, ctx: SvgEmitContext): string {
+	const decor = decorate(node.fill, node.shadow, node.id);
 	const attrs = [
 		...commonAttrs(node, ctx),
 		`width="${fmt(node.bounds.width)}"`,
@@ -419,8 +500,8 @@ export function emitRect(node: CanvasRectNode, ctx: SvgEmitContext): string {
 	if (node.radius !== undefined && node.radius > 0) {
 		attrs.push(`rx="${fmt(node.radius)}"`, `ry="${fmt(node.radius)}"`);
 	}
-	attrs.push(...paintAttrs(node.fill, node.stroke, node.strokeWidth));
-	return `<rect ${attrs.join(" ")} />`;
+	attrs.push(...paintAttrs(decor.fill, node.stroke, node.strokeWidth));
+	return `${decor.defs}<rect ${attrs.join(" ")}${decor.filterAttr} />`;
 }
 
 export function emitEllipse(
@@ -429,15 +510,16 @@ export function emitEllipse(
 ): string {
 	const rx = node.bounds.width / 2;
 	const ry = node.bounds.height / 2;
+	const decor = decorate(node.fill, node.shadow, node.id);
 	const attrs = [
 		...commonAttrs(node, ctx),
 		`cx="${fmt(rx)}"`,
 		`cy="${fmt(ry)}"`,
 		`rx="${fmt(rx)}"`,
 		`ry="${fmt(ry)}"`,
-		...paintAttrs(node.fill, node.stroke, node.strokeWidth),
+		...paintAttrs(decor.fill, node.stroke, node.strokeWidth),
 	];
-	return `<ellipse ${attrs.join(" ")} />`;
+	return `${decor.defs}<ellipse ${attrs.join(" ")}${decor.filterAttr} />`;
 }
 
 export function emitLine(node: CanvasLineNode, ctx: SvgEmitContext): string {
@@ -466,12 +548,13 @@ export function emitPath(node: CanvasPathNode, ctx: SvgEmitContext): string {
 		);
 		return "";
 	}
+	const decor = decorate(node.fill, node.shadow, node.id);
 	const attrs = [
 		...commonAttrs(node, ctx),
 		`d="${escapeAttr(node.d)}"`,
-		...paintAttrs(node.fill, node.stroke, node.strokeWidth),
+		...paintAttrs(decor.fill, node.stroke, node.strokeWidth),
 	];
-	return `<path ${attrs.join(" ")} />`;
+	return `${decor.defs}<path ${attrs.join(" ")}${decor.filterAttr} />`;
 }
 
 export function emitText(node: CanvasTextNode, ctx: SvgEmitContext): string {
@@ -479,6 +562,7 @@ export function emitText(node: CanvasTextNode, ctx: SvgEmitContext): string {
 	const anchor = textAnchor(node.align);
 	const x = textAnchorX(node.align, node.bounds.width);
 	const baselineY = node.fontSize * TEXT_ASCENT_RATIO;
+	const decor = decorate(node.fill, node.shadow, node.id);
 
 	const attrs = [
 		...commonAttrs(node, ctx),
@@ -491,7 +575,7 @@ export function emitText(node: CanvasTextNode, ctx: SvgEmitContext): string {
 		attrs.push(`font-weight="${escapeAttr(node.fontWeight)}"`);
 	}
 	if (anchor !== "start") attrs.push(`text-anchor="${anchor}"`);
-	attrs.push(`fill="${escapeAttr(node.fill)}"`);
+	attrs.push(`fill="${escapeAttr(decor.fill ?? "")}"`);
 
 	const lines = node.text.split("\n");
 	if (lines.length > 1) {
@@ -507,9 +591,9 @@ export function emitText(node: CanvasTextNode, ctx: SvgEmitContext): string {
 					`<tspan x="${fmt(x)}" dy="${index === 0 ? "0" : fmt(node.fontSize)}">${escapeXml(line)}</tspan>`,
 			)
 			.join("");
-		return `<text ${attrs.join(" ")}>${tspans}</text>`;
+		return `${decor.defs}<text ${attrs.join(" ")}${decor.filterAttr}>${tspans}</text>`;
 	}
-	return `<text ${attrs.join(" ")}>${escapeXml(node.text)}</text>`;
+	return `${decor.defs}<text ${attrs.join(" ")}${decor.filterAttr}>${escapeXml(node.text)}</text>`;
 }
 
 // --- public options / result -------------------------------------------------
@@ -549,6 +633,12 @@ export interface SvgSerializeOptions {
 	 * of silently emitting zeros.
 	 */
 	validate?: boolean;
+	/**
+	 * Node-kind registry (typically `runtime.nodeKinds`). A node whose `type` is
+	 * not a built-in kind is emitted via its registered `toSvg` hook; without one
+	 * it is skipped with an `UNKNOWN_KIND_SKIPPED` warning.
+	 */
+	nodeKinds?: CanvasNodeKindRegistry;
 }
 
 export interface SvgSerializeResult {
@@ -596,6 +686,24 @@ async function emitNode(
 				node.id,
 			);
 			return "";
+		default: {
+			// A custom (non-built-in) node kind: emit via its registered toSvg hook,
+			// else skip with a warning. The built-in cases above keep their exact
+			// byte output (golden parity); only unknown kinds reach here.
+			const unknown = node as unknown as CanvasUnknownNode;
+			const def = ctx.options.nodeKinds?.get(unknown.type);
+			if (def?.toSvg) {
+				const fragment = def.toSvg(unknown, makeSvgHookContext(ctx));
+				return fragment ? pad + fragment : "";
+			}
+			warn(
+				ctx,
+				"UNKNOWN_KIND_SKIPPED",
+				`No SVG serializer registered for node kind "${unknown.type}".`,
+				unknown.id,
+			);
+			return "";
+		}
 	}
 }
 

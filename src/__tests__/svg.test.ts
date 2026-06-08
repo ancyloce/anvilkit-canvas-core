@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { toAffineMatrix } from "../geometry.js";
 import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir-walkers.js";
 import {
 	bytesToBase64,
@@ -18,7 +19,6 @@ import {
 	sanitizeId,
 	serializePageToSvg,
 	shouldSkipNode,
-	toAffineMatrix,
 	transformAttr,
 	unitToPx,
 } from "../serialize/svg.js";
@@ -778,4 +778,4 @@ describe("serializePageToSvg accessibility", () => {
 		expect(svg).not.toContain('role="img"');
 		expect(svg).not.toContain("<title>");
 	});
-})
+});
