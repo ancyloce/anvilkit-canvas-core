@@ -1,4 +1,11 @@
-import { findNode, isGroupNode, parentOf, walkPage } from "./ir-walkers.js";
+import { resolveNow } from "./clock.js";
+import {
+	CanvasIRDepthError,
+	findNode,
+	isGroupNode,
+	MAX_TREE_DEPTH,
+	walkPage,
+} from "./ir-walkers.js";
 import type {
 	CanvasGroupNode,
 	CanvasIR,
@@ -31,13 +38,8 @@ interface NowOption {
 	now?: () => string;
 }
 
-function nowIso(): string {
-	return new Date().toISOString();
-}
-
 function bumpUpdatedAt(ir: CanvasIR, options: NowOption): CanvasIR["metadata"] {
-	const now = options.now ?? nowIso;
-	return { ...ir.metadata, updatedAt: now() };
+	return { ...ir.metadata, updatedAt: resolveNow(options.now)() };
 }
 
 function isPageRoot(ir: CanvasIR, id: string): boolean {
@@ -48,18 +50,31 @@ function replacePage(ir: CanvasIR, page: CanvasPage): CanvasPage[] {
 	return ir.pages.map((p) => (p.id === page.id ? page : p));
 }
 
+/**
+ * Bound recursion depth so a maliciously/accidentally deep IR cannot overflow
+ * the stack inside a mutation. Mirrors the `walkPage` guard (same
+ * `MAX_TREE_DEPTH`), so mutations fail the same way reads do.
+ */
+function assertTreeDepth(depth: number, nodeId: string): void {
+	if (depth > MAX_TREE_DEPTH) {
+		throw new CanvasIRDepthError([nodeId]);
+	}
+}
+
 function replaceGroupInTree(
 	root: CanvasGroupNode,
 	targetId: string,
 	replacer: (group: CanvasGroupNode) => CanvasGroupNode,
+	depth = 0,
 ): CanvasGroupNode {
+	assertTreeDepth(depth, root.id);
 	if (root.id === targetId) {
 		return replacer(root);
 	}
 	let changed = false;
 	const newChildren: CanvasNode[] = root.children.map((child) => {
 		if (isGroupNode(child)) {
-			const replaced = replaceGroupInTree(child, targetId, replacer);
+			const replaced = replaceGroupInTree(child, targetId, replacer, depth + 1);
 			if (replaced !== child) changed = true;
 			return replaced;
 		}
@@ -72,7 +87,9 @@ function replaceGroupInTree(
 function removeIdFromTree(
 	root: CanvasGroupNode,
 	targetId: string,
+	depth = 0,
 ): { root: CanvasGroupNode; removed: CanvasNode | null } {
+	assertTreeDepth(depth, root.id);
 	let removed: CanvasNode | null = null;
 	const newChildren: CanvasNode[] = [];
 	for (const child of root.children) {
@@ -81,7 +98,7 @@ function removeIdFromTree(
 			continue;
 		}
 		if (isGroupNode(child)) {
-			const inner = removeIdFromTree(child, targetId);
+			const inner = removeIdFromTree(child, targetId, depth + 1);
 			if (inner.removed) {
 				removed = inner.removed;
 				newChildren.push(inner.root);
@@ -94,11 +111,127 @@ function removeIdFromTree(
 	return { root: { ...root, children: newChildren }, removed };
 }
 
-function descendantIds(node: CanvasNode): Set<string> {
+/**
+ * Apply `patch` to `node`, preserving the discriminant + id. A patch entry whose
+ * value is `undefined` DELETES that (optional) key rather than setting it to
+ * `undefined`, so the inverse of "add an optional field" restores the node's
+ * original shape exactly (absent key, not `{ field: undefined }`).
+ */
+function mergeNodePatch(node: CanvasNode, patch: object): CanvasNode {
+	const merged = { ...node, ...patch } as Record<string, unknown>;
+	for (const key of Object.keys(patch)) {
+		if ((patch as Record<string, unknown>)[key] === undefined) {
+			delete merged[key];
+		}
+	}
+	merged.id = node.id;
+	merged.type = node.type;
+	return merged as unknown as CanvasNode;
+}
+
+/**
+ * Single-pass immutable node patch. Walks `root` once, rebuilding only the spine
+ * down to the first pre-order node whose id matches, and returns the same `root`
+ * reference when the id is absent (so callers can detect "not in this page"
+ * without a second lookup). Replaces the prior `findNode` + `parentOf` +
+ * `replaceGroupInTree` three-walk sequence with one traversal. The discriminant
+ * and id are always preserved even if `patch` tries to override them.
+ */
+function updateNodeInTree<K extends CanvasNodeKind>(
+	group: CanvasGroupNode,
+	id: string,
+	patch: Partial<Omit<CanvasNodeByKind<K>, "id" | "type">>,
+	depth = 0,
+): CanvasGroupNode {
+	assertTreeDepth(depth, group.id);
+	let changed = false;
+	const newChildren: CanvasNode[] = group.children.map((child) => {
+		if (changed) return child;
+		if (child.id === id) {
+			changed = true;
+			return mergeNodePatch(child, patch);
+		}
+		if (isGroupNode(child)) {
+			const replaced = updateNodeInTree(child, id, patch, depth + 1);
+			if (replaced !== child) {
+				changed = true;
+				return replaced;
+			}
+		}
+		return child;
+	});
+	return changed ? { ...group, children: newChildren } : group;
+}
+
+/**
+ * Single-pass immutable insert. Walks `root` once, splicing `node` into the
+ * first pre-order group whose id matches `parentId`, and returns the same `root`
+ * reference when `parentId` is absent. Throws `parent-not-group` /
+ * `index-out-of-range` when the parent is found but invalid (terminal — the
+ * caller must not retry on another page). Replaces the prior `findNode` +
+ * `replaceGroupInTree` two-walk sequence with one traversal.
+ */
+function insertIntoTree(
+	root: CanvasGroupNode,
+	parentId: string,
+	node: CanvasNode,
+	index: number | undefined,
+	depth = 0,
+): CanvasGroupNode {
+	assertTreeDepth(depth, root.id);
+	if (root.id === parentId) {
+		return spliceChild(root, node, index);
+	}
+	let changed = false;
+	const newChildren: CanvasNode[] = root.children.map((child) => {
+		if (changed) return child;
+		if (child.id === parentId) {
+			if (!isGroupNode(child)) {
+				throw new CanvasIRMutationError(
+					"parent-not-group",
+					`Parent id "${parentId}" is not a group (type=${child.type})`,
+				);
+			}
+			changed = true;
+			return spliceChild(child, node, index);
+		}
+		if (isGroupNode(child)) {
+			const replaced = insertIntoTree(child, parentId, node, index, depth + 1);
+			if (replaced !== child) {
+				changed = true;
+				return replaced;
+			}
+		}
+		return child;
+	});
+	return changed ? { ...root, children: newChildren } : root;
+}
+
+/** Insert `node` into `parent.children` at `index` (append when omitted). */
+function spliceChild(
+	parent: CanvasGroupNode,
+	node: CanvasNode,
+	index: number | undefined,
+): CanvasGroupNode {
+	const length = parent.children.length;
+	const at = index ?? length;
+	if (at < 0 || at > length) {
+		throw new CanvasIRMutationError(
+			"index-out-of-range",
+			`Insert index ${at} out of range for parent with ${length} children`,
+		);
+	}
+	const newChildren = [...parent.children];
+	newChildren.splice(at, 0, node);
+	return { ...parent, children: newChildren };
+}
+
+function descendantIds(node: CanvasNode, depth = 0): Set<string> {
+	assertTreeDepth(depth, node.id);
 	const out = new Set<string>([node.id]);
 	if (isGroupNode(node)) {
 		for (const child of node.children) {
-			for (const id of descendantIds(child)) {
+			for (const id of descendantIds(child, depth + 1)) {
 				out.add(id);
 			}
 		}
@@ -109,11 +242,13 @@ function descendantIds(node: CanvasNode): Set<string> {
 function findGroupInTree(
 	root: CanvasGroupNode,
 	id: string,
+	depth = 0,
 ): CanvasGroupNode | null {
+	assertTreeDepth(depth, root.id);
 	if (root.id === id) return root;
 	for (const child of root.children) {
 		if (isGroupNode(child)) {
-			const inner = findGroupInTree(child, id);
+			const inner = findGroupInTree(child, id, depth + 1);
 			if (inner) return inner;
 		}
 	}
@@ -138,37 +273,33 @@ export interface InsertNodeOptions extends NowOption {
 }
 
 export function insertNode(ir: CanvasIR, options: InsertNodeOptions): CanvasIR {
-	const parentInfo = findNode(ir, options.parentId);
-	if (!parentInfo) {
+	let inserted = false;
+	const newPages = ir.pages.map((page) => {
+		if (inserted) return page;
+		// `insertIntoTree` throws (parent-not-group / index-out-of-range) when the
+		// parent is found but invalid, and returns the same root reference when the
+		// parent is absent from this page.
+		const newRoot = insertIntoTree(
+			page.root,
+			options.parentId,
+			options.node,
+			options.index,
+		);
+		if (newRoot !== page.root) {
+			inserted = true;
+			return { ...page, root: newRoot };
+		}
+		return page;
+	});
+	if (!inserted) {
 		throw new CanvasIRMutationError(
 			"parent-not-found",
 			`Parent id "${options.parentId}" not found`,
 		);
 	}
-	if (!isGroupNode(parentInfo.node)) {
-		throw new CanvasIRMutationError(
-			"parent-not-group",
-			`Parent id "${options.parentId}" is not a group (type=${parentInfo.node.type})`,
-		);
-	}
-	const parent = parentInfo.node;
-	const insertIndex = options.index ?? parent.children.length;
-	if (insertIndex < 0 || insertIndex > parent.children.length) {
-		throw new CanvasIRMutationError(
-			"index-out-of-range",
-			`Insert index ${insertIndex} out of range for parent with ${parent.children.length} children`,
-		);
-	}
-	const page = parentInfo.page;
-	const newRoot = replaceGroupInTree(page.root, parent.id, (g) => {
-		const newChildren = [...g.children];
-		newChildren.splice(insertIndex, 0, options.node);
-		return { ...g, children: newChildren };
-	});
-	const newPage: CanvasPage = { ...page, root: newRoot };
 	return {
 		...ir,
-		pages: replacePage(ir, newPage),
+		pages: newPages,
 		metadata: bumpUpdatedAt(ir, options),
 	};
 }
@@ -184,27 +315,25 @@ export function removeNode(ir: CanvasIR, options: RemoveNodeOptions): CanvasIR {
 			`Cannot remove page-root group "${options.id}"`,
 		);
 	}
-	const found = findNode(ir, options.id);
-	if (!found) {
+	let removedAny = false;
+	const newPages = ir.pages.map((page) => {
+		if (removedAny) return page;
+		const { root: newRoot, removed } = removeIdFromTree(page.root, options.id);
+		if (removed) {
+			removedAny = true;
+			return { ...page, root: newRoot };
+		}
+		return page;
+	});
+	if (!removedAny) {
 		throw new CanvasIRMutationError(
 			"node-not-found",
 			`Node id "${options.id}" not found`,
 		);
 	}
-	const { root: newRoot, removed } = removeIdFromTree(
-		found.page.root,
-		options.id,
-	);
-	if (!removed) {
-		throw new CanvasIRMutationError(
-			"node-not-found",
-			`Node id "${options.id}" not found inside page "${found.page.id}"`,
-		);
-	}
-	const newPage: CanvasPage = { ...found.page, root: newRoot };
 	return {
 		...ir,
-		pages: replacePage(ir, newPage),
+		pages: newPages,
 		metadata: bumpUpdatedAt(ir, options),
 	};
 }
@@ -218,51 +347,42 @@ export function updateNode<K extends CanvasNodeKind>(
 	ir: CanvasIR,
 	options: UpdateNodeOptions<K>,
 ): CanvasIR {
-	const found = findNode(ir, options.id);
-	if (!found) {
+	// A page-root update keeps priority over a same-id descendant (matching the
+	// prior `isPageRoot`-first ordering) and preserves the id + type=group invariant.
+	const rootPage = ir.pages.find((p) => p.root.id === options.id);
+	if (rootPage) {
+		const newRoot = mergeNodePatch(
+			rootPage.root,
+			options.patch,
+		) as CanvasGroupNode;
+		const newPages = ir.pages.map((p) =>
+			p.id === rootPage.id ? { ...p, root: newRoot } : p,
+		);
+		return {
+			...ir,
+			pages: newPages,
+			metadata: bumpUpdatedAt(ir, options),
+		};
+	}
+	let updated = false;
+	const newPages = ir.pages.map((page) => {
+		if (updated) return page;
+		const newRoot = updateNodeInTree(page.root, options.id, options.patch);
+		if (newRoot !== page.root) {
+			updated = true;
+			return { ...page, root: newRoot };
+		}
+		return page;
+	});
+	if (!updated) {
 		throw new CanvasIRMutationError(
 			"node-not-found",
 			`Node id "${options.id}" not found`,
 		);
 	}
-	const page = found.page;
-	const target = found.node;
-	if (isPageRoot(ir, options.id)) {
-		const newRoot = { ...page.root, ...options.patch } as CanvasGroupNode;
-		// Always preserve id + type + children invariant.
-		newRoot.id = target.id;
-		newRoot.type = "group";
-		const newPage: CanvasPage = { ...page, root: newRoot };
-		return {
-			...ir,
-			pages: replacePage(ir, newPage),
-			metadata: bumpUpdatedAt(ir, options),
-		};
-	}
-	const parentResult = parentOf(ir, options.id);
-	if (!parentResult) {
-		// Should be unreachable since we know it's not a page-root and findNode succeeded.
-		throw new CanvasIRMutationError(
-			"parent-not-found",
-			`Parent of node "${options.id}" not found`,
-		);
-	}
-	const parent = parentResult.parent;
-	const newRoot = replaceGroupInTree(page.root, parent.id, (g) => {
-		const newChildren = g.children.map((child) => {
-			if (child.id !== options.id) return child;
-			const merged = { ...child, ...options.patch } as CanvasNode;
-			// Preserve discriminant + id even if patch tried to override (Partial<Omit> already forbids this at the type level, but defend at runtime too).
-			merged.id = child.id;
-			merged.type = child.type;
-			return merged;
-		});
-		return { ...g, children: newChildren };
-	});
-	const newPage: CanvasPage = { ...page, root: newRoot };
 	return {
 		...ir,
-		pages: replacePage(ir, newPage),
+		pages: newPages,
 		metadata: bumpUpdatedAt(ir, options),
 	};
 }
@@ -398,6 +518,53 @@ export function reorderChildren(
 		newChildren.splice(options.toIndex, 0, moved);
 		return { ...g, children: newChildren };
 	});
+	const newPage: CanvasPage = { ...page, root: newRoot };
+	return {
+		...ir,
+		pages: replacePage(ir, newPage),
+		metadata: bumpUpdatedAt(ir, options),
+	};
+}
+
+export interface ReplaceChildrenInParentOptions extends NowOption {
+	parentId: string;
+	/**
+	 * Receives the parent group's current children and returns the replacement
+	 * array. Runs inside a single tree rewrite, so a batch edit (e.g. grouping or
+	 * ungrouping N siblings) costs one O(n) pass instead of N insert/remove
+	 * passes. The caller owns IR invariants (unique ids, no cycles) within the
+	 * returned array.
+	 */
+	replace: (children: readonly CanvasNode[]) => CanvasNode[];
+}
+
+/**
+ * Rewrite a single parent group's `children` in one immutable pass. The
+ * building block the command layer uses for batch sibling edits (group /
+ * ungroup) so they don't pay one full tree clone per affected child.
+ */
+export function replaceChildrenInParent(
+	ir: CanvasIR,
+	options: ReplaceChildrenInParentOptions,
+): CanvasIR {
+	const parentInfo = findNode(ir, options.parentId);
+	if (!parentInfo) {
+		throw new CanvasIRMutationError(
+			"parent-not-found",
+			`Parent id "${options.parentId}" not found`,
+		);
+	}
+	if (!isGroupNode(parentInfo.node)) {
+		throw new CanvasIRMutationError(
+			"parent-not-group",
+			`Parent id "${options.parentId}" is not a group (type=${parentInfo.node.type})`,
+		);
+	}
+	const page = parentInfo.page;
+	const newRoot = replaceGroupInTree(page.root, options.parentId, (g) => ({
+		...g,
+		children: options.replace(g.children),
+	}));
 	const newPage: CanvasPage = { ...page, root: newRoot };
 	return {
 		...ir,

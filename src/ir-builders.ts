@@ -1,3 +1,4 @@
+import { nowIso } from "./clock.js";
 import type {
 	CanvasBounds,
 	CanvasEllipseNode,
@@ -8,9 +9,9 @@ import type {
 	CanvasLineNode,
 	CanvasNode,
 	CanvasPage,
-	CanvasPathNode,
 	CanvasPageBackground,
 	CanvasPageSize,
+	CanvasPathNode,
 	CanvasRectNode,
 	CanvasTextAlign,
 	CanvasTextNode,
@@ -48,10 +49,6 @@ function generateId(): string {
 			.toString(16)
 			.padStart(Math.ceil(n / 4), "0");
 	return `${rand(32)}-${rand(16)}-4${rand(12).slice(0, 3)}-${(8 + Math.floor(Math.random() * 4)).toString(16)}${rand(12).slice(0, 3)}-${rand(48)}`;
-}
-
-function nowIso(): string {
-	return new Date().toISOString();
 }
 
 function clonePartialTransform(

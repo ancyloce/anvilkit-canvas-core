@@ -16,6 +16,18 @@ import type {
 	ImageFilter,
 } from "./types.js";
 
+/**
+ * Object schemas use `z.looseObject` (preserve unknown keys) rather than the
+ * Zod default (`strip`, which silently drops them). The Canvas IR is a versioned
+ * (`version: "1"`) persisted + collaborative wire format, so a replica on an
+ * older build must round-trip a newer peer's extra fields instead of silently
+ * deleting them — silent stripping would lose data and break CRDT convergence.
+ * A stricter trust-boundary posture (`z.strictObject`, reject unknown keys) was
+ * considered; `loose` was chosen because it is non-breaking and forward-compatible
+ * across a mixed-version swarm, and preserved unknown keys are inert (consumers
+ * read only known fields). See `@anvilkit/canvas-editor`'s `decodeCanvasIR`.
+ */
+
 const FiniteNumber = z.number().refine((v) => Number.isFinite(v), {
 	message: "must be a finite number",
 });
@@ -24,7 +36,7 @@ const NonNegativeFiniteNumber = FiniteNumber.refine((v) => v >= 0, {
 	message: "must be >= 0",
 });
 
-export const CanvasTransformSchema: z.ZodType<CanvasTransform> = z.object({
+export const CanvasTransformSchema: z.ZodType<CanvasTransform> = z.looseObject({
 	x: FiniteNumber,
 	y: FiniteNumber,
 	rotation: FiniteNumber,
@@ -34,12 +46,12 @@ export const CanvasTransformSchema: z.ZodType<CanvasTransform> = z.object({
 	skewY: FiniteNumber.optional(),
 });
 
-export const CanvasBoundsSchema: z.ZodType<CanvasBounds> = z.object({
+export const CanvasBoundsSchema: z.ZodType<CanvasBounds> = z.looseObject({
 	width: NonNegativeFiniteNumber,
 	height: NonNegativeFiniteNumber,
 });
 
-export const CanvasPageSizeSchema: z.ZodType<CanvasPageSize> = z.object({
+export const CanvasPageSizeSchema: z.ZodType<CanvasPageSize> = z.looseObject({
 	width: NonNegativeFiniteNumber,
 	height: NonNegativeFiniteNumber,
 	unit: z.enum(["px", "mm", "in"]),
@@ -47,12 +59,12 @@ export const CanvasPageSizeSchema: z.ZodType<CanvasPageSize> = z.object({
 });
 
 export const CanvasPageBackgroundSchema: z.ZodType<CanvasPageBackground> =
-	z.object({
+	z.looseObject({
 		kind: z.enum(["solid", "image", "gradient"]),
 		value: z.string(),
 	});
 
-export const CanvasAssetRefSchema: z.ZodType<CanvasAssetRef> = z.object({
+export const CanvasAssetRefSchema: z.ZodType<CanvasAssetRef> = z.looseObject({
 	id: z.string().min(1),
 	uri: z.string().min(1),
 	mimeType: z.string().optional(),
@@ -61,27 +73,27 @@ export const CanvasAssetRefSchema: z.ZodType<CanvasAssetRef> = z.object({
 	byteSize: NonNegativeFiniteNumber.optional(),
 });
 
-export const CanvasImageCropSchema: z.ZodType<CanvasImageCrop> = z.object({
+export const CanvasImageCropSchema: z.ZodType<CanvasImageCrop> = z.looseObject({
 	x: FiniteNumber,
 	y: FiniteNumber,
 	width: NonNegativeFiniteNumber,
 	height: NonNegativeFiniteNumber,
 });
 
-export const ImageFilterSchema: z.ZodType<ImageFilter> = z.object({
+export const ImageFilterSchema: z.ZodType<ImageFilter> = z.looseObject({
 	kind: z.string().min(1),
 	params: z
 		.record(z.string(), z.union([z.number(), z.string(), z.boolean()]))
 		.optional(),
 });
 
-const CanvasAiSourceMetaSchema = z.object({
+const CanvasAiSourceMetaSchema = z.looseObject({
 	prompt: z.string().optional(),
 	model: z.string().optional(),
 	ts: FiniteNumber,
 });
 
-export const CanvasNodeMetaSchema: z.ZodType<CanvasNodeMeta> = z.object({
+export const CanvasNodeMetaSchema: z.ZodType<CanvasNodeMeta> = z.looseObject({
 	aiSource: CanvasAiSourceMetaSchema.optional(),
 });
 
@@ -99,9 +111,9 @@ const CanvasNodeBaseShape = {
 } as const;
 
 export const CanvasNodeBaseSchema: z.ZodType<CanvasNodeBase> =
-	z.object(CanvasNodeBaseShape);
+	z.looseObject(CanvasNodeBaseShape);
 
-export const CanvasRectNodeSchema = z.object({
+export const CanvasRectNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("rect"),
 	fill: z.string().optional(),
@@ -110,7 +122,7 @@ export const CanvasRectNodeSchema = z.object({
 	radius: NonNegativeFiniteNumber.optional(),
 });
 
-export const CanvasEllipseNodeSchema = z.object({
+export const CanvasEllipseNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("ellipse"),
 	fill: z.string().optional(),
@@ -118,7 +130,7 @@ export const CanvasEllipseNodeSchema = z.object({
 	strokeWidth: NonNegativeFiniteNumber.optional(),
 });
 
-export const CanvasLineNodeSchema = z.object({
+export const CanvasLineNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("line"),
 	points: z.tuple([FiniteNumber, FiniteNumber, FiniteNumber, FiniteNumber]),
@@ -126,7 +138,7 @@ export const CanvasLineNodeSchema = z.object({
 	strokeWidth: NonNegativeFiniteNumber.optional(),
 });
 
-export const CanvasPathNodeSchema = z.object({
+export const CanvasPathNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("path"),
 	d: z.string().min(1),
@@ -135,7 +147,7 @@ export const CanvasPathNodeSchema = z.object({
 	strokeWidth: NonNegativeFiniteNumber.optional(),
 });
 
-export const CanvasTextNodeSchema = z.object({
+export const CanvasTextNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("text"),
 	text: z.string(),
@@ -146,7 +158,7 @@ export const CanvasTextNodeSchema = z.object({
 	align: z.enum(["left", "center", "right"]).optional(),
 });
 
-export const CanvasImageNodeSchema = z.object({
+export const CanvasImageNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("image"),
 	assetId: z.string().min(1),
@@ -155,7 +167,7 @@ export const CanvasImageNodeSchema = z.object({
 	maskAssetId: z.string().min(1).optional(),
 });
 
-export const CanvasAiPlaceholderNodeSchema = z.object({
+export const CanvasAiPlaceholderNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("ai-placeholder"),
 	jobId: z.string().min(1),
@@ -163,19 +175,21 @@ export const CanvasAiPlaceholderNodeSchema = z.object({
 	sourcePrompt: z.string().optional(),
 });
 
-// Recursive pair: CanvasGroupNodeSchema references CanvasNodeSchema (via z.lazy),
-// CanvasNodeSchema unions CanvasGroupNodeSchema with all leaf schemas (via z.lazy).
-// Both wrapped in z.lazy so the cyclic reference resolves only at parse time.
-export const CanvasGroupNodeSchema: z.ZodType<CanvasGroupNode> = z.lazy(() =>
-	z.object({
-		...CanvasNodeBaseShape,
-		type: z.literal("group"),
-		children: z.array(CanvasNodeSchema),
-	}),
-);
+// Recursive pair. `CanvasGroupNodeSchema` stays a concrete object schema (not
+// `z.lazy`-wrapped) so it carries a readable `type` discriminant — only its
+// `children` element is deferred via `z.lazy`, which resolves the cyclic
+// reference at parse time. `CanvasNodeSchema` is a `discriminatedUnion` on
+// `type`: O(1) dispatch on the literal tag (vs a plain union trying all eight
+// members) plus a precise error for an unknown tag.
+export const CanvasGroupNodeSchema = z.looseObject({
+	...CanvasNodeBaseShape,
+	type: z.literal("group"),
+	children: z.array(z.lazy((): z.ZodType<CanvasNode> => CanvasNodeSchema)),
+});
 
-export const CanvasNodeSchema: z.ZodType<CanvasNode> = z.lazy(() =>
-	z.union([
+export const CanvasNodeSchema: z.ZodType<CanvasNode> = z.discriminatedUnion(
+	"type",
+	[
 		CanvasGroupNodeSchema,
 		CanvasRectNodeSchema,
 		CanvasEllipseNodeSchema,
@@ -184,10 +198,10 @@ export const CanvasNodeSchema: z.ZodType<CanvasNode> = z.lazy(() =>
 		CanvasTextNodeSchema,
 		CanvasImageNodeSchema,
 		CanvasAiPlaceholderNodeSchema,
-	]),
+	],
 );
 
-export const CanvasPageSchema: z.ZodType<CanvasPage> = z.object({
+export const CanvasPageSchema: z.ZodType<CanvasPage> = z.looseObject({
 	id: z.string().min(1),
 	name: z.string().optional(),
 	size: CanvasPageSizeSchema,
@@ -195,14 +209,15 @@ export const CanvasPageSchema: z.ZodType<CanvasPage> = z.object({
 	root: CanvasGroupNodeSchema,
 });
 
-export const CanvasIRMetadataSchema: z.ZodType<CanvasIRMetadata> = z.object({
-	createdAt: z.string().min(1),
-	updatedAt: z.string().min(1),
-	ownerId: z.string().optional(),
-	brandId: z.string().optional(),
-});
+export const CanvasIRMetadataSchema: z.ZodType<CanvasIRMetadata> =
+	z.looseObject({
+		createdAt: z.string().min(1),
+		updatedAt: z.string().min(1),
+		ownerId: z.string().optional(),
+		brandId: z.string().optional(),
+	});
 
-export const CanvasIRSchema: z.ZodType<CanvasIR> = z.object({
+export const CanvasIRSchema: z.ZodType<CanvasIR> = z.looseObject({
 	version: z.literal("1"),
 	id: z.string().min(1),
 	title: z.string(),
@@ -210,3 +225,31 @@ export const CanvasIRSchema: z.ZodType<CanvasIR> = z.object({
 	assets: z.record(z.string(), CanvasAssetRefSchema),
 	metadata: CanvasIRMetadataSchema,
 });
+
+/** The CanvasIR schema version this build emits and treats as current. */
+export const CANVAS_IR_VERSION = "1" as const;
+
+/**
+ * Parse + forward-migrate an untrusted/persisted IR to the current schema
+ * version, then validate it. This is the single seam for schema evolution:
+ * when a future `version: "2"` ships, upgrade older `raw` to the current shape
+ * *here* (e.g. `if (version === "1") raw = upgradeV1ToV2(raw)`) before the
+ * `CanvasIRSchema.parse` below. Today only `"1"` exists, so any other version is
+ * rejected with a clear, actionable error rather than a cryptic schema failure.
+ *
+ * Prefer this over a bare `CanvasIRSchema.parse` when decoding persisted or
+ * peer-supplied IR (e.g. collaborative editing) so old documents keep loading
+ * as the schema grows.
+ */
+export function migrateCanvasIR(raw: unknown): CanvasIR {
+	const version =
+		raw && typeof raw === "object"
+			? (raw as { version?: unknown }).version
+			: undefined;
+	if (version !== CANVAS_IR_VERSION) {
+		throw new Error(
+			`Unsupported CanvasIR version ${JSON.stringify(version)} (expected "${CANVAS_IR_VERSION}"). No migration path is registered.`,
+		);
+	}
+	return CanvasIRSchema.parse(raw);
+}
