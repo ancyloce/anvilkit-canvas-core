@@ -17,16 +17,7 @@
 				"default": "./dist/index.cjs"
 			}
 		},
-		"./*": {
-			"import": {
-				"types": "./dist/*.d.ts",
-				"default": "./dist/*.js"
-			},
-			"require": {
-				"types": "./dist/*.d.cts",
-				"default": "./dist/*.cjs"
-			}
-		}
+		"./package.json": "./package.json"
 	},
 	"files": [
 		"dist"
