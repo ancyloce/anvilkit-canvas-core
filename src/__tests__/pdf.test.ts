@@ -237,6 +237,28 @@ describe("serializeDocumentToPdf", () => {
 			serializeDocumentToPdf(ir, { pages: [99], rasters: [] }),
 		).rejects.toThrow(RangeError);
 	});
+
+	it("throws a RangeError on a page with non-finite dimensions (no NaN PDF)", async () => {
+		const ir = makeIr([
+			makePage("p1", { width: Number.NaN, height: 72, unit: "px" }),
+		]);
+		await expect(serializeDocumentToPdf(ir, { rasters: [] })).rejects.toThrow(
+			/non-finite dimensions/i,
+		);
+	});
+
+	it("validate:true rejects an IR with a non-finite page size", async () => {
+		const ir = makeIr([
+			makePage("p1", {
+				width: Number.POSITIVE_INFINITY,
+				height: 72,
+				unit: "px",
+			}),
+		]);
+		await expect(
+			serializeDocumentToPdf(ir, { rasters: [], validate: true }),
+		).rejects.toThrow();
+	});
 });
 
 /** Round a point dimension to the nearest integer for stable comparison. */

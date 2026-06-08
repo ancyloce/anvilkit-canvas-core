@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import pkg from "../../package.json" with { type: "json" };
 import type { CanvasIR } from "../index.js";
 import { CANVAS_CORE_VERSION, CanvasIRSchema } from "../index.js";
 
@@ -28,8 +29,8 @@ const minimalIR: CanvasIR = {
 };
 
 describe("canvas-core smoke", () => {
-	it("exports a version constant", () => {
-		expect(CANVAS_CORE_VERSION).toBe("0.1.0");
+	it("exports a version constant that matches package.json (guards drift)", () => {
+		expect(CANVAS_CORE_VERSION).toBe(pkg.version);
 	});
 
 	it("validates a minimal real CanvasIR", () => {

@@ -6,6 +6,7 @@ import {
 	createRect,
 	createText,
 } from "../ir-builders.js";
+import { insertNode } from "../ir-mutations.js";
 import {
 	CanvasIRDepthError,
 	findNode,
@@ -145,6 +146,73 @@ describe("type guards", () => {
 		const { text } = buildSampleIR();
 		expect(isNodeOfKind(text, "text")).toBe(true);
 		expect(isNodeOfKind(text, "rect")).toBe(false);
+	});
+});
+
+describe("node lookup resolution", () => {
+	it("is isolated per IR version: a mutation's new IR sees the change, the prior IR does not", () => {
+		const { ir, outerGroup } = buildSampleIR();
+		expect(findNode(ir, outerGroup.id)?.node.id).toBe(outerGroup.id);
+		expect(findNode(ir, "added-rect")).toBeNull();
+
+		const added = createRect({
+			id: "added-rect",
+			bounds: { width: 5, height: 5 },
+		});
+		const next = insertNode(ir, { parentId: outerGroup.id, node: added });
+
+		// The new IR resolves the inserted node...
+		expect(findNode(next, "added-rect")?.node.id).toBe("added-rect");
+		expect(parentOf(next, "added-rect")?.parent.id).toBe(outerGroup.id);
+		expect(pageOf(next, "added-rect")?.id).toBe("page-1");
+		// ...and the prior (immutable) IR is unaffected — no cross-version leak.
+		expect(findNode(ir, "added-rect")).toBeNull();
+	});
+
+	it("resolves consistently across repeated lookups and returns the live tree node", () => {
+		const { ir, text, innerGroup, page } = buildSampleIR();
+		for (let i = 0; i < 3; i += 1) {
+			expect(findNode(ir, text.id)?.node.id).toBe(text.id);
+			expect(parentOf(ir, text.id)?.parent.id).toBe(innerGroup.id);
+			expect(pageOf(ir, text.id)?.id).toBe(page.id);
+		}
+		// Identity is preserved: the resolved node is the live tree node.
+		expect(findNode(ir, text.id)?.node).toBe(text);
+	});
+
+	it("resolves the first pre-order occurrence when an id is duplicated", () => {
+		const dupChild = createRect({
+			id: "dup",
+			bounds: { width: 1, height: 1 },
+		});
+		const dupGroup = createGroup({ id: "dup", children: [dupChild] });
+		const page = createPage({ id: "p-dup" });
+		page.root = createGroup({
+			id: "p-dup-root",
+			bounds: page.root.bounds,
+			children: [dupGroup],
+		});
+		const ir = createCanvasIR({ pages: [page] });
+		// Pre-order visits the group before its child, so the group wins.
+		expect(findNode(ir, "dup")?.node.type).toBe("group");
+	});
+
+	it("findNode throws CanvasIRDepthError on a tree past MAX_TREE_DEPTH", () => {
+		let leaf: CanvasGroupNode = createGroup({
+			id: "leaf",
+			bounds: { width: 0, height: 0 },
+		});
+		for (let i = MAX_TREE_DEPTH + 1; i >= 0; i--) {
+			leaf = createGroup({
+				id: `g-${i}`,
+				bounds: { width: 0, height: 0 },
+				children: [leaf],
+			});
+		}
+		const page = createPage({ id: "p-deep" });
+		page.root = leaf;
+		const ir = createCanvasIR({ pages: [page] });
+		expect(() => findNode(ir, "leaf")).toThrow(CanvasIRDepthError);
 	});
 });
 

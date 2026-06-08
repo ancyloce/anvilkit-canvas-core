@@ -12,9 +12,10 @@ import {
 	moveNode,
 	removeNode,
 	reorderChildren,
+	replaceChildrenInParent,
 	updateNode,
 } from "../ir-mutations.js";
-import { findNode } from "../ir-walkers.js";
+import { CanvasIRDepthError, findNode, MAX_TREE_DEPTH } from "../ir-walkers.js";
 import type { CanvasIR, CanvasRectNode } from "../types.js";
 
 let counter = 0;
@@ -341,5 +342,78 @@ describe("updatedAt cadence", () => {
 		});
 		expect(after2.metadata.updatedAt).toBe("2026-07-01T00:00:00.000Z");
 		expect(after2.metadata.createdAt).toBe(initialCreated);
+	});
+});
+
+describe("replaceChildrenInParent", () => {
+	it("rewrites a parent's children in one pass and is pure", () => {
+		const ir = sampleIR();
+		const before = snapshot(ir);
+		const next = replaceChildrenInParent(ir, {
+			parentId: "outer",
+			replace: (children) => children.filter((c) => c.id !== "rectA"),
+			now: tick,
+		});
+		expect(findNode(next, "rectA")).toBeNull();
+		expect(findNode(next, "rectB")).not.toBeNull();
+		expect(next.metadata.updatedAt).not.toBe(ir.metadata.updatedAt);
+		// original untouched
+		expect(snapshot(ir)).toEqual(before);
+	});
+
+	it("throws parent-not-found / parent-not-group", () => {
+		const ir = sampleIR();
+		expect(() =>
+			replaceChildrenInParent(ir, { parentId: "missing", replace: (c) => [...c] }),
+		).toThrow(CanvasIRMutationError);
+		expect(() =>
+			replaceChildrenInParent(ir, { parentId: "rectA", replace: (c) => [...c] }),
+		).toThrow(/not a group/i);
+	});
+});
+
+describe("mutation depth guard", () => {
+	// Build a page whose root nests MAX_TREE_DEPTH+2 groups deep, with the leaf
+	// group holding a sentinel child the mutation will try to reach.
+	function deepIR(): CanvasIR {
+		let node = createGroup({ id: "leaf", bounds: { width: 0, height: 0 } });
+		for (let i = MAX_TREE_DEPTH + 1; i >= 0; i--) {
+			node = createGroup({
+				id: `g-${i}`,
+				bounds: { width: 0, height: 0 },
+				children: [node],
+			});
+		}
+		const page = createPage({ id: "p-deep" });
+		page.root = node;
+		return createCanvasIR({ pages: [page] });
+	}
+
+	it("insertNode throws CanvasIRDepthError instead of overflowing the stack", () => {
+		expect(() =>
+			insertNode(deepIR(), {
+				parentId: "leaf",
+				node: createRect({ id: "x", bounds: { width: 1, height: 1 } }),
+			}),
+		).toThrow(CanvasIRDepthError);
+	});
+
+	it("updateNode throws CanvasIRDepthError on a too-deep tree", () => {
+		expect(() =>
+			updateNode(deepIR(), { id: "leaf", patch: { name: "renamed" } }),
+		).toThrow(CanvasIRDepthError);
+	});
+});
+
+describe("updateNode undefined-key semantics (P3-1)", () => {
+	it("patching an optional key to undefined deletes it (absent, not key:undefined)", () => {
+		const ir = sampleIR();
+		// rectA has fill: "#f00". Patch fill -> undefined should REMOVE the key.
+		const after = updateNode<"rect">(ir, {
+			id: "rectA",
+			patch: { fill: undefined },
+		});
+		const node = findNode(after, "rectA")?.node as CanvasRectNode;
+		expect("fill" in node).toBe(false);
 	});
 });

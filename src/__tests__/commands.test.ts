@@ -1096,3 +1096,53 @@ describe("applyCommand: node.ungroup", () => {
 		}
 	});
 });
+
+describe("applyCommand: node.update inverse restores absent optionals (P3-1)", () => {
+	it("undo of adding an optional field removes the key, not key:undefined", () => {
+		const ir = buildFixture();
+		// rectA has no `stroke`; add it, then undo must restore exact absence.
+		const cmd: CanvasAnyNodeUpdateCommand = {
+			type: "node.update",
+			nodeId: "rectA",
+			kind: "rect",
+			patch: { stroke: "#000" },
+		};
+		const applied = applyCommand(ir, cmd, { now });
+		expect((findNode(applied.ir, "rectA")?.node as CanvasRectNode).stroke).toBe(
+			"#000",
+		);
+
+		const undone = applyCommand(applied.ir, applied.inverse, { now });
+		const restored = findNode(undone.ir, "rectA")?.node as CanvasRectNode;
+		expect("stroke" in restored).toBe(false);
+		// Exact structural round-trip (Object.keys, not just JSON which drops undefined).
+		const original = findNode(ir, "rectA")?.node as CanvasRectNode;
+		expect(Object.keys(restored).sort()).toEqual(Object.keys(original).sort());
+	});
+});
+
+describe("applyCommand: node.group transform-aware bounds (P3-2)", () => {
+	it("group bounds reflect a rotated child's extent, not just x + width", () => {
+		// A 100×40 rect rotated 90° occupies a 40-wide × 100-tall box.
+		const rotated = createRect({
+			id: "rot",
+			bounds: { width: 100, height: 40 },
+			transform: { rotation: 90 },
+		});
+		const page = createPage({ id: "pg" });
+		page.root = createGroup({
+			id: "pg-root",
+			bounds: page.root.bounds,
+			children: [rotated],
+		});
+		const ir = createCanvasIR({ id: "g-ir", pages: [page], now });
+		const result = applyCommand(
+			ir,
+			{ type: "node.group", pageId: "pg", childIds: ["rot"], groupId: "grp" },
+			{ now },
+		);
+		const group = findNode(result.ir, "grp")?.node as CanvasGroupNode;
+		expect(Math.round(group.bounds.width)).toBe(40);
+		expect(Math.round(group.bounds.height)).toBe(100);
+	});
+});

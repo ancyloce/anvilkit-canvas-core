@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	CANVAS_IR_VERSION,
 	CanvasGroupNodeSchema,
 	CanvasImageNodeSchema,
 	CanvasIRSchema,
@@ -9,6 +10,7 @@ import {
 	CanvasRectNodeSchema,
 	CanvasTextNodeSchema,
 	CanvasTransformSchema,
+	migrateCanvasIR,
 } from "../ir-validators.js";
 import type {
 	CanvasGroupNode,
@@ -186,6 +188,63 @@ describe("CanvasNodeSchema discriminated union", () => {
 		const result = CanvasGroupNodeSchema.safeParse(deepGroup);
 		expect(result.success).toBe(true);
 	});
+
+	it("dispatches on the discriminant: a rect payload reports a rect-shaped error, not a union dump", () => {
+		const badRect = {
+			...makeRect("r1"),
+			fontSize: -5, // not a rect field; rect requires no fontSize, so this is just ignored under loose
+			bounds: { width: -1, height: 10 }, // invalid: width must be >= 0
+		};
+		const result = CanvasNodeSchema.safeParse(badRect);
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			// discriminatedUnion routes to the rect member only — the error path is
+			// the rect's bounds.width, not a pile of "expected literal …" branches.
+			expect(result.error.issues.some((i) => i.path.includes("width"))).toBe(
+				true,
+			);
+		}
+	});
+});
+
+describe("unknown-key handling (loose / forward-compat)", () => {
+	it("preserves unknown keys on a node instead of stripping them", () => {
+		const withFuture = {
+			...makeRect("r1"),
+			futureField: { nested: 1 },
+		};
+		const result = CanvasNodeSchema.safeParse(withFuture);
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(
+				(result.data as unknown as { futureField?: unknown }).futureField,
+			).toEqual({ nested: 1 });
+		}
+	});
+
+	it("preserves unknown keys across a full IR round-trip (no silent data loss)", () => {
+		const ir = makeIR([makePage("p1", [makeRect("r1")])]);
+		const withExtras = {
+			...ir,
+			experimentalFlag: true,
+			pages: [
+				{
+					...ir.pages[0],
+					root: { ...ir.pages[0]?.root, customLayoutHint: "grid" },
+				},
+			],
+		};
+		const result = CanvasIRSchema.safeParse(withExtras);
+		expect(result.success).toBe(true);
+		if (result.success) {
+			const data = result.data as unknown as {
+				experimentalFlag?: boolean;
+				pages: Array<{ root: { customLayoutHint?: string } }>;
+			};
+			expect(data.experimentalFlag).toBe(true);
+			expect(data.pages[0]?.root.customLayoutHint).toBe("grid");
+		}
+	});
 });
 
 describe("primitive validators", () => {
@@ -227,3 +286,28 @@ describe("primitive validators", () => {
 		expect(CanvasPageSchema.safeParse(bad).success).toBe(false);
 	});
 });
+
+describe("migrateCanvasIR (migration seam)", () => {
+	it("validates and returns a current-version IR", () => {
+		const ir = makeIR([makePage("p1", [makeRect("r1")])]);
+		const out = migrateCanvasIR(ir);
+		expect(out.id).toBe("ir-1");
+		expect(CANVAS_IR_VERSION).toBe("1");
+	});
+
+	it("preserves unknown keys (loose) through migration", () => {
+		const ir = { ...makeIR([makePage("p1", [])]), experimental: 1 };
+		const out = migrateCanvasIR(ir) as unknown as { experimental?: number };
+		expect(out.experimental).toBe(1);
+	});
+
+	it("throws a clear error for an unsupported version", () => {
+		const ir = { ...makeIR([makePage("p1", [])]), version: "2" };
+		expect(() => migrateCanvasIR(ir)).toThrow(/Unsupported CanvasIR version/);
+	});
+
+	it("throws for non-object / version-less input", () => {
+		expect(() => migrateCanvasIR(null)).toThrow(/Unsupported CanvasIR version/);
+		expect(() => migrateCanvasIR(42)).toThrow(/Unsupported CanvasIR version/);
+	});
+})

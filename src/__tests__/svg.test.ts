@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir-walkers.js";
 import {
 	bytesToBase64,
 	createEmitContext,
@@ -9,6 +10,7 @@ import {
 	emitText,
 	escapeAttr,
 	escapeCssString,
+	escapeCssUrl,
 	escapeXml,
 	isSafeDataImageUrl,
 	isValidPathD,
@@ -66,6 +68,22 @@ describe("escapeCssString", () => {
 	});
 });
 
+describe("escapeCssUrl", () => {
+	it("strips the CSS rule/declaration breakout characters { } ;", () => {
+		expect(escapeCssUrl("url(x); } * { background: url(//evil) }")).toBe(
+			"url(x)  *  background: url(//evil) ",
+		);
+		expect(escapeCssUrl("a{b}c;d")).toBe("abcd");
+	});
+
+	it("strips <, > and newlines but preserves url()/format() quotes", () => {
+		expect(escapeCssUrl('url("a.woff2") format("woff2")')).toBe(
+			'url("a.woff2") format("woff2")',
+		);
+		expect(escapeCssUrl("url(x)<svg>\n")).toBe("url(x)svg");
+	});
+});
+
 describe("normalizeUri", () => {
 	it("blocks dangerous schemes regardless of case", () => {
 		expect(normalizeUri("javascript:alert(1)")).toBeUndefined();
@@ -76,11 +94,22 @@ describe("normalizeUri", () => {
 		expect(normalizeUri("filesystem:https://x")).toBeUndefined();
 	});
 
-	it("allows http(s) and relative URLs", () => {
+	it("allows http(s), relative, and protocol-relative URLs", () => {
 		expect(normalizeUri("https://cdn.example.com/a.png")).toBe(
 			"https://cdn.example.com/a.png",
 		);
 		expect(normalizeUri("/assets/a.png")).toBe("/assets/a.png");
+		expect(normalizeUri("./img/a.png")).toBe("./img/a.png");
+		expect(normalizeUri("//cdn.example.com/a.png")).toBe(
+			"//cdn.example.com/a.png",
+		);
+	});
+
+	it("allowlist: rejects non-http(s) schemes beyond the legacy blocklist", () => {
+		expect(normalizeUri("ftp://host/a.png")).toBeUndefined();
+		expect(normalizeUri("mailto:a@b.com")).toBeUndefined();
+		expect(normalizeUri("custom-scheme://x")).toBeUndefined();
+		expect(normalizeUri("ws://host")).toBeUndefined();
 	});
 
 	it("only allows safe data:image URIs when opted in", () => {
@@ -652,4 +681,101 @@ describe("serializePageToSvg fonts", () => {
 		expect(warnings.map((w) => w.code)).toContain("FONT_NOT_IN_MANIFEST");
 		expect(svg).not.toContain("@font-face");
 	});
+
+	it("cannot be broken out of with a hostile @font-face src", async () => {
+		const { svg } = await serializePageToSvg(makeIR(group([text])), 0, {
+			fonts: [
+				{ family: "Inter", src: "url(x); } body { background: url(//evil) }" },
+			],
+		});
+		// The injected `}`/`;` are stripped, so no extra rule escapes the @font-face.
+		expect(svg).not.toContain("} body {");
+		expect(svg).toContain("@font-face{");
+	});
 });
+
+describe("serializePageToSvg robustness", () => {
+	function deepChain(levels: number): CanvasGroupNode {
+		let node: CanvasGroupNode = {
+			id: "leaf",
+			type: "group",
+			transform: identity,
+			bounds: { width: 0, height: 0 },
+			zIndex: 0,
+			children: [],
+		};
+		for (let i = levels; i >= 0; i--) {
+			node = {
+				id: `g-${i}`,
+				type: "group",
+				transform: identity,
+				bounds: { width: 0, height: 0 },
+				zIndex: 0,
+				children: [node],
+			};
+		}
+		return node;
+	}
+
+	it("throws CanvasIRDepthError on a tree past MAX_TREE_DEPTH (no stack overflow)", async () => {
+		const ir = makeIR(group([deepChain(MAX_TREE_DEPTH + 2)]));
+		await expect(serializePageToSvg(ir, 0)).rejects.toBeInstanceOf(
+			CanvasIRDepthError,
+		);
+	});
+
+	it("validate:true rejects a non-finite IR; default coerces it to 0", async () => {
+		const badRect: CanvasRectNode = {
+			id: "r-nan",
+			type: "rect",
+			transform: { ...identity, x: Number.NaN },
+			bounds: { width: 10, height: 10 },
+			zIndex: 0,
+			fill: "#000",
+		};
+		const ir = makeIR(group([badRect]));
+		await expect(
+			serializePageToSvg(ir, 0, { validate: true }),
+		).rejects.toThrow();
+		// Default (no validate): fmt coerces NaN → "0", output stays well-formed.
+		const { svg } = await serializePageToSvg(ir, 0);
+		expect(svg).not.toContain("NaN");
+		expect(svg.endsWith("</svg>")).toBe(true);
+	});
+
+	it("preserves and XML-escapes unicode text (CJK / emoji / RTL)", async () => {
+		const unicode: CanvasTextNode = {
+			...text,
+			id: "t-uni",
+			text: "日本語 😀 مرحبا <x>",
+		};
+		const { svg } = await serializePageToSvg(makeIR(group([unicode])), 0);
+		expect(svg).toContain("日本語 😀 مرحبا &lt;x&gt;");
+	});
+});
+
+describe("serializePageToSvg accessibility", () => {
+	it("emits role=img + a <title> (document title fallback) for an accessible name", async () => {
+		const { svg } = await serializePageToSvg(makeIR(group([])), 0);
+		expect(svg).toContain('role="img"');
+		expect(svg).toContain("<title>Fixture</title>");
+		// <title> is the first child, before <defs>/content.
+		expect(svg.indexOf("<title>")).toBeLessThan(svg.indexOf("<rect"));
+	});
+
+	it("prefers the page name over the document title", async () => {
+		const ir = makeIR(group([]));
+		const [page] = ir.pages;
+		if (page) page.name = "Cover";
+		const { svg } = await serializePageToSvg(ir, 0);
+		expect(svg).toContain("<title>Cover</title>");
+	});
+
+	it("omits role/title when there is no name (no role=img without a label)", async () => {
+		const ir = makeIR(group([]));
+		ir.title = "";
+		const { svg } = await serializePageToSvg(ir, 0);
+		expect(svg).not.toContain('role="img"');
+		expect(svg).not.toContain("<title>");
+	});
+})
