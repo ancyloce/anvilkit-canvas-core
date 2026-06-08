@@ -9,6 +9,9 @@ import type { CanvasTransform } from "./types.js";
  */
 
 const DEG_TO_RAD = Math.PI / 180;
+const RAD_TO_DEG = 180 / Math.PI;
+/** Determinant magnitude below which a matrix is treated as singular. */
+const SINGULAR_EPSILON = 1e-12;
 
 /** SVG `matrix(a b c d e f)` tuple: point (x,y) → (a·x + c·y + e, b·x + d·y + f). */
 export type AffineMatrix = [number, number, number, number, number, number];
@@ -109,4 +112,103 @@ export function transformedBoundsExtent(
 		if (y > maxY) maxY = y;
 	}
 	return { minX, minY, maxX, maxY };
+}
+
+/**
+ * Multiply two affine matrices. The result applies `m2` first, then `m1` — i.e.
+ * `applyMatrix(multiplyMatrix(m1, m2), p) === applyMatrix(m1, applyMatrix(m2, p))`.
+ * Use `multiplyMatrix(parentMatrix, childMatrix)` to compose a child transform
+ * into its parent's coordinate space.
+ */
+export function multiplyMatrix(
+	m1: AffineMatrix,
+	m2: AffineMatrix,
+): AffineMatrix {
+	const [a1, b1, c1, d1, e1, f1] = m1;
+	const [a2, b2, c2, d2, e2, f2] = m2;
+	return [
+		a1 * a2 + c1 * b2,
+		b1 * a2 + d1 * b2,
+		a1 * c2 + c1 * d2,
+		b1 * c2 + d1 * d2,
+		a1 * e2 + c1 * f2 + e1,
+		b1 * e2 + d1 * f2 + f1,
+	];
+}
+
+/**
+ * Invert an affine matrix. Throws if the matrix is singular (its determinant is
+ * zero or non-finite), e.g. a zero-scale transform that collapses a dimension.
+ */
+export function invertMatrix(m: AffineMatrix): AffineMatrix {
+	const [a, b, c, d, e, f] = m;
+	const det = a * d - b * c;
+	if (!Number.isFinite(det) || Math.abs(det) < SINGULAR_EPSILON) {
+		throw new Error(
+			"invertMatrix: matrix is singular (zero or non-finite determinant)",
+		);
+	}
+	const inv = 1 / det;
+	return [
+		d * inv,
+		-b * inv,
+		-c * inv,
+		a * inv,
+		(c * f - d * e) * inv,
+		(b * e - a * f) * inv,
+	];
+}
+
+/**
+ * Components recovered from an affine matrix, compatible with `CanvasTransform`.
+ * The shear is reported entirely as `skewX` (the canonical 2D affine
+ * decomposition folds any `skewY` into rotation/scale/`skewX`), so `skewY` is
+ * always 0 and omitted. `rotation` is in degrees, in the range (-180, 180].
+ */
+export interface DecomposedTransform {
+	x: number;
+	y: number;
+	rotation: number;
+	scaleX: number;
+	scaleY: number;
+	skewX: number;
+}
+
+/**
+ * Decompose an affine matrix back into translate/rotate/skew/scale components,
+ * the exact inverse of {@link toAffineMatrix} (and of Konva's
+ * `Transform.decompose`). For a transform with no `skewY`,
+ * `decomposeMatrix(toAffineMatrix(t))` round-trips `t`; for the general case the
+ * recomposed matrix `toAffineMatrix(decomposeMatrix(m))` equals `m`.
+ */
+export function decomposeMatrix(m: AffineMatrix): DecomposedTransform {
+	const [a, b, c, d, e, f] = m;
+	const delta = a * d - b * c;
+	const result: DecomposedTransform = {
+		x: e,
+		y: f,
+		rotation: 0,
+		scaleX: 0,
+		scaleY: 0,
+		skewX: 0,
+	};
+	if (a !== 0 || b !== 0) {
+		const r = Math.sqrt(a * a + b * b);
+		result.rotation =
+			(b > 0 ? Math.acos(a / r) : -Math.acos(a / r)) * RAD_TO_DEG;
+		result.scaleX = r;
+		result.scaleY = delta / r;
+		result.skewX = (a * c + b * d) / delta;
+	} else if (c !== 0 || d !== 0) {
+		const s = Math.sqrt(c * c + d * d);
+		result.rotation =
+			(Math.PI / 2 - (d > 0 ? Math.acos(-c / s) : -Math.acos(c / s))) *
+			RAD_TO_DEG;
+		result.scaleX = delta / s;
+		result.scaleY = s;
+	}
+	// Normalize -0 → +0 so callers comparing with Object.is/toEqual don't trip
+	// (matches the convention in computeSnap).
+	result.rotation = result.rotation || 0;
+	return result;
 }
