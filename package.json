@@ -47,7 +47,7 @@
 		"@anvilkit/typescript-config": "workspace:*",
 		"@anvilkit/vitest-config": "workspace:*",
 		"@rslib/core": "^0.23.0",
-		"@types/node": "^26.0.0",
+		"@types/node": "^26.0.1",
 		"publint": "^0.3.21",
 		"typescript": "6.0.3",
 		"vitest": "^4.1.9"
