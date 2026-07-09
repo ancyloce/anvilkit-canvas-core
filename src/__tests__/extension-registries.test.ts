@@ -130,4 +130,19 @@ describe("createMigrationRegistry", () => {
 		const reg = createMigrationRegistry();
 		expect(() => reg.migrate({}, "2")).toThrow(/version/);
 	});
+
+	it("detects a migration cycle instead of looping forever", () => {
+		const reg = createMigrationRegistry();
+		reg.register({
+			from: "1",
+			to: "2",
+			up: (raw) => ({ ...(raw as object), version: "2" }),
+		});
+		reg.register({
+			from: "2",
+			to: "1",
+			up: (raw) => ({ ...(raw as object), version: "1" }),
+		});
+		expect(() => reg.migrate({ version: "1" }, "3")).toThrow(/cycle/i);
+	});
 });

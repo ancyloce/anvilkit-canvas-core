@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="200" viewBox="0 0 240 200" role="img">
+	<title>Golden fills</title>
+	<rect x="0" y="0" width="240" height="200" fill="#ffffff" />
+	<defs><linearGradient id="grad-linear" gradientUnits="objectBoundingBox" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0ea5e9" /><stop offset="1" stop-color="#8b5cf6" /></linearGradient></defs><rect transform="translate(8 8)" width="100" height="48" fill="url(#grad-linear)" />
+	<defs><radialGradient id="grad-radial" gradientUnits="objectBoundingBox" cx="0.5" cy="0.5" r="0.7071"><stop offset="0" stop-color="#fde047" /><stop offset="1" stop-color="#f97316" /></radialGradient></defs><ellipse transform="translate(128 8)" cx="24" cy="24" rx="24" ry="24" fill="url(#grad-radial)" />
+	<defs><filter id="shadow-shadowed"><feDropShadow dx="2" dy="4" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.5" /></filter></defs><rect transform="translate(8 72)" width="100" height="40" fill="#e2e8f0" filter="url(#shadow-shadowed)" />
+	<image transform="translate(128 72)" width="40" height="40" preserveAspectRatio="none" href="https://cdn.example.com/photo.png" />
+	<image transform="translate(8 132)" width="40" height="40" preserveAspectRatio="none" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" />
+</svg>
