@@ -9,6 +9,21 @@ import type { CanvasNodeBase } from "../types.js";
 /** A node whose `type` discriminant is not necessarily a built-in kind. */
 export type CanvasUnknownNode = CanvasNodeBase & { type: string };
 
+export type CanvasExtensionErrorCode =
+	| "builtin-kind-shadowed"
+	| "duplicate-kind";
+
+/** Structured error thrown when an extension registration is rejected. */
+export class CanvasExtensionError extends Error {
+	readonly code: CanvasExtensionErrorCode;
+
+	constructor(code: CanvasExtensionErrorCode, message: string) {
+		super(message);
+		this.name = "CanvasExtensionError";
+		this.code = code;
+	}
+}
+
 /**
  * Minimal, React/Konva-free SVG emit surface handed to a kind's `toSvg` hook so
  * a custom kind can render to the same `<svg>` the built-in serializer produces.
@@ -46,20 +61,45 @@ export interface CanvasNodeKindDefinition<
 }
 
 export interface CanvasNodeKindRegistry {
+	/**
+	 * Register an extension kind. Seeded built-in kinds are unshadowable and a
+	 * kind may only be registered once.
+	 *
+	 * @throws CanvasExtensionError with code `"builtin-kind-shadowed"` when the
+	 * kind is a seeded built-in, or `"duplicate-kind"` when another extension
+	 * already registered it.
+	 */
 	register<N extends CanvasUnknownNode>(def: CanvasNodeKindDefinition<N>): void;
 	get(kind: string): CanvasNodeKindDefinition | undefined;
 	has(kind: string): boolean;
 	list(): readonly CanvasNodeKindDefinition[];
 }
 
-/** Create a node-kind registry, optionally seeded with built-in definitions. */
+/**
+ * Create a node-kind registry, optionally seeded with built-in definitions.
+ * Seeding is exempt from the shadow guard; later `register()` calls are not —
+ * mirroring the built-in command-type protection in `createCanvasRuntime`.
+ */
 export function createNodeKindRegistry(
 	builtins: readonly CanvasNodeKindDefinition[] = [],
 ): CanvasNodeKindRegistry {
 	const map = new Map<string, CanvasNodeKindDefinition>();
 	for (const def of builtins) map.set(def.kind, def);
+	const builtinKinds: ReadonlySet<string> = new Set(map.keys());
 	return {
 		register(def) {
+			if (builtinKinds.has(def.kind)) {
+				throw new CanvasExtensionError(
+					"builtin-kind-shadowed",
+					`Cannot register node kind "${def.kind}": built-in kinds cannot be shadowed by extensions.`,
+				);
+			}
+			if (map.has(def.kind)) {
+				throw new CanvasExtensionError(
+					"duplicate-kind",
+					`Cannot register node kind "${def.kind}": it is already registered by another extension.`,
+				);
+			}
 			map.set(def.kind, def as unknown as CanvasNodeKindDefinition);
 		},
 		get(kind) {
