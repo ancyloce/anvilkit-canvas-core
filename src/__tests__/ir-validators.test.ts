@@ -310,4 +310,4 @@ describe("migrateCanvasIR (migration seam)", () => {
 		expect(() => migrateCanvasIR(null)).toThrow(/Unsupported CanvasIR version/);
 		expect(() => migrateCanvasIR(42)).toThrow(/Unsupported CanvasIR version/);
 	});
-})
+});

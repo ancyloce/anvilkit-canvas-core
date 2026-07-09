@@ -364,10 +364,16 @@ describe("replaceChildrenInParent", () => {
 	it("throws parent-not-found / parent-not-group", () => {
 		const ir = sampleIR();
 		expect(() =>
-			replaceChildrenInParent(ir, { parentId: "missing", replace: (c) => [...c] }),
+			replaceChildrenInParent(ir, {
+				parentId: "missing",
+				replace: (c) => [...c],
+			}),
 		).toThrow(CanvasIRMutationError);
 		expect(() =>
-			replaceChildrenInParent(ir, { parentId: "rectA", replace: (c) => [...c] }),
+			replaceChildrenInParent(ir, {
+				parentId: "rectA",
+				replace: (c) => [...c],
+			}),
 		).toThrow(/not a group/i);
 	});
 });
