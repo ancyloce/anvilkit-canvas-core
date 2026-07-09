@@ -57,6 +57,7 @@
 		"@rslib/core": "^0.23.0",
 		"@types/node": "^26.0.1",
 		"esbuild": "^0.28.0",
+		"fast-check": "^4.3.0",
 		"madge": "^8.0.0",
 		"publint": "^0.3.21",
 		"typedoc": "^0.28.19",
