@@ -220,3 +220,38 @@ describe("createCanvasRuntime — migrate", () => {
 		expect(migrated.version).toBe("1");
 	});
 });
+
+describe("createCanvasRuntime — built-in kind protection", () => {
+	it("rejects an extension that registers a built-in node kind", () => {
+		const rectShadow: CanvasExtension = {
+			id: "hostile",
+			nodeKinds: [
+				{
+					kind: "rect",
+					schema: z.looseObject({
+						id: z.string(),
+						type: z.literal("rect"),
+					}) as unknown as z.ZodType<CanvasUnknownNode>,
+				},
+			],
+		};
+		expect(() => createCanvasRuntime([rectShadow])).toThrowError(
+			/built-in kinds cannot be shadowed/,
+		);
+	});
+
+	it("rejects two extensions claiming the same custom kind", () => {
+		const kindDef: CanvasNodeKindDefinition = {
+			kind: "sticker",
+			schema: z.looseObject({
+				id: z.string(),
+				type: z.literal("sticker"),
+			}) as unknown as z.ZodType<CanvasUnknownNode>,
+		};
+		const a: CanvasExtension = { id: "a", nodeKinds: [kindDef] };
+		const b: CanvasExtension = { id: "b", nodeKinds: [{ ...kindDef }] };
+		expect(() => createCanvasRuntime([a, b])).toThrowError(
+			/already registered by another extension/,
+		);
+	});
+});

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createCommandRegistry } from "../extensions/command-registry.js";
 import { createMigrationRegistry } from "../extensions/migration-registry.js";
 import {
+	CanvasExtensionError,
 	type CanvasNodeKindDefinition,
 	type CanvasUnknownNode,
 	createNodeKindRegistry,
@@ -44,12 +45,35 @@ describe("createNodeKindRegistry", () => {
 		expect(reg.get("nope")).toBeUndefined();
 	});
 
-	it("seeds from builtins and last register wins for a kind", () => {
+	it("seeds from builtins and rejects shadowing a seeded kind", () => {
 		const reg = createNodeKindRegistry([starDef]);
 		expect(reg.has("star")).toBe(true);
 		const override = { ...starDef, isContainer: true };
-		reg.register(override);
-		expect(reg.get("star")?.isContainer).toBe(true);
+		expect(() => reg.register(override)).toThrowError(CanvasExtensionError);
+		try {
+			reg.register(override);
+			expect.unreachable("register() must throw for a seeded kind");
+		} catch (error) {
+			expect((error as CanvasExtensionError).code).toBe(
+				"builtin-kind-shadowed",
+			);
+		}
+		// The seeded definition survives untouched.
+		expect(reg.get("star")?.isContainer).toBeUndefined();
+		expect(reg.list()).toHaveLength(1);
+	});
+
+	it("rejects registering the same custom kind twice", () => {
+		const reg = createNodeKindRegistry();
+		reg.register(starDef);
+		try {
+			reg.register({ ...starDef, isContainer: true });
+			expect.unreachable("register() must throw for a duplicate kind");
+		} catch (error) {
+			expect(error).toBeInstanceOf(CanvasExtensionError);
+			expect((error as CanvasExtensionError).code).toBe("duplicate-kind");
+		}
+		expect(reg.get("star")?.isContainer).toBeUndefined();
 		expect(reg.list()).toHaveLength(1);
 	});
 
