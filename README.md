@@ -255,7 +255,7 @@ unknown node kind, …) as `warnings` rather than throwing.
 
 ## Release gates
 
-`pnpm check:all` runs the release-gate chain: `check:publint` (packed-tarball publint), `check:circular` (madge), `check:react-free-runtime` (React/Konva-free source scan), `check:peer-deps` (dependency-cone rules: zero peers, no React/Konva anywhere in the runtime cone), and `check:bundle-budget` (esbuild-based, budget and externals read from `.size-limit.json` so the two size gates cannot drift). An API-snapshot gate will join the chain once snapshot infrastructure lands.
+`pnpm check:all` runs the release-gate chain: `check:publint` (packed-tarball publint), `check:circular` (madge), `check:react-free-runtime` (React/Konva-free source scan), `check:peer-deps` (dependency-cone rules: zero peers, no React/Konva anywhere in the runtime cone), and `check:bundle-budget` (esbuild-based, budget and externals read from `.size-limit.json` so the two size gates cannot drift). `check:api-snapshot` (typedoc JSON diff of the public API; regenerate with `pnpm update:api-snapshot` and commit the result).
 
 Gates assume a **full package build** first — run `pnpm build` before `pnpm check:all`.
 
