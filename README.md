@@ -253,6 +253,12 @@ unknown node kind, …) as `warnings` rather than throwing.
 - **Single entry point.** Everything is exported from the package root (`.`);
   there are no subpath exports.
 
+## Release gates
+
+`pnpm check:all` runs the release-gate chain: `check:publint` (packed-tarball publint), `check:circular` (madge), `check:react-free-runtime` (React/Konva-free source scan), `check:peer-deps` (dependency-cone rules: zero peers, no React/Konva anywhere in the runtime cone), and `check:bundle-budget` (esbuild-based, budget and externals read from `.size-limit.json` so the two size gates cannot drift). An API-snapshot gate will join the chain once snapshot infrastructure lands.
+
+Gates assume a **full package build** first — run `pnpm build` before `pnpm check:all`.
+
 ## License
 
 MIT

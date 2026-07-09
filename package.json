@@ -40,6 +40,14 @@
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"publint": "publint",
+		"check:publint": "node ./scripts/check-publint.mjs",
+		"check:circular": "madge --circular --extensions ts src/",
+		"check:react-free-runtime": "node ./scripts/check-react-free.mjs",
+		"check:peer-deps": "node ./scripts/check-peer-deps.mjs",
+		"check:bundle-budget": "node ./scripts/check-bundle-budget.mjs",
+		"check:api-snapshot": "node ./scripts/check-api-snapshot.mjs",
+		"check:all": "pnpm check:publint && pnpm check:circular && pnpm check:react-free-runtime && pnpm check:peer-deps && pnpm check:bundle-budget && pnpm check:api-snapshot",
+		"update:api-snapshot": "node ./scripts/check-api-snapshot.mjs --update",
 		"size": "size-limit"
 	},
 	"devDependencies": {
@@ -48,7 +56,11 @@
 		"@anvilkit/vitest-config": "workspace:*",
 		"@rslib/core": "^0.23.0",
 		"@types/node": "^26.0.1",
+		"esbuild": "^0.28.0",
+		"madge": "^8.0.0",
 		"publint": "^0.3.21",
+		"typedoc": "^0.28.19",
+		"typedoc-plugin-markdown": "^4.11.2",
 		"typescript": "6.0.3",
 		"vitest": "^4.1.9"
 	}
