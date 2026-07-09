@@ -3,5 +3,6 @@
 	"extends": ["../../../typedoc.base.json"],
 	"entryPoints": ["./src/index.ts"],
 	"tsconfig": "./tsconfig.json",
-	"name": "@anvilkit/canvas-core"
+	"name": "@anvilkit/canvas-core",
+	"intentionallyNotExported": ["Point"]
 }
