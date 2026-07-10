@@ -6,7 +6,7 @@ import { CANVAS_CORE_VERSION, CanvasIRSchema } from "../index.js";
 const FIXED_TS = "2026-05-20T00:00:00.000Z";
 
 const minimalIR: CanvasIR = {
-	version: "1",
+	version: "2",
 	id: "ir-1",
 	title: "Smoke",
 	pages: [
@@ -39,7 +39,7 @@ describe("canvas-core smoke", () => {
 	});
 
 	it("rejects an IR missing required fields", () => {
-		const broken = { ...minimalIR, version: "2" };
+		const { metadata: _metadata, ...broken } = minimalIR;
 		expect(CanvasIRSchema.safeParse(broken).success).toBe(false);
 	});
 });

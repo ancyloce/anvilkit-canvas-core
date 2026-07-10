@@ -5,8 +5,8 @@ import {
 	createGroup,
 	createPage,
 	createRect,
-} from "../ir-builders.js";
-import type { CanvasIR } from "../types.js";
+} from "../ir/builders.js";
+import type { CanvasIR } from "../ir/types.js";
 
 function makeIR(): CanvasIR {
 	const page = createPage({ id: "p1" });

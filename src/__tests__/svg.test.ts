@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { toAffineMatrix } from "../geometry.js";
-import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir-walkers.js";
+import { toAffineMatrix } from "../geometry/affine.js";
+import type {
+	CanvasAssetRef,
+	CanvasEllipseNode,
+	CanvasGroupNode,
+	CanvasImageNode,
+	CanvasIR,
+	CanvasLineNode,
+	CanvasNode,
+	CanvasPageBackground,
+	CanvasPageSize,
+	CanvasPathNode,
+	CanvasRectNode,
+	CanvasTextNode,
+	CanvasTransform,
+} from "../ir/types.js";
+import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir/walkers.js";
 import {
 	bytesToBase64,
 	createEmitContext,
@@ -22,21 +37,6 @@ import {
 	transformAttr,
 	unitToPx,
 } from "../serialize/svg.js";
-import type {
-	CanvasAssetRef,
-	CanvasEllipseNode,
-	CanvasGroupNode,
-	CanvasImageNode,
-	CanvasIR,
-	CanvasLineNode,
-	CanvasNode,
-	CanvasPageBackground,
-	CanvasPageSize,
-	CanvasPathNode,
-	CanvasRectNode,
-	CanvasTextNode,
-	CanvasTransform,
-} from "../types.js";
 
 const identity: CanvasTransform = {
 	x: 0,
@@ -416,7 +416,7 @@ function makeIR(
 	} = {},
 ): CanvasIR {
 	return {
-		version: "1",
+		version: "2",
 		id: "ir-1",
 		title: "Fixture",
 		pages: [

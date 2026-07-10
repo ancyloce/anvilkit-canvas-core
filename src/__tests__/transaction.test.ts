@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { applyCommand } from "../commands/runtime.js";
 import { applyCommands } from "../commands/transaction.js";
 import type { CanvasBatchCommand } from "../commands/types.js";
-import { createCanvasIR, createPage, createRect } from "../ir-builders.js";
-import { insertNode } from "../ir-mutations.js";
-import { findNode } from "../ir-walkers.js";
-import type { CanvasIR, CanvasNode } from "../types.js";
+import { createCanvasIR, createPage, createRect } from "../ir/builders.js";
+import { insertNode } from "../ir/mutations.js";
+import type { CanvasIR, CanvasNode } from "../ir/types.js";
+import { findNode } from "../ir/walkers.js";
 
 function makeIR(): { ir: CanvasIR; rootId: string } {
 	const page = createPage({ id: "p1" });

@@ -4,7 +4,7 @@ import {
 	commandToChange,
 	createChangeEmitter,
 } from "../commands/change-events.js";
-import { createPage, createRect } from "../ir-builders.js";
+import { createPage, createRect } from "../ir/builders.js";
 
 describe("commandToChange", () => {
 	it("maps node.move to a transform delta", () => {

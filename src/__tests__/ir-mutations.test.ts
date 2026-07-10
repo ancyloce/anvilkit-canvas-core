@@ -5,7 +5,7 @@ import {
 	createPage,
 	createRect,
 	createText,
-} from "../ir-builders.js";
+} from "../ir/builders.js";
 import {
 	CanvasIRMutationError,
 	insertNode,
@@ -14,9 +14,9 @@ import {
 	reorderChildren,
 	replaceChildrenInParent,
 	updateNode,
-} from "../ir-mutations.js";
-import { CanvasIRDepthError, findNode, MAX_TREE_DEPTH } from "../ir-walkers.js";
-import type { CanvasIR, CanvasRectNode } from "../types.js";
+} from "../ir/mutations.js";
+import type { CanvasIR, CanvasRectNode } from "../ir/types.js";
+import { CanvasIRDepthError, findNode, MAX_TREE_DEPTH } from "../ir/walkers.js";
 
 let counter = 0;
 function tick(): string {

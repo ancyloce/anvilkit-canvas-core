@@ -9,7 +9,7 @@ import {
 	createPath,
 	createRect,
 	createText,
-} from "../ir-builders.js";
+} from "../ir/builders.js";
 import {
 	CanvasEllipseNodeSchema,
 	CanvasGroupNodeSchema,
@@ -20,13 +20,13 @@ import {
 	CanvasPathNodeSchema,
 	CanvasRectNodeSchema,
 	CanvasTextNodeSchema,
-} from "../ir-validators.js";
+} from "../ir/validators.js";
 
 describe("createCanvasIR", () => {
 	it("returns a schema-valid IR with no args", () => {
 		const ir = createCanvasIR();
 		expect(CanvasIRSchema.safeParse(ir).success).toBe(true);
-		expect(ir.version).toBe("1");
+		expect(ir.version).toBe("2");
 		expect(ir.pages).toHaveLength(1);
 		expect(ir.title).toBe("Untitled");
 	});

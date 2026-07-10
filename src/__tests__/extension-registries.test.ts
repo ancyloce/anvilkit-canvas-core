@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createCommandRegistry } from "../extensions/command-registry.js";
-import { createMigrationRegistry } from "../extensions/migration-registry.js";
 import {
 	CanvasExtensionError,
 	type CanvasNodeKindDefinition,
 	type CanvasUnknownNode,
 	createNodeKindRegistry,
 } from "../extensions/node-kind-registry.js";
+import { createMigrationRegistry } from "../ir/migrations.js";
 
 interface StarNode extends CanvasUnknownNode {
 	type: "star";
@@ -121,9 +121,19 @@ describe("createMigrationRegistry", () => {
 		expect(reg.migrate(doc, "3")).toBe(doc);
 	});
 
+	it("is pre-seeded with the built-in v1→v2 migration", () => {
+		const reg = createMigrationRegistry();
+		expect(reg.has("1")).toBe(true);
+		const out = reg.migrate({ version: "1", extra: true }, "2") as Record<
+			string,
+			unknown
+		>;
+		expect(out).toEqual({ version: "2", extra: true });
+	});
+
 	it("throws on a missing step", () => {
 		const reg = createMigrationRegistry();
-		expect(() => reg.migrate({ version: "1" }, "2")).toThrow(/no migration/);
+		expect(() => reg.migrate({ version: "2" }, "3")).toThrow(/no migration/);
 	});
 
 	it("throws when the version is unreadable", () => {

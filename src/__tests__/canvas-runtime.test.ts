@@ -8,10 +8,10 @@ import type {
 	CanvasNodeKindDefinition,
 	CanvasUnknownNode,
 } from "../extensions/node-kind-registry.js";
-import { createCanvasIR, createPage, createRect } from "../ir-builders.js";
-import { insertNode } from "../ir-mutations.js";
-import { CanvasIRSchema, CanvasNodeSchema } from "../ir-validators.js";
-import type { CanvasIR } from "../types.js";
+import { createCanvasIR, createPage, createRect } from "../ir/builders.js";
+import { insertNode } from "../ir/mutations.js";
+import type { CanvasIR } from "../ir/types.js";
+import { CanvasIRSchema, CanvasNodeSchema } from "../ir/validators.js";
 
 function fixtureIR(extra?: CanvasUnknownNode): CanvasIR {
 	const page = createPage({ id: "p1" });
@@ -198,9 +198,19 @@ describe("createCanvasRuntime — migrate", () => {
 		expect(rt.migrate(ir)).toEqual(ir);
 	});
 
-	it("default runtime rejects a non-current version (no migration path)", () => {
+	it("default runtime migrates a v1 document to v2 (built-in seed)", () => {
 		const rt = createCanvasRuntime();
-		expect(() => rt.migrate({ ...fixtureIR(), version: "2" })).toThrow();
+		const v1 = { ...fixtureIR(), version: "1", experimental: true };
+		const migrated = rt.migrate(v1);
+		expect(migrated.version).toBe("2");
+		expect(
+			(migrated as unknown as { experimental?: boolean }).experimental,
+		).toBe(true);
+	});
+
+	it("default runtime rejects an unknown version (no migration path)", () => {
+		const rt = createCanvasRuntime();
+		expect(() => rt.migrate({ ...fixtureIR(), version: "0" })).toThrow();
 	});
 
 	it("applies a registered migration chain then validates", () => {
@@ -216,8 +226,9 @@ describe("createCanvasRuntime — migrate", () => {
 		};
 		const rt = createCanvasRuntime([ext]);
 		const old = { ...fixtureIR(), version: "0" };
+		// Extension step 0→1 chains into the built-in 1→2.
 		const migrated = rt.migrate(old);
-		expect(migrated.version).toBe("1");
+		expect(migrated.version).toBe("2");
 	});
 });
 

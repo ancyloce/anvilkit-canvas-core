@@ -1,4 +1,4 @@
-import type { CanvasAiPlaceholderStatus } from "./types.js";
+import type { CanvasAiPlaceholderStatus } from "./ir/types.js";
 
 export interface AiImageTextToImageRequest {
 	kind: "text-to-image";

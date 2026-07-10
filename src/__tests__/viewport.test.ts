@@ -4,7 +4,7 @@ import {
 	type ViewportDescriptor,
 	viewportMatrix,
 	worldToScreen,
-} from "../viewport.js";
+} from "../geometry/viewport.js";
 
 const viewports: ViewportDescriptor[] = [
 	{ zoom: 1, panX: 0, panY: 0 },

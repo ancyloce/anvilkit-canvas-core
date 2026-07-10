@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import type { CanvasIR, CanvasTransform } from "../ir/types.js";
 import { serializePageToSvg } from "../serialize/svg.js";
-import type { CanvasIR, CanvasTransform } from "../types.js";
 
 /**
  * Dependency-free well-formedness check: scans tags and verifies every open
@@ -30,7 +30,7 @@ function t(x = 0, y = 0): CanvasTransform {
 }
 
 const fixture: CanvasIR = {
-	version: "1",
+	version: "2",
 	id: "doc-golden",
 	title: "Golden",
 	pages: [
@@ -158,7 +158,7 @@ const PIXEL_PNG =
  * these snapshots pin the exact bytes so serializer drift fails loudly.
  */
 const fillsFixture: CanvasIR = {
-	version: "1",
+	version: "2",
 	id: "doc-golden-fills",
 	title: "Golden fills",
 	pages: [

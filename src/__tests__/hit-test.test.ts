@@ -5,8 +5,8 @@ import {
 	marqueeHits,
 	nodeWorldAabb,
 	pointInNode,
-} from "../hit-test.js";
-import { createRect } from "../ir-builders.js";
+} from "../geometry/hit-test.js";
+import { createRect } from "../ir/builders.js";
 
 describe("pointInNode", () => {
 	it("tests an axis-aligned box", () => {

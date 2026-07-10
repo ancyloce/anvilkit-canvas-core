@@ -1,4 +1,13 @@
 import { describe, expect, it } from "vitest";
+import type {
+	CanvasGroupNode,
+	CanvasImageNode,
+	CanvasIR,
+	CanvasNode,
+	CanvasPage,
+	CanvasRectNode,
+	CanvasTextNode,
+} from "../ir/types.js";
 import {
 	CANVAS_IR_VERSION,
 	CanvasGroupNodeSchema,
@@ -11,16 +20,7 @@ import {
 	CanvasTextNodeSchema,
 	CanvasTransformSchema,
 	migrateCanvasIR,
-} from "../ir-validators.js";
-import type {
-	CanvasGroupNode,
-	CanvasImageNode,
-	CanvasIR,
-	CanvasNode,
-	CanvasPage,
-	CanvasRectNode,
-	CanvasTextNode,
-} from "../types.js";
+} from "../ir/validators.js";
 
 const FIXED_TS = "2026-05-20T00:00:00.000Z";
 
@@ -79,7 +79,7 @@ const makePage = (id: string, children: CanvasNode[]): CanvasPage => ({
 });
 
 const makeIR = (pages: CanvasPage[]): CanvasIR => ({
-	version: "1",
+	version: "2",
 	id: "ir-1",
 	title: "Test IR",
 	pages,
@@ -105,10 +105,22 @@ describe("CanvasIRSchema", () => {
 		}
 	});
 
-	it("rejects an IR with version other than '1'", () => {
+	it("rejects a non-current version (bare schema does not migrate)", () => {
 		const ir = makeIR([makePage("p1", [])]);
-		const broken = { ...ir, version: "2" as unknown as "1" };
+		const broken = { ...ir, version: "1" as unknown as "2" };
 		expect(CanvasIRSchema.safeParse(broken).success).toBe(false);
+	});
+
+	it("accepts an optional documentKind and rejects unknown kinds", () => {
+		const ir = makeIR([makePage("p1", [])]);
+		const withKind = { ...ir, documentKind: "template-instance" as const };
+		const parsed = CanvasIRSchema.safeParse(withKind);
+		expect(parsed.success).toBe(true);
+		if (parsed.success) {
+			expect(parsed.data.documentKind).toBe("template-instance");
+		}
+		const badKind = { ...ir, documentKind: "banana" };
+		expect(CanvasIRSchema.safeParse(badKind).success).toBe(false);
 	});
 
 	it("rejects an IR with zero pages", () => {
@@ -292,7 +304,14 @@ describe("migrateCanvasIR (migration seam)", () => {
 		const ir = makeIR([makePage("p1", [makeRect("r1")])]);
 		const out = migrateCanvasIR(ir);
 		expect(out.id).toBe("ir-1");
-		expect(CANVAS_IR_VERSION).toBe("1");
+		expect(CANVAS_IR_VERSION).toBe("2");
+	});
+
+	it("migrates a v1 document to v2", () => {
+		const v1 = { ...makeIR([makePage("p1", [makeRect("r1")])]), version: "1" };
+		const out = migrateCanvasIR(v1);
+		expect(out.version).toBe("2");
+		expect(out.pages[0]?.root.children).toHaveLength(1);
 	});
 
 	it("preserves unknown keys (loose) through migration", () => {
@@ -301,8 +320,22 @@ describe("migrateCanvasIR (migration seam)", () => {
 		expect(out.experimental).toBe(1);
 	});
 
+	it("preserves unknown keys across the v1→v2 upgrade", () => {
+		const v1 = {
+			...makeIR([makePage("p1", [])]),
+			version: "1",
+			experimental: 1,
+		};
+		const out = migrateCanvasIR(v1) as unknown as {
+			version: string;
+			experimental?: number;
+		};
+		expect(out.version).toBe("2");
+		expect(out.experimental).toBe(1);
+	});
+
 	it("throws a clear error for an unsupported version", () => {
-		const ir = { ...makeIR([makePage("p1", [])]), version: "2" };
+		const ir = { ...makeIR([makePage("p1", [])]), version: "0" };
 		expect(() => migrateCanvasIR(ir)).toThrow(/Unsupported CanvasIR version/);
 	});
 

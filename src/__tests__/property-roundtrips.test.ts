@@ -8,12 +8,12 @@ import {
 	invertMatrix,
 	multiplyMatrix,
 	toAffineMatrix,
-} from "../geometry.js";
-import { createCanvasIR, createPage, createRect } from "../ir-builders.js";
-import { insertNode } from "../ir-mutations.js";
-import { findNode } from "../ir-walkers.js";
-import type { CanvasIR, CanvasTransform } from "../types.js";
-import { screenToWorld, worldToScreen } from "../viewport.js";
+} from "../geometry/affine.js";
+import { screenToWorld, worldToScreen } from "../geometry/viewport.js";
+import { createCanvasIR, createPage, createRect } from "../ir/builders.js";
+import { insertNode } from "../ir/mutations.js";
+import type { CanvasIR, CanvasTransform } from "../ir/types.js";
+import { findNode } from "../ir/walkers.js";
 
 /**
  * Property-based round-trip suite (canvas-m0-011 / FR-006). Invariants that

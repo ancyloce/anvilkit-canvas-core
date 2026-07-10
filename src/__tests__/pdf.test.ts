@@ -1,12 +1,12 @@
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
-import { serializeDocumentToPdf, unitToPt } from "../serialize/pdf.js";
 import type {
 	CanvasIR,
 	CanvasPage,
 	CanvasPageSize,
 	CanvasTransform,
-} from "../types.js";
+} from "../ir/types.js";
+import { serializeDocumentToPdf, unitToPt } from "../serialize/pdf.js";
 
 /** A valid 1×1 transparent PNG (verified to embed via pdf-lib's decoder). */
 const PNG_1X1 =
@@ -36,7 +36,7 @@ function makePage(id: string, size: CanvasPageSize): CanvasPage {
 
 function makeIr(pages: CanvasPage[]): CanvasIR {
 	return {
-		version: "1",
+		version: "2",
 		id: "doc-pdf",
 		title: "PDF Doc",
 		pages,

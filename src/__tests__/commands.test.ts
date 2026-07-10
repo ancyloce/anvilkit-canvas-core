@@ -22,14 +22,14 @@ import {
 	createPage,
 	createRect,
 	createText,
-} from "../ir-builders.js";
-import { findNode } from "../ir-walkers.js";
+} from "../ir/builders.js";
 import type {
 	CanvasGroupNode,
 	CanvasImageNode,
 	CanvasIR,
 	CanvasRectNode,
-} from "../types.js";
+} from "../ir/types.js";
+import { findNode } from "../ir/walkers.js";
 
 const FIXED_TS = "2026-05-20T00:00:00.000Z";
 const now = () => FIXED_TS;

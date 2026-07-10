@@ -7,8 +7,8 @@ import {
 	multiplyMatrix,
 	toAffineMatrix,
 	transformedBoundsExtent,
-} from "../geometry.js";
-import type { CanvasTransform } from "../types.js";
+} from "../geometry/affine.js";
+import type { CanvasTransform } from "../ir/types.js";
 
 const identity: CanvasTransform = {
 	x: 0,
