@@ -7,8 +7,7 @@ import {
 	reorderChildren,
 	replaceChildrenInParent,
 	updateNode,
-} from "../ir-mutations.js";
-import { findNode, parentOf } from "../ir-walkers.js";
+} from "../ir/mutations.js";
 import type {
 	CanvasBounds,
 	CanvasGroupNode,
@@ -18,7 +17,8 @@ import type {
 	CanvasNodeByKind,
 	CanvasNodeKind,
 	CanvasPage,
-} from "../types.js";
+} from "../ir/types.js";
+import { findNode, parentOf } from "../ir/walkers.js";
 import type {
 	CanvasAnyNodeUpdateCommand,
 	CanvasBatchCommand,

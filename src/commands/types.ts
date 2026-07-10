@@ -5,7 +5,7 @@ import type {
 	CanvasNodeByKind,
 	CanvasNodeKind,
 	CanvasPage,
-} from "../types.js";
+} from "../ir/types.js";
 
 export interface CanvasPoint {
 	x: number;

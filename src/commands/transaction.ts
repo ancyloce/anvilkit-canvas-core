@@ -1,4 +1,4 @@
-import type { CanvasIR } from "../types.js";
+import type { CanvasIR } from "../ir/types.js";
 import { type CanvasChange, commandToChange } from "./change-events.js";
 import { applyCommand } from "./runtime.js";
 import type {
