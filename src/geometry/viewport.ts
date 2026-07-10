@@ -1,4 +1,4 @@
-import { type AffineMatrix, applyMatrix, invertMatrix } from "./geometry.js";
+import { type AffineMatrix, applyMatrix, invertMatrix } from "./affine.js";
 
 /**
  * Viewport pan/zoom math for `@anvilkit/canvas-core`.

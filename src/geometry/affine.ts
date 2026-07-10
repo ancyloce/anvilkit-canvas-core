@@ -1,4 +1,4 @@
-import type { CanvasTransform } from "./types.js";
+import type { CanvasTransform } from "../ir/types.js";
 
 /**
  * Affine-transform geometry for `@anvilkit/canvas-core`.

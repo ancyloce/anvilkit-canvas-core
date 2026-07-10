@@ -1,3 +1,4 @@
+import type { CanvasNode } from "../ir/types.js";
 import {
 	type AffineMatrix,
 	applyMatrix,
@@ -5,8 +6,7 @@ import {
 	invertMatrix,
 	multiplyMatrix,
 	toAffineMatrix,
-} from "./geometry.js";
-import type { CanvasNode } from "./types.js";
+} from "./affine.js";
 
 /**
  * Rotation-aware hit-testing for `@anvilkit/canvas-core`.
