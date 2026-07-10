@@ -6,9 +6,16 @@ import type {
 	CommandApplyResult,
 } from "../commands/types.js";
 import {
+	type CanvasMigration,
+	type CanvasMigrationRegistry,
+	createMigrationRegistry,
+} from "../ir/migrations.js";
+import type { CanvasIR, CanvasNode } from "../ir/types.js";
+import {
 	CANVAS_IR_VERSION,
 	CanvasAiPlaceholderNodeSchema,
 	CanvasAssetRefSchema,
+	CanvasDocumentKindSchema,
 	CanvasEllipseNodeSchema,
 	CanvasGroupNodeSchema,
 	CanvasImageNodeSchema,
@@ -22,18 +29,12 @@ import {
 	CanvasPathNodeSchema,
 	CanvasRectNodeSchema,
 	CanvasTextNodeSchema,
-} from "../ir-validators.js";
-import type { CanvasIR, CanvasNode } from "../types.js";
+} from "../ir/validators.js";
 import {
 	type CanvasCommandHandler,
 	type CanvasCommandRegistry,
 	createCommandRegistry,
 } from "./command-registry.js";
-import {
-	type CanvasMigration,
-	type CanvasMigrationRegistry,
-	createMigrationRegistry,
-} from "./migration-registry.js";
 import {
 	type CanvasNodeKindDefinition,
 	type CanvasNodeKindRegistry,
@@ -173,7 +174,8 @@ function buildExtendedSchemas(
 		root: group,
 	});
 	const irSchema = z.looseObject({
-		version: z.literal("1"),
+		version: z.literal(CANVAS_IR_VERSION),
+		documentKind: CanvasDocumentKindSchema.optional(),
 		id: z.string().min(1),
 		title: z.string(),
 		pages: z.array(page).min(1),

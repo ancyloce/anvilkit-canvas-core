@@ -2,7 +2,7 @@ import type {
 	CommandApplyOptions,
 	CommandApplyResult,
 } from "../commands/types.js";
-import type { CanvasIR } from "../types.js";
+import type { CanvasIR } from "../ir/types.js";
 
 /**
  * A command extension. `apply` must be reversible like the built-in

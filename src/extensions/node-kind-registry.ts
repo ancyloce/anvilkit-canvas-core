@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { CanvasNodeBase } from "../types.js";
+import type { CanvasNodeBase } from "../ir/types.js";
 
 /**
  * Domain extension registries for `@anvilkit/canvas-core`. These let a host add
