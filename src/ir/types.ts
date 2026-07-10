@@ -211,8 +211,26 @@ export interface CanvasPage {
 	root: CanvasGroupNode;
 }
 
+/**
+ * Every CanvasIR schema version this build can read. Documents at older
+ * versions are forward-migrated on read (`migrateCanvasIR`/`runtime.migrate`);
+ * `CanvasIR["version"]` — the version this build writes — is always the
+ * newest member.
+ */
+export type CanvasIRVersion = "1" | "2";
+
+/**
+ * What a document is: an editable design (the default when absent), an
+ * instance stamped from a template, or a variant produced for export.
+ */
+export type CanvasDocumentKind =
+	| "design"
+	| "template-instance"
+	| "export-variant";
+
 export interface CanvasIR {
-	version: "1";
+	version: "2";
+	documentKind?: CanvasDocumentKind;
 	id: string;
 	title: string;
 	pages: CanvasPage[];

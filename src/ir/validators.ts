@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { createMigrationRegistry } from "./migrations.js";
 import type {
 	CanvasAssetRef,
 	CanvasBounds,
+	CanvasDocumentKind,
 	CanvasFill,
 	CanvasGradientFill,
 	CanvasGradientStop,
@@ -23,7 +25,7 @@ import type {
 /**
  * Object schemas use `z.looseObject` (preserve unknown keys) rather than the
  * Zod default (`strip`, which silently drops them). The Canvas IR is a versioned
- * (`version: "1"`) persisted + collaborative wire format, so a replica on an
+ * persisted + collaborative wire format, so a replica on an
  * older build must round-trip a newer peer's extra fields instead of silently
  * deleting them — silent stripping would lose data and break CRDT convergence.
  * A stricter trust-boundary posture (`z.strictObject`, reject unknown keys) was
@@ -250,8 +252,26 @@ export const CanvasIRMetadataSchema: z.ZodType<CanvasIRMetadata> =
 		brandId: z.string().optional(),
 	});
 
+/**
+ * The CanvasIR schema version this build emits and treats as current.
+ *
+ * Policy: **migrate-on-read, write current.** Anything parsed through
+ * `migrateCanvasIR`/`runtime.migrate` comes out at this version, and
+ * builders/serializers emit it. This is the single version literal — the
+ * static schema below and `buildExtendedSchemas` both derive from it, so the
+ * two can never drift.
+ */
+export const CANVAS_IR_VERSION = "2" satisfies CanvasIR["version"];
+
+export const CanvasDocumentKindSchema: z.ZodType<CanvasDocumentKind> = z.enum([
+	"design",
+	"template-instance",
+	"export-variant",
+]);
+
 export const CanvasIRSchema: z.ZodType<CanvasIR> = z.looseObject({
-	version: z.literal("1"),
+	version: z.literal(CANVAS_IR_VERSION),
+	documentKind: CanvasDocumentKindSchema.optional(),
 	id: z.string().min(1),
 	title: z.string(),
 	pages: z.array(CanvasPageSchema).min(1),
@@ -259,30 +279,37 @@ export const CanvasIRSchema: z.ZodType<CanvasIR> = z.looseObject({
 	metadata: CanvasIRMetadataSchema,
 });
 
-/** The CanvasIR schema version this build emits and treats as current. */
-export const CANVAS_IR_VERSION = "1" as const;
+const DEFAULT_MIGRATIONS = createMigrationRegistry();
 
 /**
  * Parse + forward-migrate an untrusted/persisted IR to the current schema
- * version, then validate it. This is the single seam for schema evolution:
- * when a future `version: "2"` ships, upgrade older `raw` to the current shape
- * *here* (e.g. `if (version === "1") raw = upgradeV1ToV2(raw)`) before the
- * `CanvasIRSchema.parse` below. Today only `"1"` exists, so any other version is
- * rejected with a clear, actionable error rather than a cryptic schema failure.
+ * version, then validate it. This is the single seam for schema evolution.
+ *
+ * Policy: **migrate-on-read, write current** (`CANVAS_IR_VERSION`). A
+ * supported older version (see `CANVAS_IR_MIGRATIONS`) is upgraded step by
+ * step before the `CanvasIRSchema.parse`, so persisted and peer-supplied
+ * documents (e.g. collaborative editing) keep loading as the schema grows —
+ * and always come out stamped with the current version. An unsupported
+ * version is rejected with a clear, actionable error rather than a cryptic
+ * schema failure.
  *
  * Prefer this over a bare `CanvasIRSchema.parse` when decoding persisted or
- * peer-supplied IR (e.g. collaborative editing) so old documents keep loading
- * as the schema grows.
+ * peer-supplied IR.
  */
 export function migrateCanvasIR(raw: unknown): CanvasIR {
 	const version =
 		raw && typeof raw === "object"
 			? (raw as { version?: unknown }).version
 			: undefined;
-	if (version !== CANVAS_IR_VERSION) {
+	const supported =
+		version === CANVAS_IR_VERSION ||
+		(typeof version === "string" && DEFAULT_MIGRATIONS.has(version));
+	if (!supported) {
 		throw new Error(
-			`Unsupported CanvasIR version ${JSON.stringify(version)} (expected "${CANVAS_IR_VERSION}"). No migration path is registered.`,
+			`Unsupported CanvasIR version ${JSON.stringify(version)} (current is "${CANVAS_IR_VERSION}"). No migration path is registered.`,
 		);
 	}
-	return CanvasIRSchema.parse(raw);
+	return CanvasIRSchema.parse(
+		DEFAULT_MIGRATIONS.migrate(raw, CANVAS_IR_VERSION),
+	);
 }

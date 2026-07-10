@@ -1,11 +1,4 @@
-import { resolveNow } from "./clock.js";
-import {
-	CanvasIRDepthError,
-	findNode,
-	isGroupNode,
-	MAX_TREE_DEPTH,
-	walkPage,
-} from "./ir-walkers.js";
+import { resolveNow } from "../clock.js";
 import type {
 	CanvasGroupNode,
 	CanvasIR,
@@ -14,6 +7,13 @@ import type {
 	CanvasNodeKind,
 	CanvasPage,
 } from "./types.js";
+import {
+	CanvasIRDepthError,
+	findNode,
+	isGroupNode,
+	MAX_TREE_DEPTH,
+	walkPage,
+} from "./walkers.js";
 
 export type CanvasIRMutationCode =
 	| "node-not-found"

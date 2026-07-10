@@ -24,8 +24,30 @@ function readVersion(raw: unknown): string | undefined {
 	return undefined;
 }
 
+/**
+ * Production migrations for the core CanvasIR version chain, seeded into
+ * every registry so a zero-extension runtime still reads old documents.
+ *
+ * v1 → v2 is a pure structural version bump — every valid v1 document is a
+ * valid v2 document — so `up` only rewrites the version tag; all other
+ * fields (including unknown ones) ride along via the spread.
+ */
+export const CANVAS_IR_MIGRATIONS: readonly CanvasMigration[] = [
+	{
+		from: "1",
+		to: "2",
+		up: (raw) => ({ ...(raw as object), version: "2" }),
+	},
+];
+
+/**
+ * Create a registry pre-seeded with {@link CANVAS_IR_MIGRATIONS}; `register`
+ * adds extension steps (re-registering a `from` overrides the earlier step).
+ */
 export function createMigrationRegistry(): CanvasMigrationRegistry {
-	const byFrom = new Map<string, CanvasMigration>();
+	const byFrom = new Map<string, CanvasMigration>(
+		CANVAS_IR_MIGRATIONS.map((m) => [m.from, m]),
+	);
 	return {
 		register(m) {
 			byFrom.set(m.from, m);

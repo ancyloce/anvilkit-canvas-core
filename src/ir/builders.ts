@@ -1,4 +1,4 @@
-import { nowIso } from "./clock.js";
+import { nowIso } from "../clock.js";
 import type {
 	CanvasBounds,
 	CanvasEllipseNode,
@@ -18,6 +18,7 @@ import type {
 	CanvasTransform,
 	ImageFilter,
 } from "./types.js";
+import { CANVAS_IR_VERSION } from "./validators.js";
 
 const IDENTITY_TRANSFORM: CanvasTransform = {
 	x: 0,
@@ -71,7 +72,7 @@ export function createCanvasIR(options: CreateCanvasIROptions = {}): CanvasIR {
 	const ts = now();
 	const pages = options.pages?.length ? options.pages : [createPage()];
 	return {
-		version: "1",
+		version: CANVAS_IR_VERSION,
 		id: options.id ?? generateId(),
 		title: options.title ?? "Untitled",
 		pages,
