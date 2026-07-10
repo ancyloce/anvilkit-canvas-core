@@ -3,7 +3,7 @@ import type {
 	CanvasSvgHookContext,
 	CanvasUnknownNode,
 } from "../extensions/node-kind-registry.js";
-import { toAffineMatrix } from "../geometry.js";
+import { toAffineMatrix } from "../geometry/affine.js";
 import type {
 	CanvasAssetRef,
 	CanvasEllipseNode,
