@@ -1,5 +1,5 @@
 import { resolveNow } from "../clock.js";
-import { transformedBoundsExtent } from "../geometry.js";
+import { transformedBoundsExtent } from "../geometry/affine.js";
 import {
 	CanvasIRMutationError,
 	insertNode,
