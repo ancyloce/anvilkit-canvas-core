@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createCanvasIR, createPage } from "../ir/builders.js";
-import { insertNode } from "../ir/mutations.js";
-import { CanvasRectNodeSchema } from "../ir/validators.js";
-import { serializePageToSvg } from "../serialize/svg.js";
+import { createCanvasIR, createPage } from "../../ir/builders.js";
+import { insertNode } from "../../ir/mutations.js";
+import { CanvasRectNodeSchema } from "../../ir/validators.js";
+import { serializePageToSvg } from "../svg.js";
 
 const baseRect = {
 	id: "r",

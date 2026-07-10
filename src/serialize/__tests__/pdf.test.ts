@@ -5,8 +5,8 @@ import type {
 	CanvasPage,
 	CanvasPageSize,
 	CanvasTransform,
-} from "../ir/types.js";
-import { serializeDocumentToPdf, unitToPt } from "../serialize/pdf.js";
+} from "../../ir/types.js";
+import { serializeDocumentToPdf, unitToPt } from "../pdf.js";
 
 /** A valid 1×1 transparent PNG (verified to embed via pdf-lib's decoder). */
 const PNG_1X1 =

@@ -9,7 +9,7 @@ import {
 	createPath,
 	createRect,
 	createText,
-} from "../ir/builders.js";
+} from "../builders.js";
 import {
 	CanvasEllipseNodeSchema,
 	CanvasGroupNodeSchema,
@@ -20,7 +20,7 @@ import {
 	CanvasPathNodeSchema,
 	CanvasRectNodeSchema,
 	CanvasTextNodeSchema,
-} from "../ir/validators.js";
+} from "../validators.js";
 
 describe("createCanvasIR", () => {
 	it("returns a schema-valid IR with no args", () => {

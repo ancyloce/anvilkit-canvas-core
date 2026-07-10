@@ -5,9 +5,9 @@ import {
 	createPage,
 	createRect,
 	createText,
-} from "../ir/builders.js";
-import { insertNode } from "../ir/mutations.js";
-import type { CanvasGroupNode, CanvasNode } from "../ir/types.js";
+} from "../builders.js";
+import { insertNode } from "../mutations.js";
+import type { CanvasGroupNode, CanvasNode } from "../types.js";
 import {
 	CanvasIRDepthError,
 	findNode,
@@ -18,7 +18,7 @@ import {
 	pageOf,
 	parentOf,
 	walk,
-} from "../ir/walkers.js";
+} from "../walkers.js";
 
 function buildSampleIR() {
 	const rect = createRect({

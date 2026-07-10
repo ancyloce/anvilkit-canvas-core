@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { createPage, createRect } from "../../ir/builders.js";
 import {
 	type CanvasChange,
 	commandToChange,
 	createChangeEmitter,
-} from "../commands/change-events.js";
-import { createPage, createRect } from "../ir/builders.js";
+} from "../change-events.js";
 
 describe("commandToChange", () => {
 	it("maps node.move to a transform delta", () => {

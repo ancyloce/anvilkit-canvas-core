@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import type { CanvasIR, CanvasTransform } from "../ir/types.js";
-import { serializePageToSvg } from "../serialize/svg.js";
+import type { CanvasIR, CanvasTransform } from "../../ir/types.js";
+import { serializePageToSvg } from "../svg.js";
 
 /**
  * Dependency-free well-formedness check: scans tags and verifies every open

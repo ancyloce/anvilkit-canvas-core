@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { applyCommand } from "../commands/runtime.js";
 import {
 	createCanvasIR,
 	createGroup,
 	createPage,
 	createRect,
-} from "../ir/builders.js";
-import type { CanvasIR } from "../ir/types.js";
+} from "../../ir/builders.js";
+import type { CanvasIR } from "../../ir/types.js";
+import { applyCommand } from "../runtime.js";
 
 function makeIR(): CanvasIR {
 	const page = createPage({ id: "p1" });

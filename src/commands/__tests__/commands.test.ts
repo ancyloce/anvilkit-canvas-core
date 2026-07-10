@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { applyCommand, CanvasCommandError } from "../commands/runtime.js";
+import {
+	createCanvasIR,
+	createGroup,
+	createImage,
+	createPage,
+	createRect,
+	createText,
+} from "../../ir/builders.js";
+import type {
+	CanvasGroupNode,
+	CanvasImageNode,
+	CanvasIR,
+	CanvasRectNode,
+} from "../../ir/types.js";
+import { findNode } from "../../ir/walkers.js";
+import { applyCommand, CanvasCommandError } from "../runtime.js";
 import type {
 	CanvasAnyNodeUpdateCommand,
 	CanvasImageReplaceCommand,
@@ -14,22 +29,7 @@ import type {
 	CanvasPageDeleteCommand,
 	CanvasPageRenameCommand,
 	CanvasPageReorderCommand,
-} from "../commands/types.js";
-import {
-	createCanvasIR,
-	createGroup,
-	createImage,
-	createPage,
-	createRect,
-	createText,
-} from "../ir/builders.js";
-import type {
-	CanvasGroupNode,
-	CanvasImageNode,
-	CanvasIR,
-	CanvasRectNode,
-} from "../ir/types.js";
-import { findNode } from "../ir/walkers.js";
+} from "../types.js";
 
 const FIXED_TS = "2026-05-20T00:00:00.000Z";
 const now = () => FIXED_TS;

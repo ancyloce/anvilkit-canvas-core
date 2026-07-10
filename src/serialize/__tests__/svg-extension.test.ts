@@ -4,11 +4,11 @@ import {
 	type CanvasNodeKindDefinition,
 	type CanvasUnknownNode,
 	createNodeKindRegistry,
-} from "../extensions/node-kind-registry.js";
-import { createCanvasIR, createPage } from "../ir/builders.js";
-import { insertNode } from "../ir/mutations.js";
-import type { CanvasIR } from "../ir/types.js";
-import { serializePageToSvg } from "../serialize/svg.js";
+} from "../../extensions/node-kind-registry.js";
+import { createCanvasIR, createPage } from "../../ir/builders.js";
+import { insertNode } from "../../ir/mutations.js";
+import type { CanvasIR } from "../../ir/types.js";
+import { serializePageToSvg } from "../svg.js";
 
 interface StarNode extends CanvasUnknownNode {
 	type: "star";

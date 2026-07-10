@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { CanvasTransform } from "../../ir/types.js";
 import {
 	type AffineMatrix,
 	applyMatrix,
@@ -7,8 +8,7 @@ import {
 	multiplyMatrix,
 	toAffineMatrix,
 	transformedBoundsExtent,
-} from "../geometry/affine.js";
-import type { CanvasTransform } from "../ir/types.js";
+} from "../affine.js";
 
 const identity: CanvasTransform = {
 	x: 0,

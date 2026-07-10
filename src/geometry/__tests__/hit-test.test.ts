@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { createRect } from "../../ir/builders.js";
 import {
 	type Aabb,
 	hitTest,
 	marqueeHits,
 	nodeWorldAabb,
 	pointInNode,
-} from "../geometry/hit-test.js";
-import { createRect } from "../ir/builders.js";
+} from "../hit-test.js";
 
 describe("pointInNode", () => {
 	it("tests an axis-aligned box", () => {

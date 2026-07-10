@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toAffineMatrix } from "../geometry/affine.js";
+import { toAffineMatrix } from "../../geometry/affine.js";
 import type {
 	CanvasAssetRef,
 	CanvasEllipseNode,
@@ -14,8 +14,8 @@ import type {
 	CanvasRectNode,
 	CanvasTextNode,
 	CanvasTransform,
-} from "../ir/types.js";
-import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir/walkers.js";
+} from "../../ir/types.js";
+import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../../ir/walkers.js";
 import {
 	bytesToBase64,
 	createEmitContext,
@@ -36,7 +36,7 @@ import {
 	shouldSkipNode,
 	transformAttr,
 	unitToPx,
-} from "../serialize/svg.js";
+} from "../svg.js";
 
 const identity: CanvasTransform = {
 	x: 0,

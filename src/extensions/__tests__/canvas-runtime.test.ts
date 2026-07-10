@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { createCanvasIR, createPage, createRect } from "../../ir/builders.js";
+import { insertNode } from "../../ir/mutations.js";
+import type { CanvasIR } from "../../ir/types.js";
+import { CanvasIRSchema, CanvasNodeSchema } from "../../ir/validators.js";
 import {
 	type CanvasExtension,
 	createCanvasRuntime,
-} from "../extensions/canvas-runtime.js";
+} from "../canvas-runtime.js";
 import type {
 	CanvasNodeKindDefinition,
 	CanvasUnknownNode,
-} from "../extensions/node-kind-registry.js";
-import { createCanvasIR, createPage, createRect } from "../ir/builders.js";
-import { insertNode } from "../ir/mutations.js";
-import type { CanvasIR } from "../ir/types.js";
-import { CanvasIRSchema, CanvasNodeSchema } from "../ir/validators.js";
+} from "../node-kind-registry.js";
 
 function fixtureIR(extra?: CanvasUnknownNode): CanvasIR {
 	const page = createPage({ id: "p1" });

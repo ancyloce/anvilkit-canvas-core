@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { createCommandRegistry } from "../extensions/command-registry.js";
+import { createMigrationRegistry } from "../../ir/migrations.js";
+import { createCommandRegistry } from "../command-registry.js";
 import {
 	CanvasExtensionError,
 	type CanvasNodeKindDefinition,
 	type CanvasUnknownNode,
 	createNodeKindRegistry,
-} from "../extensions/node-kind-registry.js";
-import { createMigrationRegistry } from "../ir/migrations.js";
+} from "../node-kind-registry.js";
 
 interface StarNode extends CanvasUnknownNode {
 	type: "star";

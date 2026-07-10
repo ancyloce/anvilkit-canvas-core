@@ -5,7 +5,7 @@ import {
 	DEFAULT_SNAP_THRESHOLD,
 	distributeRects,
 	type SnapRect,
-} from "../geometry/snap.js";
+} from "../snap.js";
 
 describe("computeSnap — grid only", () => {
 	it("snaps top-left to nearest grid line", () => {

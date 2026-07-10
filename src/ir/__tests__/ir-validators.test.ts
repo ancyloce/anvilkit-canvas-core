@@ -7,7 +7,7 @@ import type {
 	CanvasPage,
 	CanvasRectNode,
 	CanvasTextNode,
-} from "../ir/types.js";
+} from "../types.js";
 import {
 	CANVAS_IR_VERSION,
 	CanvasGroupNodeSchema,
@@ -20,7 +20,7 @@ import {
 	CanvasTextNodeSchema,
 	CanvasTransformSchema,
 	migrateCanvasIR,
-} from "../ir/validators.js";
+} from "../validators.js";
 
 const FIXED_TS = "2026-05-20T00:00:00.000Z";
 
