@@ -23,10 +23,10 @@ export default mergeConfig(
 				exclude: [
 					"src/**/*.test.ts",
 					"src/**/__tests__/**",
-					"src/types.ts",
+					"src/ir/types.ts",
 					"src/ai-contracts.ts",
 					"src/commands/types.ts",
-					"src/index.ts",
+					"src/**/index.ts",
 				],
 				thresholds: {
 					statements: 87,

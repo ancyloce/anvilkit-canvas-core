@@ -1,22 +1,8 @@
 export const CANVAS_CORE_VERSION = "0.1.2-rc.0";
 
 export type * from "./ai-contracts.js";
-export * from "./commands/change-events.js";
-export * from "./commands/runtime.js";
-export * from "./commands/transaction.js";
-export * from "./commands/types.js";
-export * from "./extensions/canvas-runtime.js";
-export * from "./extensions/command-registry.js";
-export * from "./extensions/node-kind-registry.js";
-export * from "./geometry/affine.js";
-export * from "./geometry/hit-test.js";
-export * from "./geometry/snap.js";
-export * from "./geometry/viewport.js";
-export * from "./ir/builders.js";
-export * from "./ir/migrations.js";
-export * from "./ir/mutations.js";
-export type * from "./ir/types.js";
-export * from "./ir/validators.js";
-export * from "./ir/walkers.js";
-export * from "./serialize/pdf.js";
-export * from "./serialize/svg.js";
+export * from "./commands/index.js";
+export * from "./extensions/index.js";
+export * from "./geometry/index.js";
+export * from "./ir/index.js";
+export * from "./serialize/index.js";

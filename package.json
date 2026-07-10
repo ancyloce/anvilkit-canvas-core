@@ -42,11 +42,12 @@
 		"publint": "publint",
 		"check:publint": "node ./scripts/check-publint.mjs",
 		"check:circular": "madge --circular --extensions ts src/",
+		"check:layering": "node ./scripts/check-layering.mjs",
 		"check:react-free-runtime": "node ./scripts/check-react-free.mjs",
 		"check:peer-deps": "node ./scripts/check-peer-deps.mjs",
 		"check:bundle-budget": "node ./scripts/check-bundle-budget.mjs",
 		"check:api-snapshot": "node ./scripts/check-api-snapshot.mjs",
-		"check:all": "pnpm check:publint && pnpm check:circular && pnpm check:react-free-runtime && pnpm check:peer-deps && pnpm check:bundle-budget && pnpm check:api-snapshot",
+		"check:all": "pnpm check:publint && pnpm check:circular && pnpm check:layering && pnpm check:react-free-runtime && pnpm check:peer-deps && pnpm check:bundle-budget && pnpm check:api-snapshot",
 		"update:api-snapshot": "node ./scripts/check-api-snapshot.mjs --update",
 		"size": "size-limit"
 	},
