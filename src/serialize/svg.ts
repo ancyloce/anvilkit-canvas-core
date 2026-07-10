@@ -4,8 +4,6 @@ import type {
 	CanvasUnknownNode,
 } from "../extensions/node-kind-registry.js";
 import { toAffineMatrix } from "../geometry.js";
-import { CanvasIRSchema } from "../ir-validators.js";
-import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir-walkers.js";
 import type {
 	CanvasAssetRef,
 	CanvasEllipseNode,
@@ -25,7 +23,9 @@ import type {
 	CanvasTextNode,
 	CanvasTransform,
 	CanvasUnit,
-} from "../types.js";
+} from "../ir/types.js";
+import { CanvasIRSchema } from "../ir/validators.js";
+import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir/walkers.js";
 
 /**
  * SVG serializer for `@anvilkit/canvas-core`.

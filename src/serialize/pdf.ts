@@ -1,6 +1,6 @@
 import { PDFDocument } from "pdf-lib";
-import { CanvasIRSchema } from "../ir-validators.js";
-import type { CanvasIR, CanvasPage, CanvasUnit } from "../types.js";
+import type { CanvasIR, CanvasPage, CanvasUnit } from "../ir/types.js";
+import { CanvasIRSchema } from "../ir/validators.js";
 import { DEFAULT_DPI } from "./svg.js";
 
 /**
