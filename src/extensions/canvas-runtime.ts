@@ -17,6 +17,8 @@ import {
 	CanvasAssetRefSchema,
 	CanvasDocumentKindSchema,
 	CanvasEllipseNodeSchema,
+	CanvasFrameNodeSchema,
+	CanvasFrameNodeShape,
 	CanvasGroupNodeSchema,
 	CanvasImageNodeSchema,
 	CanvasIRMetadataSchema,
@@ -118,6 +120,11 @@ const BUILTIN_KIND_DEFS: CanvasNodeKindDefinition[] = [
 		schema: asKindSchema(CanvasGroupNodeSchema),
 		isContainer: true,
 	},
+	{
+		kind: "frame",
+		schema: asKindSchema(CanvasFrameNodeSchema),
+		isContainer: true,
+	},
 	{ kind: "rect", schema: asKindSchema(CanvasRectNodeSchema) },
 	{ kind: "ellipse", schema: asKindSchema(CanvasEllipseNodeSchema) },
 	{ kind: "line", schema: asKindSchema(CanvasLineNodeSchema) },
@@ -136,10 +143,12 @@ type DiscriminatedUnionMembers = Parameters<typeof z.discriminatedUnion>[1];
 
 /**
  * Build a fresh node/IR schema pair whose discriminated union includes the
- * extension kinds. The `group` schema is rebuilt so its `z.lazy` children point
- * at THIS union, and the page/IR schemas are rebuilt so a page root's subtree
- * validates against the extended union. Mirrors the static construction in
- * `ir-validators.ts` (kept separate so the static default path is untouched).
+ * extension kinds. EVERY container schema (`group`, `frame`) is rebuilt so its
+ * `z.lazy` children point at THIS union — a container still bound to the static
+ * union would reject a custom kind nested inside it — and the page/IR schemas are
+ * rebuilt so a page root's subtree validates against the extended union. Mirrors
+ * the static construction in `ir-validators.ts` (kept separate so the static
+ * default path is untouched).
  */
 function buildExtendedSchemas(
 	extraSchemas: readonly z.ZodType<CanvasUnknownNode>[],
@@ -150,8 +159,13 @@ function buildExtendedSchemas(
 		type: z.literal("group"),
 		children: z.array(z.lazy(() => union)),
 	});
+	const frame = z.looseObject({
+		...CanvasFrameNodeShape,
+		children: z.array(z.lazy(() => union)),
+	});
 	const members = [
 		group,
+		frame,
 		CanvasRectNodeSchema,
 		CanvasEllipseNodeSchema,
 		CanvasLineNodeSchema,

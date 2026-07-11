@@ -2,15 +2,17 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createCanvasIR, createPage, createRect } from "../../ir/builders.js";
 import { insertNode } from "../../ir/mutations.js";
-import type { CanvasIR } from "../../ir/types.js";
+import type { CanvasIR, CanvasNode } from "../../ir/types.js";
 import { CanvasIRSchema, CanvasNodeSchema } from "../../ir/validators.js";
+import { isContainerNode } from "../../ir/walkers.js";
 import {
 	type CanvasExtension,
 	createCanvasRuntime,
 } from "../canvas-runtime.js";
-import type {
-	CanvasNodeKindDefinition,
-	CanvasUnknownNode,
+import {
+	CanvasExtensionError,
+	type CanvasNodeKindDefinition,
+	type CanvasUnknownNode,
 } from "../node-kind-registry.js";
 
 function fixtureIR(extra?: CanvasUnknownNode): CanvasIR {
@@ -74,6 +76,7 @@ describe("createCanvasRuntime — default (no extensions)", () => {
 		const rt = createCanvasRuntime();
 		for (const k of [
 			"group",
+			"frame",
 			"rect",
 			"ellipse",
 			"line",
@@ -232,6 +235,48 @@ describe("createCanvasRuntime — migrate", () => {
 	});
 });
 
+describe("container predicate ↔ kind-registry parity", () => {
+	/**
+	 * `isContainerNode` is a static predicate, while the registry carries the same
+	 * fact as `CanvasNodeKindDefinition.isContainer`. Nothing in the type system
+	 * ties them together, so a new container kind could easily be added to one and
+	 * not the other — and the failure (a subtree silently not recursed into) is
+	 * quiet and nasty. This test is the tie.
+	 */
+	it("every built-in kind flagged isContainer is exactly what isContainerNode accepts", () => {
+		const builtins = createCanvasRuntime().nodeKinds.list();
+		const flaggedAsContainer = builtins
+			.filter((def) => def.isContainer === true)
+			.map((def) => def.kind)
+			.sort();
+		expect(flaggedAsContainer).toEqual(["frame", "group"]);
+
+		// isContainerNode only reads `.type`, so a bare tagged object is enough.
+		for (const def of builtins) {
+			const probe = { type: def.kind } as unknown as CanvasNode;
+			expect(isContainerNode(probe)).toBe(def.isContainer === true);
+		}
+	});
+
+	it("registers all 9 built-in kinds", () => {
+		const kinds = createCanvasRuntime()
+			.nodeKinds.list()
+			.map((d) => d.kind)
+			.sort();
+		expect(kinds).toEqual([
+			"ai-placeholder",
+			"ellipse",
+			"frame",
+			"group",
+			"image",
+			"line",
+			"path",
+			"rect",
+			"text",
+		]);
+	});
+});
+
 describe("createCanvasRuntime — built-in kind protection", () => {
 	it("rejects an extension that registers a built-in node kind", () => {
 		const rectShadow: CanvasExtension = {
@@ -249,6 +294,32 @@ describe("createCanvasRuntime — built-in kind protection", () => {
 		expect(() => createCanvasRuntime([rectShadow])).toThrowError(
 			/built-in kinds cannot be shadowed/,
 		);
+	});
+
+	it("rejects an extension that registers `frame` (now a built-in kind)", () => {
+		const frameShadow: CanvasExtension = {
+			id: "hostile-frame",
+			nodeKinds: [
+				{
+					kind: "frame",
+					schema: z.looseObject({
+						id: z.string(),
+						type: z.literal("frame"),
+					}) as unknown as z.ZodType<CanvasUnknownNode>,
+				},
+			],
+		};
+		expect(() => createCanvasRuntime([frameShadow])).toThrowError(
+			/built-in kinds cannot be shadowed/,
+		);
+		try {
+			createCanvasRuntime([frameShadow]);
+			expect.unreachable("registering a built-in kind must throw");
+		} catch (error) {
+			expect((error as CanvasExtensionError).code).toBe(
+				"builtin-kind-shadowed",
+			);
+		}
 	});
 
 	it("rejects two extensions claiming the same custom kind", () => {
