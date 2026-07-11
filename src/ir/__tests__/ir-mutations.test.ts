@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
 	createCanvasIR,
+	createFrame,
 	createGroup,
 	createPage,
 	createRect,
@@ -15,8 +16,13 @@ import {
 	replaceChildrenInParent,
 	updateNode,
 } from "../mutations.js";
-import type { CanvasIR, CanvasRectNode } from "../types.js";
-import { CanvasIRDepthError, findNode, MAX_TREE_DEPTH } from "../walkers.js";
+import type { CanvasFrameNode, CanvasIR, CanvasRectNode } from "../types.js";
+import {
+	CanvasIRDepthError,
+	findNode,
+	isContainerNode,
+	MAX_TREE_DEPTH,
+} from "../walkers.js";
 
 let counter = 0;
 function tick(): string {
@@ -70,6 +76,195 @@ function sampleIR() {
 function snapshot(ir: CanvasIR): CanvasIR {
 	return JSON.parse(JSON.stringify(ir));
 }
+
+/**
+ * page-root > frame("frame-1") > [rectF, group("inner-f") > [textF]]
+ * The mirror of `sampleIR`'s group tree, with a frame standing in for the outer
+ * group — so every mutation below asserts frame children behave exactly like
+ * group children.
+ */
+function frameIR() {
+	const rectF = createRect({
+		id: "rectF",
+		bounds: { width: 10, height: 10 },
+		fill: "#f00",
+	});
+	const textF = createText({
+		id: "textF",
+		bounds: { width: 100, height: 24 },
+		text: "hi",
+	});
+	const innerF = createGroup({
+		id: "inner-f",
+		bounds: { width: 50, height: 50 },
+		children: [textF],
+	});
+	const frame = createFrame({
+		id: "frame-1",
+		bounds: { width: 400, height: 400 },
+		children: [rectF, innerF],
+	});
+	const page = createPage({ id: "p1" });
+	page.root = createGroup({
+		id: "page-root",
+		bounds: page.root.bounds,
+		children: [frame],
+	});
+	return createCanvasIR({
+		id: "ir-1",
+		pages: [page],
+		now: () => "2026-01-01T00:00:00.000Z",
+	});
+}
+
+function childIds(ir: CanvasIR, parentId: string): string[] {
+	const parent = findNode(ir, parentId)?.node;
+	if (!parent || !isContainerNode(parent)) {
+		throw new Error(`${parentId} is not a container`);
+	}
+	return parent.children.map((c) => c.id);
+}
+
+describe("frame containers — mutations treat frame children like group children", () => {
+	it("insertNode appends into a frame", () => {
+		const ir = frameIR();
+		const node = createRect({ id: "new", bounds: { width: 1, height: 1 } });
+		const next = insertNode(ir, { parentId: "frame-1", node, now: tick });
+		expect(childIds(next, "frame-1")).toEqual(["rectF", "inner-f", "new"]);
+		// Pure: the source IR is untouched.
+		expect(childIds(ir, "frame-1")).toEqual(["rectF", "inner-f"]);
+	});
+
+	it("insertNode honours an index inside a frame", () => {
+		const ir = frameIR();
+		const node = createRect({ id: "new", bounds: { width: 1, height: 1 } });
+		const next = insertNode(ir, {
+			parentId: "frame-1",
+			node,
+			index: 1,
+			now: tick,
+		});
+		expect(childIds(next, "frame-1")).toEqual(["rectF", "new", "inner-f"]);
+	});
+
+	it("insertNode rejects an out-of-range index on a frame", () => {
+		const ir = frameIR();
+		const node = createRect({ id: "new", bounds: { width: 1, height: 1 } });
+		try {
+			insertNode(ir, { parentId: "frame-1", node, index: 99, now: tick });
+			expect.unreachable("insert past the end must throw");
+		} catch (err) {
+			expect((err as CanvasIRMutationError).code).toBe("index-out-of-range");
+		}
+	});
+
+	it("insertNode reaches a group nested INSIDE a frame", () => {
+		const ir = frameIR();
+		const node = createRect({ id: "new", bounds: { width: 1, height: 1 } });
+		const next = insertNode(ir, { parentId: "inner-f", node, now: tick });
+		expect(childIds(next, "inner-f")).toEqual(["textF", "new"]);
+	});
+
+	it("removeNode removes a direct frame child", () => {
+		const ir = frameIR();
+		const next = removeNode(ir, { id: "rectF", now: tick });
+		expect(childIds(next, "frame-1")).toEqual(["inner-f"]);
+	});
+
+	it("removeNode removes a node nested deep inside a frame", () => {
+		const ir = frameIR();
+		const next = removeNode(ir, { id: "textF", now: tick });
+		expect(childIds(next, "inner-f")).toEqual([]);
+		expect(findNode(next, "textF")).toBeNull();
+	});
+
+	it("removeNode removes the frame itself, taking its subtree with it", () => {
+		const ir = frameIR();
+		const next = removeNode(ir, { id: "frame-1", now: tick });
+		expect(childIds(next, "page-root")).toEqual([]);
+		expect(findNode(next, "textF")).toBeNull();
+	});
+
+	it("updateNode patches a node inside a frame", () => {
+		const ir = frameIR();
+		const next = updateNode(ir, {
+			id: "rectF",
+			patch: { fill: "#0f0" },
+			now: tick,
+		});
+		const rect = findNode(next, "rectF")?.node as CanvasRectNode | undefined;
+		expect(rect?.fill).toBe("#0f0");
+	});
+
+	it("updateNode patches the frame's own fields and keeps the discriminant", () => {
+		const ir = frameIR();
+		const next = updateNode(ir, {
+			id: "frame-1",
+			patch: { clip: true, radius: 8 },
+			now: tick,
+		});
+		const frame = findNode(next, "frame-1")?.node as CanvasFrameNode;
+		expect(frame.type).toBe("frame");
+		expect(frame.clip).toBe(true);
+		expect(frame.radius).toBe(8);
+		// Children survive a patch that doesn't mention them.
+		expect(frame.children.map((c) => c.id)).toEqual(["rectF", "inner-f"]);
+	});
+
+	it("reorderChildren reorders a frame's children", () => {
+		const ir = frameIR();
+		const next = reorderChildren(ir, {
+			parentId: "frame-1",
+			fromIndex: 0,
+			toIndex: 1,
+			now: tick,
+		});
+		expect(childIds(next, "frame-1")).toEqual(["inner-f", "rectF"]);
+	});
+
+	it("moveNode moves a node OUT of a frame", () => {
+		const ir = frameIR();
+		const next = moveNode(ir, {
+			id: "rectF",
+			newParentId: "page-root",
+			now: tick,
+		});
+		expect(childIds(next, "frame-1")).toEqual(["inner-f"]);
+		expect(childIds(next, "page-root")).toEqual(["frame-1", "rectF"]);
+	});
+
+	it("moveNode moves a node INTO a frame (frame is a valid parent)", () => {
+		const ir = frameIR();
+		const next = moveNode(ir, {
+			id: "textF",
+			newParentId: "frame-1",
+			index: 0,
+			now: tick,
+		});
+		expect(childIds(next, "frame-1")).toEqual(["textF", "rectF", "inner-f"]);
+		expect(childIds(next, "inner-f")).toEqual([]);
+	});
+
+	it("moveNode rejects moving a frame into its own descendant (cycle)", () => {
+		const ir = frameIR();
+		try {
+			moveNode(ir, { id: "frame-1", newParentId: "inner-f", now: tick });
+			expect.unreachable("moving a frame into its own child must throw");
+		} catch (err) {
+			expect((err as CanvasIRMutationError).code).toBe("cycle-detected");
+		}
+	});
+
+	it("replaceChildrenInParent rewrites a frame's children in one pass", () => {
+		const ir = frameIR();
+		const next = replaceChildrenInParent(ir, {
+			parentId: "frame-1",
+			replace: (children) => [...children].reverse(),
+			now: tick,
+		});
+		expect(childIds(next, "frame-1")).toEqual(["inner-f", "rectF"]);
+	});
+});
 
 describe("insertNode", () => {
 	it("appends to the parent by default and is pure", () => {
@@ -374,7 +569,7 @@ describe("replaceChildrenInParent", () => {
 				parentId: "rectA",
 				replace: (c) => [...c],
 			}),
-		).toThrow(/not a group/i);
+		).toThrow(/not a container/i);
 	});
 });
 

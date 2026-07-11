@@ -1,4 +1,6 @@
 import type {
+	CanvasContainerNode,
+	CanvasFrameNode,
 	CanvasGroupNode,
 	CanvasIR,
 	CanvasLeafNode,
@@ -22,12 +24,47 @@ export class CanvasIRDepthError extends Error {
 	}
 }
 
+/**
+ * The kinds that hold `children`. This is the single source of truth for "should
+ * I recurse into this node" across walkers, mutations, and serializers.
+ *
+ * It is a static set rather than a lookup through a runtime's
+ * `CanvasNodeKindRegistry` (whose `CanvasNodeKindDefinition.isContainer` carries
+ * the same fact) for two reasons: the walkers and mutations here are pure
+ * functions with no runtime handle, and threading a registry through every one of
+ * them would widen their signatures for no gain; and a static set gives real type
+ * narrowing to `CanvasContainerNode`, which a registry lookup cannot. The two are
+ * kept honest by a parity test asserting this set equals the built-in kind defs
+ * flagged `isContainer`. An extension kind that declares `isContainer` is walked
+ * by the runtime, not by these built-in-typed helpers.
+ */
+const CONTAINER_KINDS: ReadonlySet<CanvasNodeKind> = new Set([
+	"group",
+	"frame",
+] satisfies CanvasContainerNode["type"][]);
+
+/** True for any node that holds `children` — currently `group` and `frame`. */
+export function isContainerNode(node: CanvasNode): node is CanvasContainerNode {
+	return CONTAINER_KINDS.has(node.type);
+}
+
+/**
+ * True only for a literal `group`. Prefer {@link isContainerNode} when the
+ * question is "does this node have children"; use this one only when the
+ * behaviour is specific to groups (e.g. ungrouping, which a frame does not
+ * support).
+ */
 export function isGroupNode(node: CanvasNode): node is CanvasGroupNode {
 	return node.type === "group";
 }
 
+/** True only for a literal `frame`. */
+export function isFrameNode(node: CanvasNode): node is CanvasFrameNode {
+	return node.type === "frame";
+}
+
 export function isLeafNode(node: CanvasNode): node is CanvasLeafNode {
-	return node.type !== "group";
+	return !isContainerNode(node);
 }
 
 export function isNodeOfKind<K extends CanvasNodeKind>(
@@ -68,7 +105,7 @@ function walkSubtree(
 		throw new CanvasIRDepthError([...idChain, node.id]);
 	}
 	visit({ node, page, parent, depth });
-	if (isGroupNode(node)) {
+	if (isContainerNode(node)) {
 		idChain.push(node.id);
 		for (const child of node.children) {
 			walkSubtree(child, page, node, depth + 1, idChain, visit);
@@ -102,7 +139,8 @@ function findNodeInPage(page: CanvasPage, id: string): FindNodeResult | null {
 }
 
 export interface ParentOfResult {
-	parent: CanvasGroupNode;
+	/** Any container — a `group` or, since frames landed, a `frame`. */
+	parent: CanvasContainerNode;
 	page: CanvasPage;
 }
 
@@ -122,7 +160,7 @@ function parentOfInPage(page: CanvasPage, id: string): ParentOfResult | null {
 	let result: ParentOfResult | null = null;
 	walkPage(page, ({ node }) => {
 		if (result) return;
-		if (isGroupNode(node)) {
+		if (isContainerNode(node)) {
 			for (const child of node.children) {
 				if (child.id === id) {
 					result = { parent: node, page };

@@ -1,5 +1,6 @@
 import { resolveNow } from "../clock.js";
 import type {
+	CanvasContainerNode,
 	CanvasGroupNode,
 	CanvasIR,
 	CanvasNode,
@@ -10,7 +11,7 @@ import type {
 import {
 	CanvasIRDepthError,
 	findNode,
-	isGroupNode,
+	isContainerNode,
 	MAX_TREE_DEPTH,
 	walkPage,
 } from "./walkers.js";
@@ -61,20 +62,32 @@ function assertTreeDepth(depth: number, nodeId: string): void {
 	}
 }
 
-function replaceGroupInTree(
-	root: CanvasGroupNode,
+/**
+ * The tree helpers below are generic over the container kind (`group` | `frame`)
+ * so a rewrite that starts at a page root — always a group, per `CanvasPage` —
+ * returns a group, while recursion into a frame child returns a frame. The
+ * `replacer` contract is that it preserves the container's discriminant, which
+ * every caller here honours (each spreads the container it was handed).
+ */
+function replaceContainerInTree<T extends CanvasContainerNode>(
+	root: T,
 	targetId: string,
-	replacer: (group: CanvasGroupNode) => CanvasGroupNode,
+	replacer: (container: CanvasContainerNode) => CanvasContainerNode,
 	depth = 0,
-): CanvasGroupNode {
+): T {
 	assertTreeDepth(depth, root.id);
 	if (root.id === targetId) {
-		return replacer(root);
+		return replacer(root) as T;
 	}
 	let changed = false;
 	const newChildren: CanvasNode[] = root.children.map((child) => {
-		if (isGroupNode(child)) {
-			const replaced = replaceGroupInTree(child, targetId, replacer, depth + 1);
+		if (isContainerNode(child)) {
+			const replaced = replaceContainerInTree(
+				child,
+				targetId,
+				replacer,
+				depth + 1,
+			);
 			if (replaced !== child) changed = true;
 			return replaced;
 		}
@@ -84,11 +97,11 @@ function replaceGroupInTree(
 	return { ...root, children: newChildren };
 }
 
-function removeIdFromTree(
-	root: CanvasGroupNode,
+function removeIdFromTree<T extends CanvasContainerNode>(
+	root: T,
 	targetId: string,
 	depth = 0,
-): { root: CanvasGroupNode; removed: CanvasNode | null } {
+): { root: T; removed: CanvasNode | null } {
 	assertTreeDepth(depth, root.id);
 	let removed: CanvasNode | null = null;
 	const newChildren: CanvasNode[] = [];
@@ -97,7 +110,7 @@ function removeIdFromTree(
 			removed = child;
 			continue;
 		}
-		if (isGroupNode(child)) {
+		if (isContainerNode(child)) {
 			const inner = removeIdFromTree(child, targetId, depth + 1);
 			if (inner.removed) {
 				removed = inner.removed;
@@ -137,21 +150,24 @@ function mergeNodePatch(node: CanvasNode, patch: object): CanvasNode {
  * `replaceGroupInTree` three-walk sequence with one traversal. The discriminant
  * and id are always preserved even if `patch` tries to override them.
  */
-function updateNodeInTree<K extends CanvasNodeKind>(
-	group: CanvasGroupNode,
+function updateNodeInTree<
+	T extends CanvasContainerNode,
+	K extends CanvasNodeKind,
+>(
+	container: T,
 	id: string,
 	patch: Partial<Omit<CanvasNodeByKind<K>, "id" | "type">>,
 	depth = 0,
-): CanvasGroupNode {
-	assertTreeDepth(depth, group.id);
+): T {
+	assertTreeDepth(depth, container.id);
 	let changed = false;
-	const newChildren: CanvasNode[] = group.children.map((child) => {
+	const newChildren: CanvasNode[] = container.children.map((child) => {
 		if (changed) return child;
 		if (child.id === id) {
 			changed = true;
 			return mergeNodePatch(child, patch);
 		}
-		if (isGroupNode(child)) {
+		if (isContainerNode(child)) {
 			const replaced = updateNodeInTree(child, id, patch, depth + 1);
 			if (replaced !== child) {
 				changed = true;
@@ -160,7 +176,7 @@ function updateNodeInTree<K extends CanvasNodeKind>(
 		}
 		return child;
 	});
-	return changed ? { ...group, children: newChildren } : group;
+	return changed ? { ...container, children: newChildren } : container;
 }
 
 /**
@@ -171,13 +187,13 @@ function updateNodeInTree<K extends CanvasNodeKind>(
  * caller must not retry on another page). Replaces the prior `findNode` +
  * `replaceGroupInTree` two-walk sequence with one traversal.
  */
-function insertIntoTree(
-	root: CanvasGroupNode,
+function insertIntoTree<T extends CanvasContainerNode>(
+	root: T,
 	parentId: string,
 	node: CanvasNode,
 	index: number | undefined,
 	depth = 0,
-): CanvasGroupNode {
+): T {
 	assertTreeDepth(depth, root.id);
 	if (root.id === parentId) {
 		return spliceChild(root, node, index);
@@ -186,16 +202,16 @@ function insertIntoTree(
 	const newChildren: CanvasNode[] = root.children.map((child) => {
 		if (changed) return child;
 		if (child.id === parentId) {
-			if (!isGroupNode(child)) {
+			if (!isContainerNode(child)) {
 				throw new CanvasIRMutationError(
 					"parent-not-group",
-					`Parent id "${parentId}" is not a group (type=${child.type})`,
+					`Parent id "${parentId}" is not a container (type=${child.type})`,
 				);
 			}
 			changed = true;
 			return spliceChild(child, node, index);
 		}
-		if (isGroupNode(child)) {
+		if (isContainerNode(child)) {
 			const replaced = insertIntoTree(child, parentId, node, index, depth + 1);
 			if (replaced !== child) {
 				changed = true;
@@ -208,11 +224,11 @@ function insertIntoTree(
 }
 
 /** Insert `node` into `parent.children` at `index` (append when omitted). */
-function spliceChild(
-	parent: CanvasGroupNode,
+function spliceChild<T extends CanvasContainerNode>(
+	parent: T,
 	node: CanvasNode,
 	index: number | undefined,
-): CanvasGroupNode {
+): T {
 	const length = parent.children.length;
 	const at = index ?? length;
 	if (at < 0 || at > length) {
@@ -229,7 +245,7 @@ function spliceChild(
 function descendantIds(node: CanvasNode, depth = 0): Set<string> {
 	assertTreeDepth(depth, node.id);
 	const out = new Set<string>([node.id]);
-	if (isGroupNode(node)) {
+	if (isContainerNode(node)) {
 		for (const child of node.children) {
 			for (const id of descendantIds(child, depth + 1)) {
 				out.add(id);
@@ -239,16 +255,16 @@ function descendantIds(node: CanvasNode, depth = 0): Set<string> {
 	return out;
 }
 
-function findGroupInTree(
-	root: CanvasGroupNode,
+function findContainerInTree(
+	root: CanvasContainerNode,
 	id: string,
 	depth = 0,
-): CanvasGroupNode | null {
+): CanvasContainerNode | null {
 	assertTreeDepth(depth, root.id);
 	if (root.id === id) return root;
 	for (const child of root.children) {
-		if (isGroupNode(child)) {
-			const inner = findGroupInTree(child, id, depth + 1);
+		if (isContainerNode(child)) {
+			const inner = findContainerInTree(child, id, depth + 1);
 			if (inner) return inner;
 		}
 	}
@@ -414,10 +430,10 @@ export function moveNode(ir: CanvasIR, options: MoveNodeOptions): CanvasIR {
 			`New parent id "${options.newParentId}" not found`,
 		);
 	}
-	if (!isGroupNode(newParentFound.node)) {
+	if (!isContainerNode(newParentFound.node)) {
 		throw new CanvasIRMutationError(
 			"parent-not-group",
-			`New parent "${options.newParentId}" is not a group (type=${newParentFound.node.type})`,
+			`New parent "${options.newParentId}" is not a container (type=${newParentFound.node.type})`,
 		);
 	}
 	// Cycle check: the new parent must not be the moved node or any of its descendants.
@@ -438,7 +454,7 @@ export function moveNode(ir: CanvasIR, options: MoveNodeOptions): CanvasIR {
 	const page = sourceFound.page;
 	const { root: rootMinusSource } = removeIdFromTree(page.root, options.id);
 	// Re-find the new parent in the source-removed tree (reference may have changed).
-	const newParent = findGroupInTree(rootMinusSource, options.newParentId);
+	const newParent = findContainerInTree(rootMinusSource, options.newParentId);
 	if (!newParent) {
 		// Should not happen since we validated above and only removed source from siblings.
 		throw new CanvasIRMutationError(
@@ -455,10 +471,10 @@ export function moveNode(ir: CanvasIR, options: MoveNodeOptions): CanvasIR {
 		);
 	}
 	const newParentId = newParent.id;
-	const newRoot = replaceGroupInTree(rootMinusSource, newParentId, (g) => {
-		const newChildren = [...g.children];
+	const newRoot = replaceContainerInTree(rootMinusSource, newParentId, (c) => {
+		const newChildren = [...c.children];
 		newChildren.splice(insertIndex, 0, sourceFound.node);
-		return { ...g, children: newChildren };
+		return { ...c, children: newChildren };
 	});
 	const newPage: CanvasPage = { ...page, root: newRoot };
 	return {
@@ -491,10 +507,10 @@ export function reorderChildren(
 			`Parent id "${options.parentId}" not found`,
 		);
 	}
-	if (!isGroupNode(parentInfo.node)) {
+	if (!isContainerNode(parentInfo.node)) {
 		throw new CanvasIRMutationError(
 			"parent-not-group",
-			`Parent id "${options.parentId}" is not a group`,
+			`Parent id "${options.parentId}" is not a container (type=${parentInfo.node.type})`,
 		);
 	}
 	const parent = parentInfo.node;
@@ -511,12 +527,12 @@ export function reorderChildren(
 		);
 	}
 	const page = parentInfo.page;
-	const newRoot = replaceGroupInTree(page.root, parent.id, (g) => {
-		const newChildren = [...g.children];
+	const newRoot = replaceContainerInTree(page.root, parent.id, (c) => {
+		const newChildren = [...c.children];
 		const [moved] = newChildren.splice(options.fromIndex, 1);
-		if (!moved) return g;
+		if (!moved) return c;
 		newChildren.splice(options.toIndex, 0, moved);
-		return { ...g, children: newChildren };
+		return { ...c, children: newChildren };
 	});
 	const newPage: CanvasPage = { ...page, root: newRoot };
 	return {
@@ -529,7 +545,7 @@ export function reorderChildren(
 export interface ReplaceChildrenInParentOptions extends NowOption {
 	parentId: string;
 	/**
-	 * Receives the parent group's current children and returns the replacement
+	 * Receives the parent container's current children and returns the replacement
 	 * array. Runs inside a single tree rewrite, so a batch edit (e.g. grouping or
 	 * ungrouping N siblings) costs one O(n) pass instead of N insert/remove
 	 * passes. The caller owns IR invariants (unique ids, no cycles) within the
@@ -539,7 +555,7 @@ export interface ReplaceChildrenInParentOptions extends NowOption {
 }
 
 /**
- * Rewrite a single parent group's `children` in one immutable pass. The
+ * Rewrite a single parent container's `children` in one immutable pass. The
  * building block the command layer uses for batch sibling edits (group /
  * ungroup) so they don't pay one full tree clone per affected child.
  */
@@ -554,16 +570,16 @@ export function replaceChildrenInParent(
 			`Parent id "${options.parentId}" not found`,
 		);
 	}
-	if (!isGroupNode(parentInfo.node)) {
+	if (!isContainerNode(parentInfo.node)) {
 		throw new CanvasIRMutationError(
 			"parent-not-group",
-			`Parent id "${options.parentId}" is not a group (type=${parentInfo.node.type})`,
+			`Parent id "${options.parentId}" is not a container (type=${parentInfo.node.type})`,
 		);
 	}
 	const page = parentInfo.page;
-	const newRoot = replaceGroupInTree(page.root, options.parentId, (g) => ({
-		...g,
-		children: options.replace(g.children),
+	const newRoot = replaceContainerInTree(page.root, options.parentId, (c) => ({
+		...c,
+		children: options.replace(c.children),
 	}));
 	const newPage: CanvasPage = { ...page, root: newRoot };
 	return {

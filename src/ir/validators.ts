@@ -19,6 +19,7 @@ import type {
 	CanvasPageSize,
 	CanvasShadow,
 	CanvasTransform,
+	FramePlaceholder,
 	ImageFilter,
 } from "./types.js";
 
@@ -210,15 +211,40 @@ export const CanvasAiPlaceholderNodeSchema = z.looseObject({
 	sourcePrompt: z.string().optional(),
 });
 
-// Recursive pair. `CanvasGroupNodeSchema` stays a concrete object schema (not
-// `z.lazy`-wrapped) so it carries a readable `type` discriminant — only its
-// `children` element is deferred via `z.lazy`, which resolves the cyclic
-// reference at parse time. `CanvasNodeSchema` is a `discriminatedUnion` on
-// `type`: O(1) dispatch on the literal tag (vs a plain union trying all eight
-// members) plus a precise error for an unknown tag.
+export const FramePlaceholderSchema: z.ZodType<FramePlaceholder> =
+	z.looseObject({
+		kind: z.enum(["image", "logo"]),
+		assetId: z.string().min(1).optional(),
+	});
+
+// Recursive members. `CanvasGroupNodeSchema` / `CanvasFrameNodeSchema` stay
+// concrete object schemas (not `z.lazy`-wrapped) so they carry a readable `type`
+// discriminant — only their `children` element is deferred via `z.lazy`, which
+// resolves the cyclic reference at parse time. `CanvasNodeSchema` is a
+// `discriminatedUnion` on `type`: O(1) dispatch on the literal tag (vs a plain
+// union trying all nine members) plus a precise error for an unknown tag.
 export const CanvasGroupNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("group"),
+	children: z.array(z.lazy((): z.ZodType<CanvasNode> => CanvasNodeSchema)),
+});
+
+/**
+ * Frame's own (non-recursive) fields. Split out because `children` must be bound
+ * to whichever node union is being assembled — the static one below, or the
+ * extension-aware one `buildExtendedSchemas` builds — and the two must not drift.
+ */
+export const CanvasFrameNodeShape = {
+	...CanvasNodeBaseShape,
+	type: z.literal("frame"),
+	clip: z.boolean().optional(),
+	background: CanvasFillSchema.optional(),
+	placeholder: FramePlaceholderSchema.optional(),
+	radius: NonNegativeFiniteNumber.optional(),
+} as const;
+
+export const CanvasFrameNodeSchema = z.looseObject({
+	...CanvasFrameNodeShape,
 	children: z.array(z.lazy((): z.ZodType<CanvasNode> => CanvasNodeSchema)),
 });
 
@@ -226,6 +252,7 @@ export const CanvasNodeSchema: z.ZodType<CanvasNode> = z.discriminatedUnion(
 	"type",
 	[
 		CanvasGroupNodeSchema,
+		CanvasFrameNodeSchema,
 		CanvasRectNodeSchema,
 		CanvasEllipseNodeSchema,
 		CanvasLineNodeSchema,

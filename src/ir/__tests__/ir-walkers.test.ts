@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	createCanvasIR,
+	createFrame,
 	createGroup,
 	createPage,
 	createRect,
@@ -11,6 +12,8 @@ import type { CanvasGroupNode, CanvasNode } from "../types.js";
 import {
 	CanvasIRDepthError,
 	findNode,
+	isContainerNode,
+	isFrameNode,
 	isGroupNode,
 	isLeafNode,
 	isNodeOfKind,
@@ -146,6 +149,81 @@ describe("type guards", () => {
 		const { text } = buildSampleIR();
 		expect(isNodeOfKind(text, "text")).toBe(true);
 		expect(isNodeOfKind(text, "rect")).toBe(false);
+	});
+
+	it("isContainerNode is true for BOTH group and frame, false for a leaf", () => {
+		const { outerGroup, rect } = buildSampleIR();
+		const frame = createFrame({ bounds: { width: 10, height: 10 } });
+		expect(isContainerNode(outerGroup)).toBe(true);
+		expect(isContainerNode(frame)).toBe(true);
+		expect(isContainerNode(rect)).toBe(false);
+	});
+
+	it("isGroupNode stays group-only — a frame is NOT a group", () => {
+		const frame = createFrame({ bounds: { width: 10, height: 10 } });
+		expect(isGroupNode(frame)).toBe(false);
+		expect(isFrameNode(frame)).toBe(true);
+	});
+
+	it("isLeafNode excludes frames (a frame has children)", () => {
+		const frame = createFrame({ bounds: { width: 10, height: 10 } });
+		expect(isLeafNode(frame)).toBe(false);
+	});
+});
+
+describe("frame containers", () => {
+	/** page-root > frame > group > rect, to prove recursion crosses container kinds. */
+	function buildFrameIR() {
+		const rect = createRect({
+			id: "f-rect",
+			bounds: { width: 10, height: 10 },
+		});
+		const innerGroup = createGroup({ id: "f-group", children: [rect] });
+		const frame = createFrame({
+			id: "frame-1",
+			bounds: { width: 400, height: 400 },
+			children: [innerGroup],
+		});
+		const page = createPage({ id: "page-1" });
+		page.root = createGroup({
+			id: "page-root",
+			bounds: page.root.bounds,
+			children: [frame],
+		});
+		return { ir: createCanvasIR({ id: "ir-1", pages: [page] }), frame, rect };
+	}
+
+	it("walk descends into frame children", () => {
+		const { ir } = buildFrameIR();
+		const visited: string[] = [];
+		walk(ir, ({ node }) => visited.push(node.id));
+		expect(visited).toEqual(["page-root", "frame-1", "f-group", "f-rect"]);
+	});
+
+	it("walk reports the frame as the parent of its direct children", () => {
+		const { ir } = buildFrameIR();
+		const parents = new Map<string, string | null>();
+		walk(ir, ({ node, parent }) => parents.set(node.id, parent?.id ?? null));
+		expect(parents.get("f-group")).toBe("frame-1");
+		expect(parents.get("frame-1")).toBe("page-root");
+	});
+
+	it("findNode reaches a node nested inside a frame", () => {
+		const { ir } = buildFrameIR();
+		expect(findNode(ir, "f-rect")?.node.id).toBe("f-rect");
+		expect(findNode(ir, "frame-1")?.node.type).toBe("frame");
+	});
+
+	it("parentOf returns the frame itself for a node inside it", () => {
+		const { ir } = buildFrameIR();
+		const parent = parentOf(ir, "f-group")?.parent;
+		expect(parent?.id).toBe("frame-1");
+		expect(parent?.type).toBe("frame");
+	});
+
+	it("pageOf resolves a node buried under a frame", () => {
+		const { ir } = buildFrameIR();
+		expect(pageOf(ir, "f-rect")?.id).toBe("page-1");
 	});
 });
 

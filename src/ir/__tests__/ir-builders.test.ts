@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	createCanvasIR,
 	createEllipse,
+	createFrame,
 	createGroup,
 	createImage,
 	createLine,
@@ -12,6 +13,7 @@ import {
 } from "../builders.js";
 import {
 	CanvasEllipseNodeSchema,
+	CanvasFrameNodeSchema,
 	CanvasGroupNodeSchema,
 	CanvasImageNodeSchema,
 	CanvasIRSchema,
@@ -87,6 +89,74 @@ describe("createGroup", () => {
 			scaleX: 1,
 			scaleY: 1,
 		});
+	});
+});
+
+describe("createFrame", () => {
+	it("returns a schema-valid empty frame with default transform", () => {
+		const f = createFrame({ bounds: { width: 400, height: 300 } });
+		expect(CanvasFrameNodeSchema.safeParse(f).success).toBe(true);
+		expect(f.type).toBe("frame");
+		expect(f.transform).toEqual({
+			x: 0,
+			y: 0,
+			rotation: 0,
+			scaleX: 1,
+			scaleY: 1,
+		});
+		expect(f.bounds).toEqual({ width: 400, height: 300 });
+		expect(f.children).toEqual([]);
+		expect(f.zIndex).toBe(0);
+	});
+
+	it("omits every optional field rather than emitting `undefined` values", () => {
+		const f = createFrame({ bounds: { width: 10, height: 10 } });
+		expect("clip" in f).toBe(false);
+		expect("background" in f).toBe(false);
+		expect("placeholder" in f).toBe(false);
+		expect("radius" in f).toBe(false);
+		expect("name" in f).toBe(false);
+	});
+
+	it("carries children, clip, background, placeholder and radius through", () => {
+		const child = createRect({ bounds: { width: 10, height: 10 } });
+		const f = createFrame({
+			id: "f1",
+			name: "Hero",
+			bounds: { width: 400, height: 300 },
+			children: [child],
+			clip: true,
+			background: "#ff0000",
+			placeholder: { kind: "image" },
+			radius: 8,
+		});
+		expect(CanvasFrameNodeSchema.safeParse(f).success).toBe(true);
+		expect(f.children).toEqual([child]);
+		expect(f.clip).toBe(true);
+		expect(f.background).toBe("#ff0000");
+		expect(f.placeholder).toEqual({ kind: "image" });
+		expect(f.radius).toBe(8);
+		expect(f.name).toBe("Hero");
+	});
+
+	it("merges partial transforms with the identity default", () => {
+		const f = createFrame({
+			bounds: { width: 10, height: 10 },
+			transform: { x: 10, rotation: 45 },
+		});
+		expect(f.transform).toEqual({
+			x: 10,
+			y: 0,
+			rotation: 45,
+			scaleX: 1,
+			scaleY: 1,
+		});
+	});
+
+	it("generates a unique id when none is supplied", () => {
+		const a = createFrame({ bounds: { width: 1, height: 1 } });
+		const b = createFrame({ bounds: { width: 1, height: 1 } });
+		expect(a.id).not.toBe(b.id);
 	});
 });
 

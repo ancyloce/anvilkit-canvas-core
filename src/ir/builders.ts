@@ -2,6 +2,8 @@ import { nowIso } from "../clock.js";
 import type {
 	CanvasBounds,
 	CanvasEllipseNode,
+	CanvasFill,
+	CanvasFrameNode,
 	CanvasGroupNode,
 	CanvasImageCrop,
 	CanvasImageNode,
@@ -16,6 +18,7 @@ import type {
 	CanvasTextAlign,
 	CanvasTextNode,
 	CanvasTransform,
+	FramePlaceholder,
 	ImageFilter,
 } from "./types.js";
 import { CANVAS_IR_VERSION } from "./validators.js";
@@ -127,6 +130,40 @@ export function createGroup(options: CreateGroupOptions = {}): CanvasGroupNode {
 		bounds: options.bounds ?? { width: 0, height: 0 },
 		zIndex: options.zIndex ?? 0,
 		children: options.children ?? [],
+	};
+}
+
+export interface CreateFrameOptions {
+	id?: string;
+	name?: string;
+	transform?: Partial<CanvasTransform>;
+	/** A frame owns its bounds (unlike a group, which derives them from children). */
+	bounds: CanvasBounds;
+	zIndex?: number;
+	children?: CanvasNode[];
+	clip?: boolean;
+	background?: CanvasFill;
+	placeholder?: FramePlaceholder;
+	radius?: number;
+}
+
+export function createFrame(options: CreateFrameOptions): CanvasFrameNode {
+	return {
+		id: options.id ?? generateId(),
+		...(options.name !== undefined ? { name: options.name } : {}),
+		type: "frame",
+		transform: clonePartialTransform(options.transform),
+		bounds: options.bounds,
+		zIndex: options.zIndex ?? 0,
+		children: options.children ?? [],
+		...(options.clip !== undefined ? { clip: options.clip } : {}),
+		...(options.background !== undefined
+			? { background: options.background }
+			: {}),
+		...(options.placeholder !== undefined
+			? { placeholder: options.placeholder }
+			: {}),
+		...(options.radius !== undefined ? { radius: options.radius } : {}),
 	};
 }
 

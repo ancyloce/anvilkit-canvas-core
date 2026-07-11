@@ -4,6 +4,7 @@ export type CanvasBackgroundKind = "solid" | "image" | "gradient";
 
 export type CanvasNodeKind =
 	| "group"
+	| "frame"
 	| "rect"
 	| "ellipse"
 	| "line"
@@ -127,6 +128,45 @@ export interface CanvasGroupNode extends CanvasNodeBase {
 	children: CanvasNode[];
 }
 
+/** What a frame stands in for until real content is dropped into it. */
+export type FramePlaceholderKind = "image" | "logo";
+
+/**
+ * Marks a frame as an empty slot awaiting content — an image well, a logo well.
+ * Deliberately minimal: enough to say "this frame is an image placeholder".
+ * Template slot binding is a separate concern and does not live here.
+ */
+export interface FramePlaceholder {
+	kind: FramePlaceholderKind;
+	/** Asset currently filling the placeholder, when one has been chosen. */
+	assetId?: string;
+}
+
+/**
+ * A layout container. Unlike a group — which is a pure grouping of siblings and
+ * derives its bounds from them — a frame has its own bounds, can clip its
+ * children to them, and can paint a background. It is the unit a template stamps
+ * content into.
+ */
+export interface CanvasFrameNode extends CanvasNodeBase {
+	type: "frame";
+	children: CanvasNode[];
+	/** Clip children to the frame's bounds. */
+	clip?: boolean;
+	background?: CanvasFill;
+	placeholder?: FramePlaceholder;
+	/** Corner radius, in local units. Matches `CanvasRectNode["radius"]`. */
+	radius?: number;
+}
+
+/**
+ * A node that holds `children` and is therefore recursed into by every walker,
+ * mutation, and serializer. Group was the only container until frame landed;
+ * anything gated on "does this node have children" must test against this union
+ * rather than `type === "group"`.
+ */
+export type CanvasContainerNode = CanvasGroupNode | CanvasFrameNode;
+
 export interface CanvasRectNode extends CanvasNodeBase {
 	type: "rect";
 	fill?: CanvasFill;
@@ -188,6 +228,7 @@ export interface CanvasAiPlaceholderNode extends CanvasNodeBase {
 
 export type CanvasNode =
 	| CanvasGroupNode
+	| CanvasFrameNode
 	| CanvasRectNode
 	| CanvasEllipseNode
 	| CanvasLineNode
@@ -196,7 +237,7 @@ export type CanvasNode =
 	| CanvasImageNode
 	| CanvasAiPlaceholderNode;
 
-export type CanvasLeafNode = Exclude<CanvasNode, CanvasGroupNode>;
+export type CanvasLeafNode = Exclude<CanvasNode, CanvasContainerNode>;
 
 export type CanvasNodeByKind<K extends CanvasNodeKind> = Extract<
 	CanvasNode,

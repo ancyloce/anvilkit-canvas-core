@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
+	CanvasFrameNode,
 	CanvasGroupNode,
 	CanvasImageNode,
 	CanvasIR,
@@ -10,6 +11,7 @@ import type {
 } from "../types.js";
 import {
 	CANVAS_IR_VERSION,
+	CanvasFrameNodeSchema,
 	CanvasGroupNodeSchema,
 	CanvasImageNodeSchema,
 	CanvasIRSchema,
@@ -67,6 +69,15 @@ const makeGroup = (id: string, children: CanvasNode[]): CanvasGroupNode => ({
 	type: "group",
 	transform: identityTransform,
 	bounds: { width: 1080, height: 1080 },
+	zIndex: 0,
+	children,
+});
+
+const makeFrame = (id: string, children: CanvasNode[]): CanvasFrameNode => ({
+	id,
+	type: "frame",
+	transform: identityTransform,
+	bounds: { width: 400, height: 400 },
 	zIndex: 0,
 	children,
 });
@@ -137,9 +148,10 @@ describe("CanvasIRSchema", () => {
 });
 
 describe("CanvasNodeSchema discriminated union", () => {
-	it("accepts each of the 8 node kinds", () => {
+	it("accepts each of the 9 node kinds", () => {
 		const nodes: CanvasNode[] = [
 			makeGroup("g1", []),
+			makeFrame("f1", []),
 			makeRect("r1"),
 			{
 				id: "e1",
@@ -201,6 +213,15 @@ describe("CanvasNodeSchema discriminated union", () => {
 		expect(result.success).toBe(true);
 	});
 
+	it("validates containers nested through each other (frame > group > frame)", () => {
+		const nested = makeFrame("f1", [
+			makeGroup("g1", [makeFrame("f2", [makeRect("r1")])]),
+		]);
+		expect(CanvasFrameNodeSchema.safeParse(nested).success).toBe(true);
+		// And the same tree via the union, so `z.lazy` resolves in both directions.
+		expect(CanvasNodeSchema.safeParse(nested).success).toBe(true);
+	});
+
 	it("dispatches on the discriminant: a rect payload reports a rect-shaped error, not a union dump", () => {
 		const badRect = {
 			...makeRect("r1"),
@@ -215,6 +236,81 @@ describe("CanvasNodeSchema discriminated union", () => {
 			expect(result.error.issues.some((i) => i.path.includes("width"))).toBe(
 				true,
 			);
+		}
+	});
+});
+
+describe("CanvasFrameNodeSchema", () => {
+	it("accepts a bare frame (every frame-specific field is optional)", () => {
+		expect(CanvasFrameNodeSchema.safeParse(makeFrame("f1", [])).success).toBe(
+			true,
+		);
+	});
+
+	it("accepts every frame-specific field, including a gradient background", () => {
+		const frame = {
+			...makeFrame("f1", [makeRect("r1")]),
+			clip: true,
+			radius: 12,
+			background: {
+				kind: "linear",
+				stops: [
+					{ offset: 0, color: "#000" },
+					{ offset: 1, color: "#fff" },
+				],
+				from: { x: 0, y: 0 },
+				to: { x: 1, y: 1 },
+			},
+			placeholder: { kind: "image", assetId: "a1" },
+		};
+		const result = CanvasFrameNodeSchema.safeParse(frame);
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.placeholder).toEqual({ kind: "image", assetId: "a1" });
+			expect(result.data.clip).toBe(true);
+		}
+	});
+
+	it("accepts a solid-colour background (CanvasFill string form)", () => {
+		const frame = { ...makeFrame("f1", []), background: "#ff0000" };
+		expect(CanvasFrameNodeSchema.safeParse(frame).success).toBe(true);
+	});
+
+	it("rejects a negative radius", () => {
+		const frame = { ...makeFrame("f1", []), radius: -1 };
+		expect(CanvasFrameNodeSchema.safeParse(frame).success).toBe(false);
+	});
+
+	it("rejects an unknown placeholder kind", () => {
+		const frame = { ...makeFrame("f1", []), placeholder: { kind: "video" } };
+		expect(CanvasFrameNodeSchema.safeParse(frame).success).toBe(false);
+	});
+
+	it("rejects a frame without children (containers must carry the array)", () => {
+		const { children: _children, ...noChildren } = makeFrame("f1", []);
+		expect(CanvasFrameNodeSchema.safeParse(noChildren).success).toBe(false);
+	});
+
+	it("round-trips a frame document through the full IR schema unchanged", () => {
+		const frame = {
+			...makeFrame("f1", [makeText("t1", "hi")]),
+			clip: true,
+			placeholder: { kind: "logo" },
+		};
+		const ir = makeIR([makePage("p1", [frame])]);
+		const parsed = CanvasIRSchema.parse(JSON.parse(JSON.stringify(ir)));
+		expect(parsed).toEqual(ir);
+	});
+
+	it("preserves unknown keys on a frame (forward-compat with a newer peer)", () => {
+		const frame = { ...makeFrame("f1", []), futureFrameField: { grid: 8 } };
+		const result = CanvasNodeSchema.safeParse(frame);
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(
+				(result.data as unknown as { futureFrameField?: unknown })
+					.futureFrameField,
+			).toEqual({ grid: 8 });
 		}
 	});
 });
