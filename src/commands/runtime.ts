@@ -10,6 +10,7 @@ import {
 } from "../ir/mutations.js";
 import type {
 	CanvasBounds,
+	CanvasContainerNode,
 	CanvasGroupNode,
 	CanvasImageNode,
 	CanvasIR,
@@ -121,7 +122,10 @@ function resolveParentId(
 	return parentId ?? page.root.id;
 }
 
-function locateSiblingIndex(parent: CanvasGroupNode, childId: string): number {
+function locateSiblingIndex(
+	parent: CanvasContainerNode,
+	childId: string,
+): number {
 	const idx = parent.children.findIndex((c) => c.id === childId);
 	if (idx < 0) {
 		throw new CanvasCommandError(
@@ -418,7 +422,9 @@ function applyNodeGroup(
 			`Group id "${cmd.groupId}" already exists`,
 		);
 	}
-	let parent: CanvasGroupNode | undefined;
+	// The common parent of the nodes being grouped may itself be a frame — a group
+	// is created *inside* it, which is exactly the group/frame interplay we want.
+	let parent: CanvasContainerNode | undefined;
 	const entries: GroupChildEntry[] = [];
 	for (const id of cmd.childIds) {
 		const found = findNode(ir, id);

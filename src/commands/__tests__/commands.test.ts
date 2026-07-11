@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	createCanvasIR,
+	createFrame,
 	createGroup,
 	createImage,
 	createPage,
@@ -801,6 +802,111 @@ function childIdsOf(ir: CanvasIR, parentId: string): string[] {
 	const parent = findNode(ir, parentId)?.node as CanvasGroupNode;
 	return parent.children.map((c) => c.id);
 }
+
+// page-root("root") > frame("f1") > [a, b, c]
+function buildFrameFixture(): CanvasIR {
+	const mk = (id: string) =>
+		createRect({ id, bounds: { width: 10, height: 10 } });
+	const frame = createFrame({
+		id: "f1",
+		bounds: { width: 400, height: 400 },
+		children: [mk("a"), mk("b"), mk("c")],
+	});
+	const page = createPage({ id: "page-1" });
+	page.root = createGroup({
+		id: "root",
+		bounds: page.root.bounds,
+		children: [frame],
+	});
+	return createCanvasIR({ id: "ir-1", title: "Framed", pages: [page], now });
+}
+
+describe("group / ungroup interplay with frames", () => {
+	it("node.group wraps siblings that live INSIDE a frame, leaving them in the frame", () => {
+		const ir = buildFrameFixture();
+		const next = applyCommand(
+			ir,
+			{
+				type: "node.group",
+				pageId: "page-1",
+				childIds: ["a", "b"],
+				groupId: "g1",
+			},
+			{ now },
+		).ir;
+		// The new group takes the topmost selected slot, still parented to the frame.
+		expect(childIdsOf(next, "f1")).toEqual(["g1", "c"]);
+		expect(childIdsOf(next, "g1")).toEqual(["a", "b"]);
+		expect(findNode(next, "f1")?.node.type).toBe("frame");
+	});
+
+	it("node.group can wrap a frame itself (a frame is a groupable child)", () => {
+		const ir = buildFrameFixture();
+		const next = applyCommand(
+			ir,
+			{
+				type: "node.group",
+				pageId: "page-1",
+				childIds: ["f1"],
+				groupId: "g1",
+			},
+			{ now },
+		).ir;
+		expect(childIdsOf(next, "root")).toEqual(["g1"]);
+		expect(childIdsOf(next, "g1")).toEqual(["f1"]);
+		// The frame keeps its own children through the wrap.
+		expect(childIdsOf(next, "f1")).toEqual(["a", "b", "c"]);
+	});
+
+	it("node.ungroup REJECTS a frame — a frame is a container, not a group", () => {
+		const ir = buildFrameFixture();
+		try {
+			applyCommand(ir, { type: "node.ungroup", groupId: "f1" }, { now });
+			expect.unreachable("ungrouping a frame must throw");
+		} catch (err) {
+			expect((err as CanvasCommandError).code).toBe("kind-mismatch");
+		}
+	});
+
+	it("node.ungroup splices a nested group's children back into the frame", () => {
+		const ir = buildFrameFixture();
+		const grouped = applyCommand(
+			ir,
+			{
+				type: "node.group",
+				pageId: "page-1",
+				childIds: ["a", "b"],
+				groupId: "g1",
+			},
+			{ now },
+		).ir;
+		const next = applyCommand(
+			grouped,
+			{ type: "node.ungroup", groupId: "g1" },
+			{ now },
+		).ir;
+		// Back to the original frame children, in the original order.
+		expect(childIdsOf(next, "f1")).toEqual(["a", "b", "c"]);
+		expect(findNode(next, "g1")).toBeNull();
+	});
+
+	it("group → ungroup inside a frame round-trips the frame's children exactly", () => {
+		const ir = buildFrameFixture();
+		const before = snapshot(ir);
+		const grouped = applyCommand(
+			ir,
+			{
+				type: "node.group",
+				pageId: "page-1",
+				childIds: ["b", "c"],
+				groupId: "g1",
+			},
+			{ now },
+		);
+		const restored = applyCommand(grouped.ir, grouped.inverse, { now });
+		expect(snapshot(restored.ir)).toBe(before);
+	});
+});
 
 describe("applyCommand: node.group", () => {
 	it("wraps contiguous siblings into a new group at the topmost slot", () => {
