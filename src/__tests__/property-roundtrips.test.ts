@@ -12,14 +12,23 @@ import {
 import { screenToWorld, worldToScreen } from "../geometry/viewport.js";
 import {
 	createCanvasIR,
+	createFrame,
 	createPage,
+	createPolygon,
 	createRect,
 	createRichText,
+	createStar,
 } from "../ir/builders.js";
 import { insertNode } from "../ir/mutations.js";
-import type { CanvasIR, CanvasTransform } from "../ir/types.js";
+import type {
+	BrandTokenRef,
+	CanvasFill,
+	CanvasIR,
+	CanvasTransform,
+} from "../ir/types.js";
 import { CanvasIRSchema } from "../ir/validators.js";
 import { findNode } from "../ir/walkers.js";
+import { serializePageToSvg } from "../serialize/svg.js";
 
 /**
  * Property-based round-trip suite (canvas-m0-011 / FR-006). Invariants that
@@ -323,6 +332,226 @@ describe("rich-text paragraph round-trips (property)", () => {
 					},
 					{ now: NOW },
 				);
+				expect(CanvasIRSchema.safeParse(applied.ir).success).toBe(true);
+			}),
+			RUNS,
+		);
+	});
+});
+
+/**
+ * Property 7 — brand-token refs (canvas-m1-012) round-trip like any other
+ * fill value: a `node.update` patch never special-cases `CanvasFill`'s third
+ * member, so a token survives the same batch + composite-inverse machinery
+ * `RichTextSpan.paragraphs` already proved works for an array-valued field.
+ */
+const brandTokenArb: fc.Arbitrary<BrandTokenRef> = fc.record({
+	type: fc.constant("brand-token" as const),
+	tokenType: fc.constantFrom("color", "font", "spacing", "asset", "logo"),
+	id: fc
+		.string({ minLength: 1, maxLength: 12 })
+		.filter((s) => s.trim().length > 0),
+});
+
+const fillArb: fc.Arbitrary<CanvasFill> = fc.oneof(
+	fc.constantFrom("#ff0000", "#00ff00", "#0000ff"),
+	brandTokenArb,
+);
+
+function tokenBaseIR(): CanvasIR {
+	const page = createPage({ id: "p1" });
+	let ir = createCanvasIR({
+		id: "doc",
+		title: "prop-token",
+		pages: [page],
+		now: NOW,
+	});
+	ir = insertNode(ir, {
+		parentId: page.root.id,
+		node: createRect({ id: "rect0", bounds: { width: 50, height: 50 } }),
+		now: NOW,
+	});
+	return ir;
+}
+
+describe("brand-token round-trips (property)", () => {
+	it("a batch of fill edits (including brand-token refs), then its composite inverse, ≡ original", () => {
+		fc.assert(
+			fc.property(
+				fc.array(fillArb, { minLength: 1, maxLength: 5 }),
+				(edits) => {
+					const base = tokenBaseIR();
+					const before = JSON.stringify(base);
+
+					const commands: CanvasCommand[] = edits.map((fill) => ({
+						type: "node.update",
+						nodeId: "rect0",
+						kind: "rect",
+						patch: { fill },
+					}));
+
+					const applied = applyCommand(
+						base,
+						{ type: "batch", commands },
+						{ now: NOW },
+					);
+					const undone = applyCommand(applied.ir, applied.inverse, {
+						now: NOW,
+					});
+
+					expect(JSON.stringify(undone.ir)).toBe(before);
+					expect(JSON.stringify(base)).toBe(before);
+				},
+			),
+			RUNS,
+		);
+	});
+
+	it("every intermediate document (including brand-token fills) validates", () => {
+		fc.assert(
+			fc.property(fillArb, (fill) => {
+				const applied = applyCommand(
+					tokenBaseIR(),
+					{
+						type: "node.update",
+						nodeId: "rect0",
+						kind: "rect",
+						patch: { fill },
+					},
+					{ now: NOW },
+				);
+				expect(CanvasIRSchema.safeParse(applied.ir).success).toBe(true);
+			}),
+			RUNS,
+		);
+	});
+
+	it("a brand-token fill survives parse -> mutate -> serialize, and resolves via the injected resolver", async () => {
+		const token: BrandTokenRef = {
+			type: "brand-token",
+			tokenType: "color",
+			id: "brand.primary",
+		};
+		const mutated = applyCommand(
+			tokenBaseIR(),
+			{
+				type: "node.update",
+				nodeId: "rect0",
+				kind: "rect",
+				patch: { fill: token },
+			},
+			{ now: NOW },
+		).ir;
+
+		// Parse: the mutated document survives an untrusted JSON round-trip.
+		const parsed = CanvasIRSchema.parse(JSON.parse(JSON.stringify(mutated)));
+		const rect = findNode(parsed, "rect0")?.node;
+		expect(rect?.type).toBe("rect");
+		expect((rect as { fill?: unknown })?.fill).toEqual(token);
+
+		// Serialize: resolves through the injected resolver, no warning.
+		const { svg, warnings } = await serializePageToSvg(parsed, 0, {
+			resolveBrandToken: (ref) =>
+				ref.id === "brand.primary" ? "#abc123" : undefined,
+		});
+		expect(svg).toContain('fill="#abc123"');
+		expect(warnings.map((w) => w.code)).not.toContain("BRAND_TOKEN_UNRESOLVED");
+	});
+});
+
+/**
+ * Property 8 — frame/polygon/star kind-specific fields (canvas-m1-010,
+ * canvas-m1-002) round-trip through the same batch + composite-inverse
+ * machinery Property 4 already proved for `rect`. Each of these three kinds
+ * added its own node-specific patch keys (frame `clip`/`radius`, polygon
+ * `sides`, star `points`/`innerRadiusRatio`) — this closes the M1 rollup gap
+ * where only `rect`/`rich-text` fixtures were exercised.
+ */
+function kindFixtureIR(): CanvasIR {
+	const page = createPage({ id: "p1" });
+	let ir = createCanvasIR({
+		id: "doc",
+		title: "prop-kinds",
+		pages: [page],
+		now: NOW,
+	});
+	ir = insertNode(ir, {
+		parentId: page.root.id,
+		node: createFrame({ id: "frame0", bounds: { width: 100, height: 100 } }),
+		now: NOW,
+	});
+	ir = insertNode(ir, {
+		parentId: page.root.id,
+		node: createPolygon({ id: "polygon0", bounds: { width: 40, height: 40 } }),
+		now: NOW,
+	});
+	ir = insertNode(ir, {
+		parentId: page.root.id,
+		node: createStar({ id: "star0", bounds: { width: 40, height: 40 } }),
+		now: NOW,
+	});
+	return ir;
+}
+
+const kindPatchArb: fc.Arbitrary<CanvasCommand> = fc.oneof(
+	fc.record({
+		type: fc.constant("node.update" as const),
+		nodeId: fc.constant("frame0" as const),
+		kind: fc.constant("frame" as const),
+		patch: fc.record({
+			clip: fc.boolean(),
+			radius: fc.double({ min: 0, max: 64, noNaN: true }),
+		}),
+	}),
+	fc.record({
+		type: fc.constant("node.update" as const),
+		nodeId: fc.constant("polygon0" as const),
+		kind: fc.constant("polygon" as const),
+		patch: fc.record({
+			sides: fc.integer({ min: 3, max: 12 }),
+		}),
+	}),
+	fc.record({
+		type: fc.constant("node.update" as const),
+		nodeId: fc.constant("star0" as const),
+		kind: fc.constant("star" as const),
+		patch: fc.record({
+			points: fc.integer({ min: 3, max: 12 }),
+			innerRadiusRatio: fc.double({ min: 0, max: 1, noNaN: true }),
+		}),
+	}),
+) as fc.Arbitrary<CanvasCommand>;
+
+describe("frame/polygon/star kind-field round-trips (property)", () => {
+	it("a batch of kind-specific field edits, then its composite inverse, ≡ original", () => {
+		fc.assert(
+			fc.property(
+				fc.array(kindPatchArb, { minLength: 1, maxLength: 6 }),
+				(commands) => {
+					const base = kindFixtureIR();
+					const before = JSON.stringify(base);
+
+					const applied = applyCommand(
+						base,
+						{ type: "batch", commands },
+						{ now: NOW },
+					);
+					const undone = applyCommand(applied.ir, applied.inverse, {
+						now: NOW,
+					});
+
+					expect(JSON.stringify(undone.ir)).toBe(before);
+					expect(JSON.stringify(base)).toBe(before);
+				},
+			),
+			RUNS,
+		);
+	});
+
+	it("every intermediate document (frame/polygon/star fields) validates", () => {
+		fc.assert(
+			fc.property(kindPatchArb, (command) => {
+				const applied = applyCommand(kindFixtureIR(), command, { now: NOW });
 				expect(CanvasIRSchema.safeParse(applied.ir).success).toBe(true);
 			}),
 			RUNS,
