@@ -10,6 +10,7 @@ export type CanvasNodeKind =
 	| "line"
 	| "path"
 	| "text"
+	| "rich-text"
 	| "image"
 	| "ai-placeholder";
 
@@ -211,6 +212,73 @@ export interface CanvasTextNode extends CanvasNodeBase {
 	shadow?: CanvasShadow;
 }
 
+/** How a rich-text block behaves when its content exceeds its box. */
+export type RichTextOverflow = "visible" | "clip" | "auto-height" | "ellipsis";
+
+/** Where lines may break. `"none"` lays every paragraph out on a single line. */
+export type RichTextWrap = "none" | "word" | "character";
+
+/** How a span's glyphs are cased at render time. Purely presentational — the
+ * span's `text` is never rewritten, so the original casing survives a round-trip. */
+export type RichTextTransform =
+	| "none"
+	| "uppercase"
+	| "lowercase"
+	| "capitalize";
+
+/**
+ * A styled run of text. Every style field is optional: an omitted field inherits
+ * from the host's defaults at measure/render time rather than being resolved
+ * here, which keeps the IR free of any font or layout knowledge.
+ */
+export interface RichTextSpan {
+	text: string;
+	fontFamily?: string;
+	fontSize?: number;
+	fontWeight?: string;
+	italic?: boolean;
+	underline?: boolean;
+	letterSpacing?: number;
+	textTransform?: RichTextTransform;
+	fill?: CanvasFill;
+}
+
+/** A paragraph: a horizontal run of spans separated from its siblings by a break. */
+export interface RichTextParagraph {
+	align?: CanvasTextAlign;
+	/** Multiple of the resolved font size (1.4 = 140%), not an absolute length. */
+	lineHeight?: number;
+	spans: RichTextSpan[];
+}
+
+/**
+ * Multi-span, multi-paragraph text with real wrapping.
+ *
+ * Deliberately a SEPARATE kind from {@link CanvasTextNode} rather than an
+ * extension of it (FR-013): `text` is a single plain string with one style, and
+ * its schema, tests and SVG goldens must keep working byte-for-byte.
+ *
+ * `width` (and optional `height`) are the authoring intent — the box the text is
+ * laid out INTO, and the width paragraphs wrap against. `bounds`, inherited from
+ * {@link CanvasNodeBase}, remains the node's geometric box: what hit-testing,
+ * snapping and group extents read. The two are related but not the same thing,
+ * and a host reconciles them after measuring (with `overflow: "auto-height"`,
+ * `bounds.height` grows to the measured height while `height` stays unset).
+ * Core does not reconcile them, because core cannot measure text — see
+ * {@link CanvasTextMeasurer}. This mirrors how `line` carries `points` and `path`
+ * carries `d` alongside their bounds.
+ */
+export interface CanvasRichTextNode extends CanvasNodeBase {
+	type: "rich-text";
+	/** The wrap width, in local units. */
+	width: number;
+	/** Fixed height. Omit to let the measured content decide (`auto-height`). */
+	height?: number;
+	paragraphs: RichTextParagraph[];
+	overflow?: RichTextOverflow;
+	wrap?: RichTextWrap;
+}
+
 export interface CanvasImageNode extends CanvasNodeBase {
 	type: "image";
 	assetId: string;
@@ -234,6 +302,7 @@ export type CanvasNode =
 	| CanvasLineNode
 	| CanvasPathNode
 	| CanvasTextNode
+	| CanvasRichTextNode
 	| CanvasImageNode
 	| CanvasAiPlaceholderNode;
 

@@ -15,11 +15,15 @@ import type {
 	CanvasPageSize,
 	CanvasPathNode,
 	CanvasRectNode,
+	CanvasRichTextNode,
 	CanvasTextAlign,
 	CanvasTextNode,
 	CanvasTransform,
 	FramePlaceholder,
 	ImageFilter,
+	RichTextOverflow,
+	RichTextParagraph,
+	RichTextWrap,
 } from "./types.js";
 import { CANVAS_IR_VERSION } from "./validators.js";
 
@@ -317,6 +321,48 @@ export function createText(options: CreateTextOptions): CanvasTextNode {
 			: {}),
 		fill: options.fill ?? "#000000",
 		...(options.align !== undefined ? { align: options.align } : {}),
+	};
+}
+
+export interface CreateRichTextOptions {
+	id?: string;
+	name?: string;
+	transform?: Partial<CanvasTransform>;
+	/** The node's geometric box (hit-testing, snapping, group extents). */
+	bounds: CanvasBounds;
+	zIndex?: number;
+	/** The wrap width. Defaults to `bounds.width` — the overwhelmingly common case. */
+	width?: number;
+	height?: number;
+	paragraphs?: RichTextParagraph[];
+	overflow?: RichTextOverflow;
+	wrap?: RichTextWrap;
+}
+
+/**
+ * A rich-text block. `width` defaults to `bounds.width`, so the two agree unless
+ * a caller deliberately separates them — see {@link CanvasRichTextNode} for why
+ * both exist.
+ *
+ * `paragraphs` defaults to a single empty paragraph rather than `[]`: an empty
+ * array has no caret position, so an editor would have to special-case it before
+ * the user can type. One empty paragraph is the natural "empty text block".
+ */
+export function createRichText(
+	options: CreateRichTextOptions,
+): CanvasRichTextNode {
+	return {
+		id: options.id ?? generateId(),
+		...(options.name !== undefined ? { name: options.name } : {}),
+		type: "rich-text",
+		transform: clonePartialTransform(options.transform),
+		bounds: options.bounds,
+		zIndex: options.zIndex ?? 0,
+		width: options.width ?? options.bounds.width,
+		...(options.height !== undefined ? { height: options.height } : {}),
+		paragraphs: options.paragraphs ?? [{ spans: [] }],
+		...(options.overflow !== undefined ? { overflow: options.overflow } : {}),
+		...(options.wrap !== undefined ? { wrap: options.wrap } : {}),
 	};
 }
 

@@ -194,6 +194,44 @@ export const CanvasTextNodeSchema = z.looseObject({
 	align: z.enum(["left", "center", "right"]).optional(),
 });
 
+/**
+ * A rich-text span. Every style field is optional — an omitted field means
+ * "inherit from the host's default", which is resolved at measure/render time,
+ * not here. `text` may legitimately be empty (an empty span is how an editor
+ * represents a caret sitting in a freshly-split paragraph).
+ */
+export const RichTextSpanSchema = z.looseObject({
+	text: z.string(),
+	fontFamily: z.string().min(1).optional(),
+	fontSize: NonNegativeFiniteNumber.optional(),
+	fontWeight: z.string().optional(),
+	italic: z.boolean().optional(),
+	underline: z.boolean().optional(),
+	// Letter spacing may be negative (tightening), so it is a plain finite number.
+	letterSpacing: FiniteNumber.optional(),
+	textTransform: z
+		.enum(["none", "uppercase", "lowercase", "capitalize"])
+		.optional(),
+	fill: CanvasFillSchema.optional(),
+});
+
+export const RichTextParagraphSchema = z.looseObject({
+	align: z.enum(["left", "center", "right"]).optional(),
+	// A multiplier of the resolved font size, not an absolute length.
+	lineHeight: NonNegativeFiniteNumber.optional(),
+	spans: z.array(RichTextSpanSchema),
+});
+
+export const CanvasRichTextNodeSchema = z.looseObject({
+	...CanvasNodeBaseShape,
+	type: z.literal("rich-text"),
+	width: NonNegativeFiniteNumber,
+	height: NonNegativeFiniteNumber.optional(),
+	paragraphs: z.array(RichTextParagraphSchema),
+	overflow: z.enum(["visible", "clip", "auto-height", "ellipsis"]).optional(),
+	wrap: z.enum(["none", "word", "character"]).optional(),
+});
+
 export const CanvasImageNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("image"),
@@ -258,6 +296,7 @@ export const CanvasNodeSchema: z.ZodType<CanvasNode> = z.discriminatedUnion(
 		CanvasLineNodeSchema,
 		CanvasPathNodeSchema,
 		CanvasTextNodeSchema,
+		CanvasRichTextNodeSchema,
 		CanvasImageNodeSchema,
 		CanvasAiPlaceholderNodeSchema,
 	],
