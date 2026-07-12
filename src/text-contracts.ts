@@ -1,5 +1,6 @@
 import type {
 	CanvasFill,
+	CanvasFontFamily,
 	CanvasTextAlign,
 	RichTextParagraph,
 	RichTextSpan,
@@ -32,7 +33,16 @@ import type {
  * contract exists to prevent. {@link resolveSpanStyle} is that single answer.
  */
 export interface ResolvedSpanStyle {
-	fontFamily: string;
+	/**
+	 * A span's `fontFamily` is inheritance-merged here (span over default), NOT
+	 * brand-token-resolved — a `BrandTokenRef` survives this step unchanged.
+	 * Core has no brand-kit knowledge (PRD FR-030): resolving one to a concrete
+	 * name is each CONSUMER's job (the SVG serializer's `resolveBrandToken`
+	 * option; a future editor equivalent). {@link RichTextStyleDefaults}
+	 * narrows this back to `string` — the host's fallback is always concrete,
+	 * since layout/measurement needs a real font name to measure glyphs with.
+	 */
+	fontFamily: CanvasFontFamily;
 	fontSize: number;
 	fontWeight: string;
 	italic: boolean;
@@ -44,6 +54,8 @@ export interface ResolvedSpanStyle {
 
 /** The host's fallbacks for span fields a document leaves unset. */
 export interface RichTextStyleDefaults extends ResolvedSpanStyle {
+	/** Always a concrete name — see {@link ResolvedSpanStyle.fontFamily}. */
+	fontFamily: string;
 	/** Multiple of the resolved font size, used when a paragraph omits its own. */
 	lineHeight: number;
 	align: CanvasTextAlign;
