@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { toAffineMatrix } from "../../geometry/affine.js";
 import type {
+	BrandTokenRef,
 	CanvasAssetRef,
 	CanvasEllipseNode,
 	CanvasGroupNode,
@@ -11,8 +12,10 @@ import type {
 	CanvasPageBackground,
 	CanvasPageSize,
 	CanvasPathNode,
+	CanvasPolygonNode,
 	CanvasRectNode,
 	CanvasRichTextNode,
+	CanvasStarNode,
 	CanvasTextNode,
 	CanvasTransform,
 } from "../../ir/types.js";
@@ -29,8 +32,10 @@ import {
 	emitEllipse,
 	emitLine,
 	emitPath,
+	emitPolygon,
 	emitRect,
 	emitRichText,
+	emitStar,
 	emitText,
 	escapeAttr,
 	escapeCssString,
@@ -303,6 +308,220 @@ describe("emitEllipse", () => {
 		expect(emitEllipse(ellipse, createEmitContext())).toBe(
 			'<ellipse cx="40" cy="20" rx="40" ry="20" fill="#0f0" />',
 		);
+	});
+});
+
+describe("emitPolygon", () => {
+	it("emits a <polygon> with one point per side, plus fill/stroke", () => {
+		const polygon: CanvasPolygonNode = {
+			id: "poly1",
+			type: "polygon",
+			transform: identity,
+			bounds: { width: 100, height: 100 },
+			zIndex: 0,
+			sides: 4,
+			fill: "#f00",
+			stroke: "#000",
+			strokeWidth: 2,
+		};
+		const out = emitPolygon(polygon, createEmitContext());
+		expect(out).toBe(
+			'<polygon points="50,0 100,50 50,100 0,50" fill="#f00" stroke="#000" stroke-width="2" />',
+		);
+	});
+
+	it("emits fill=none for an unfilled polygon", () => {
+		const bare: CanvasPolygonNode = {
+			id: "poly2",
+			type: "polygon",
+			transform: identity,
+			bounds: { width: 10, height: 10 },
+			zIndex: 0,
+			sides: 3,
+		};
+		expect(emitPolygon(bare, createEmitContext())).toContain('fill="none"');
+	});
+});
+
+describe("emitStar", () => {
+	it("emits a <polygon> with 2 * points, alternating outer/inner vertices", () => {
+		const star: CanvasStarNode = {
+			id: "star1",
+			type: "star",
+			transform: identity,
+			bounds: { width: 100, height: 100 },
+			zIndex: 0,
+			points: 4,
+			innerRadiusRatio: 0.5,
+			fill: "#00f",
+		};
+		const out = emitStar(star, createEmitContext());
+		expect(out.startsWith('<polygon points="')).toBe(true);
+		const pointsMatch = out.match(/points="([^"]*)"/);
+		const points = pointsMatch?.[1]?.split(" ") ?? [];
+		expect(points).toHaveLength(8);
+		expect(out).toContain('fill="#00f"');
+	});
+
+	it("emits fill=none for an unfilled star", () => {
+		const bare: CanvasStarNode = {
+			id: "star2",
+			type: "star",
+			transform: identity,
+			bounds: { width: 10, height: 10 },
+			zIndex: 0,
+			points: 5,
+			innerRadiusRatio: 0.5,
+		};
+		expect(emitStar(bare, createEmitContext())).toContain('fill="none"');
+	});
+});
+
+describe("brand-token resolution", () => {
+	const colorToken: BrandTokenRef = {
+		type: "brand-token",
+		tokenType: "color",
+		id: "brand.accent",
+	};
+	const fontToken: BrandTokenRef = {
+		type: "brand-token",
+		tokenType: "font",
+		id: "brand.heading-font",
+	};
+
+	it("resolves a token fill via resolveBrandToken", () => {
+		const ctx = createEmitContext({
+			resolveBrandToken: (ref) =>
+				ref.id === "brand.accent" ? "#123456" : undefined,
+		});
+		const out = emitRect({ ...rect, fill: colorToken }, ctx);
+		expect(out).toContain('fill="#123456"');
+		expect(ctx.warnings).toEqual([]);
+	});
+
+	it("a resolver can resolve a token fill to a gradient", () => {
+		const ctx = createEmitContext({
+			resolveBrandToken: () => ({
+				kind: "linear",
+				stops: [
+					{ offset: 0, color: "#000" },
+					{ offset: 1, color: "#fff" },
+				],
+				from: { x: 0, y: 0 },
+				to: { x: 1, y: 1 },
+			}),
+		});
+		const out = emitRect({ ...rect, fill: colorToken }, ctx);
+		expect(out).toContain("<linearGradient");
+		expect(out).toContain('fill="url(#grad-r1)"');
+	});
+
+	it("degrades a token fill to fill=none + BRAND_TOKEN_UNRESOLVED when no resolver is supplied", () => {
+		const ctx = createEmitContext();
+		const out = emitRect({ ...rect, fill: colorToken }, ctx);
+		expect(out).toContain('fill="none"');
+		expect(ctx.warnings).toEqual([
+			{
+				code: "BRAND_TOKEN_UNRESOLVED",
+				message: expect.stringContaining("brand.accent"),
+				nodeId: "r1",
+			},
+		]);
+	});
+
+	it("degrades a token fill to fill=none + warns when the resolver returns undefined", () => {
+		const ctx = createEmitContext({ resolveBrandToken: () => undefined });
+		const out = emitRect({ ...rect, fill: colorToken }, ctx);
+		expect(out).toContain('fill="none"');
+		expect(ctx.warnings.map((w) => w.code)).toEqual(["BRAND_TOKEN_UNRESOLVED"]);
+	});
+
+	it("never throws for an unresolved token — the node still emits", () => {
+		expect(() =>
+			emitRect({ ...rect, fill: colorToken }, createEmitContext()),
+		).not.toThrow();
+	});
+
+	it("resolves a token fontFamily on a plain text node", () => {
+		const text: CanvasTextNode = {
+			id: "t1",
+			type: "text",
+			transform: identity,
+			bounds: { width: 100, height: 20 },
+			zIndex: 0,
+			text: "hi",
+			fontFamily: fontToken,
+			fontSize: 16,
+			fill: "#000",
+		};
+		const ctx = createEmitContext({
+			resolveBrandToken: () => "Georgia",
+		});
+		const out = emitText(text, ctx);
+		expect(out).toContain('font-family="Georgia"');
+		expect(ctx.usedFonts.has("Georgia")).toBe(true);
+	});
+
+	it("omits font-family + warns for an unresolved token fontFamily", () => {
+		const text: CanvasTextNode = {
+			id: "t1",
+			type: "text",
+			transform: identity,
+			bounds: { width: 100, height: 20 },
+			zIndex: 0,
+			text: "hi",
+			fontFamily: fontToken,
+			fontSize: 16,
+			fill: "#000",
+		};
+		const ctx = createEmitContext();
+		const out = emitText(text, ctx);
+		expect(out).not.toContain("font-family=");
+		expect(ctx.warnings.map((w) => w.code)).toEqual(["BRAND_TOKEN_UNRESOLVED"]);
+		expect(ctx.usedFonts.size).toBe(0);
+	});
+
+	it("resolves a rich-text span's token fill and fontFamily", () => {
+		const richText: CanvasRichTextNode = {
+			id: "rt1",
+			type: "rich-text",
+			transform: identity,
+			bounds: { width: 200, height: 60 },
+			zIndex: 0,
+			width: 200,
+			paragraphs: [
+				{ spans: [{ text: "hi", fill: colorToken, fontFamily: fontToken }] },
+			],
+		};
+		const ctx = createEmitContext({
+			resolveBrandToken: (ref) =>
+				ref.tokenType === "font" ? "Georgia" : "#ff00ff",
+		});
+		const out = emitRichText(richText, ctx);
+		expect(out).toContain('fill="#ff00ff"');
+		expect(out).toContain('font-family="Georgia"');
+		// RICH_TEXT_WRAP_APPROXIMATE is pre-existing/unrelated — no measurer was
+		// supplied. The point here is no BRAND_TOKEN_UNRESOLVED: both tokens resolved.
+		expect(ctx.warnings.map((w) => w.code)).not.toContain(
+			"BRAND_TOKEN_UNRESOLVED",
+		);
+	});
+
+	it("warns once per unresolved span, not twice, for the usedFonts pre-scan", () => {
+		const richText: CanvasRichTextNode = {
+			id: "rt1",
+			type: "rich-text",
+			transform: identity,
+			bounds: { width: 200, height: 60 },
+			zIndex: 0,
+			width: 200,
+			paragraphs: [{ spans: [{ text: "hi", fontFamily: fontToken }] }],
+		};
+		const ctx = createEmitContext();
+		emitRichText(richText, ctx);
+		expect(
+			ctx.warnings.filter((w) => w.code === "BRAND_TOKEN_UNRESOLVED"),
+		).toHaveLength(1);
 	});
 });
 

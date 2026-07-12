@@ -4,10 +4,16 @@ import type {
 	CanvasUnknownNode,
 } from "../extensions/node-kind-registry.js";
 import { toAffineMatrix } from "../geometry/affine.js";
+import {
+	computePolygonVertices,
+	computeStarVertices,
+} from "../geometry/polygon.js";
 import type {
+	BrandTokenRef,
 	CanvasAssetRef,
 	CanvasEllipseNode,
 	CanvasFill,
+	CanvasFontFamily,
 	CanvasFrameNode,
 	CanvasGradientFill,
 	CanvasGroupNode,
@@ -18,9 +24,11 @@ import type {
 	CanvasNodeBase,
 	CanvasPage,
 	CanvasPathNode,
+	CanvasPolygonNode,
 	CanvasRectNode,
 	CanvasRichTextNode,
 	CanvasShadow,
+	CanvasStarNode,
 	CanvasTextAlign,
 	CanvasTextNode,
 	CanvasTransform,
@@ -307,7 +315,13 @@ export type SvgWarningCode =
 	// losslessly representable as a `<clipPath>`, exactly like a frame's, so a code
 	// for it could never fire — dead API, which the frame work already ruled out.
 	| "RICH_TEXT_WRAP_APPROXIMATE"
-	| "RICH_TEXT_ELLIPSIS_UNSUPPORTED";
+	| "RICH_TEXT_ELLIPSIS_UNSUPPORTED"
+	// Added for brand-token refs (canvas-m1-012). Same grow-only rule. Fires when
+	// a `BrandTokenRef` fill/fontFamily has no `resolveBrandToken` option, or the
+	// resolver returns nothing usable — the node still emits, with the token's
+	// fill/font degraded to the same deterministic fallback an absent value gets
+	// (fill: omitted attribute; fontFamily: inherits from the parent element).
+	| "BRAND_TOKEN_UNRESOLVED";
 
 export interface SvgSerializeWarning {
 	code: SvgWarningCode;
@@ -343,6 +357,7 @@ export interface ResolvedSvgOptions {
 	fetchAsset?: SvgFetchAsset;
 	nodeKinds?: CanvasNodeKindRegistry;
 	textMeasurer?: CanvasTextMeasurer;
+	resolveBrandToken?: SvgResolveBrandToken;
 }
 
 /**
@@ -375,6 +390,9 @@ export function createEmitContext(
 	if (options.fetchAsset) resolved.fetchAsset = options.fetchAsset;
 	if (options.nodeKinds) resolved.nodeKinds = options.nodeKinds;
 	if (options.textMeasurer) resolved.textMeasurer = options.textMeasurer;
+	if (options.resolveBrandToken) {
+		resolved.resolveBrandToken = options.resolveBrandToken;
+	}
 	return {
 		warnings: [],
 		usedFonts: new Set<string>(),
@@ -502,24 +520,84 @@ function shadowMarkup(id: string, s: CanvasShadow): string {
 }
 
 /**
+ * Resolve a fill field through `resolveBrandToken` when it is a token
+ * reference; pass a plain color/gradient through unchanged. Unresolved (no
+ * resolver, or the resolver returns nothing) degrades to `undefined` — which
+ * `decorate` already treats as "no fill" — with a `BRAND_TOKEN_UNRESOLVED`
+ * warning. Never throws.
+ */
+function resolveFill(
+	fill: CanvasFill | undefined,
+	ctx: SvgEmitContext,
+	nodeId: string,
+): string | CanvasGradientFill | undefined {
+	if (fill === undefined || typeof fill === "string") return fill;
+	if ("kind" in fill) return fill; // CanvasGradientFill — not a token.
+	const resolved = ctx.options.resolveBrandToken?.(fill);
+	if (resolved !== undefined) return resolved;
+	warn(
+		ctx,
+		"BRAND_TOKEN_UNRESOLVED",
+		`Brand token "${fill.id}" (${fill.tokenType}) could not be resolved; fill omitted.`,
+		nodeId,
+	);
+	return undefined;
+}
+
+/** `resolveFill`'s font-family counterpart, warning on an unresolved token. */
+function resolveFontFamily(
+	fontFamily: CanvasFontFamily,
+	ctx: SvgEmitContext,
+	nodeId: string,
+): string | undefined {
+	const resolved = tryResolveFontFamily(fontFamily, ctx);
+	if (resolved !== undefined || typeof fontFamily === "string") return resolved;
+	warn(
+		ctx,
+		"BRAND_TOKEN_UNRESOLVED",
+		`Brand token "${fontFamily.id}" (font) could not be resolved; font-family omitted.`,
+		nodeId,
+	);
+	return undefined;
+}
+
+/**
+ * Silent variant of `resolveFontFamily`, for the `usedFonts` pre-scan
+ * (`emitRichText`) — that pass is best-effort bookkeeping, not an emission
+ * point, so it must not double-warn for the same token the actual `<tspan>`
+ * emission already warns about.
+ */
+function tryResolveFontFamily(
+	fontFamily: CanvasFontFamily,
+	ctx: SvgEmitContext,
+): string | undefined {
+	if (typeof fontFamily === "string") return fontFamily;
+	const resolved = ctx.options.resolveBrandToken?.(fontFamily);
+	return typeof resolved === "string" ? resolved : undefined;
+}
+
+/**
  * Resolve a fillable/shadowable node's fill + shadow into inline `<defs>`, the
  * `fill` value (a color, or `url(#id)` for a gradient), and an optional `filter`
  * attribute. Ids derive from the node id (one fill + one shadow per node). A
  * string/undefined fill with no shadow yields empty defs/filter, so the output
- * is byte-identical to a plain shape.
+ * is byte-identical to a plain shape. A brand-token fill is resolved FIRST,
+ * before any of the gradient/defs logic below ever sees it.
  */
 function decorate(
 	fill: CanvasFill | undefined,
 	shadow: CanvasShadow | undefined,
 	nodeId: string,
+	ctx: SvgEmitContext,
 ): { defs: string; fill: string | undefined; filterAttr: string } {
+	const resolvedFill = resolveFill(fill, ctx, nodeId);
 	const inner: string[] = [];
 	let fillValue: string | undefined;
-	if (fill === undefined || typeof fill === "string") {
-		fillValue = fill;
+	if (resolvedFill === undefined || typeof resolvedFill === "string") {
+		fillValue = resolvedFill;
 	} else {
 		const id = `grad-${sanitizeId(nodeId)}`;
-		inner.push(gradientMarkup(id, fill));
+		inner.push(gradientMarkup(id, resolvedFill));
 		fillValue = `url(#${id})`;
 	}
 	let filterAttr = "";
@@ -563,7 +641,7 @@ export function shouldSkipNode(
 // --- shape emitters (synchronous; image emission is async, added later) ------
 
 export function emitRect(node: CanvasRectNode, ctx: SvgEmitContext): string {
-	const decor = decorate(node.fill, node.shadow, node.id);
+	const decor = decorate(node.fill, node.shadow, node.id, ctx);
 	const attrs = [
 		...commonAttrs(node, ctx),
 		`width="${fmt(node.bounds.width)}"`,
@@ -582,7 +660,7 @@ export function emitEllipse(
 ): string {
 	const rx = node.bounds.width / 2;
 	const ry = node.bounds.height / 2;
-	const decor = decorate(node.fill, node.shadow, node.id);
+	const decor = decorate(node.fill, node.shadow, node.id, ctx);
 	const attrs = [
 		...commonAttrs(node, ctx),
 		`cx="${fmt(rx)}"`,
@@ -592,6 +670,38 @@ export function emitEllipse(
 		...paintAttrs(decor.fill, node.stroke, node.strokeWidth),
 	];
 	return `${decor.defs}<ellipse ${attrs.join(" ")}${decor.filterAttr} />`;
+}
+
+function pointsAttr(vertices: readonly { x: number; y: number }[]): string {
+	return vertices.map((v) => `${fmt(v.x)},${fmt(v.y)}`).join(" ");
+}
+
+export function emitPolygon(
+	node: CanvasPolygonNode,
+	ctx: SvgEmitContext,
+): string {
+	const decor = decorate(node.fill, node.shadow, node.id, ctx);
+	const attrs = [
+		...commonAttrs(node, ctx),
+		`points="${pointsAttr(computePolygonVertices(node.bounds, node.sides))}"`,
+		...paintAttrs(decor.fill, node.stroke, node.strokeWidth),
+	];
+	return `${decor.defs}<polygon ${attrs.join(" ")}${decor.filterAttr} />`;
+}
+
+export function emitStar(node: CanvasStarNode, ctx: SvgEmitContext): string {
+	const decor = decorate(node.fill, node.shadow, node.id, ctx);
+	const vertices = computeStarVertices(
+		node.bounds,
+		node.points,
+		node.innerRadiusRatio,
+	);
+	const attrs = [
+		...commonAttrs(node, ctx),
+		`points="${pointsAttr(vertices)}"`,
+		...paintAttrs(decor.fill, node.stroke, node.strokeWidth),
+	];
+	return `${decor.defs}<polygon ${attrs.join(" ")}${decor.filterAttr} />`;
 }
 
 export function emitLine(node: CanvasLineNode, ctx: SvgEmitContext): string {
@@ -620,7 +730,7 @@ export function emitPath(node: CanvasPathNode, ctx: SvgEmitContext): string {
 		);
 		return "";
 	}
-	const decor = decorate(node.fill, node.shadow, node.id);
+	const decor = decorate(node.fill, node.shadow, node.id, ctx);
 	const attrs = [
 		...commonAttrs(node, ctx),
 		`d="${escapeAttr(node.d)}"`,
@@ -630,17 +740,20 @@ export function emitPath(node: CanvasPathNode, ctx: SvgEmitContext): string {
 }
 
 export function emitText(node: CanvasTextNode, ctx: SvgEmitContext): string {
-	ctx.usedFonts.add(node.fontFamily);
+	const fontFamily = resolveFontFamily(node.fontFamily, ctx, node.id);
+	if (fontFamily !== undefined) ctx.usedFonts.add(fontFamily);
 	const anchor = textAnchor(node.align);
 	const x = textAnchorX(node.align, node.bounds.width);
 	const baselineY = node.fontSize * TEXT_ASCENT_RATIO;
-	const decor = decorate(node.fill, node.shadow, node.id);
+	const decor = decorate(node.fill, node.shadow, node.id, ctx);
 
 	const attrs = [
 		...commonAttrs(node, ctx),
 		`x="${fmt(x)}"`,
 		`y="${fmt(baselineY)}"`,
-		`font-family="${escapeAttr(node.fontFamily)}"`,
+		...(fontFamily !== undefined
+			? [`font-family="${escapeAttr(fontFamily)}"`]
+			: []),
 		`font-size="${fmt(node.fontSize)}"`,
 	];
 	if (node.fontWeight !== undefined) {
@@ -710,10 +823,15 @@ function applyTextTransform(
 function richSpanAttrs(
 	span: RichTextSpan,
 	fillValue: string | undefined,
+	ctx: SvgEmitContext,
+	nodeId: string,
 ): string[] {
 	const attrs: string[] = [];
 	if (span.fontFamily !== undefined) {
-		attrs.push(`font-family="${escapeAttr(span.fontFamily)}"`);
+		const fontFamily = resolveFontFamily(span.fontFamily, ctx, nodeId);
+		if (fontFamily !== undefined) {
+			attrs.push(`font-family="${escapeAttr(fontFamily)}"`);
+		}
 	}
 	if (span.fontSize !== undefined) {
 		attrs.push(`font-size="${fmt(span.fontSize)}"`);
@@ -749,12 +867,14 @@ function richSpanFill(
 	span: RichTextSpan,
 	paragraphIndex: number,
 	spanIndex: number,
+	ctx: SvgEmitContext,
 ): { defs: string; fill: string | undefined } {
 	if (span.fill === undefined) return { defs: "", fill: undefined };
 	const decor = decorate(
 		span.fill,
 		undefined,
 		`${node.id}-p${paragraphIndex}s${spanIndex}`,
+		ctx,
 	);
 	return { defs: decor.defs, fill: decor.fill };
 }
@@ -794,15 +914,21 @@ export function emitRichText(
 
 	// Every family that will actually be painted, so `@font-face` emission (and
 	// the FONT_NOT_IN_MANIFEST check) sees rich text too — `emitText` was the only
-	// producer of `usedFonts` before this.
+	// producer of `usedFonts` before this. Silent resolution: this is a
+	// best-effort pre-scan, not an emission point, so an unresolved token is
+	// skipped here without warning — the actual `<tspan>` emission warns.
 	ctx.usedFonts.add(defaults.fontFamily);
 	for (const paragraph of node.paragraphs) {
 		for (const span of paragraph.spans) {
-			ctx.usedFonts.add(resolveSpanStyle(span, defaults).fontFamily);
+			const family = tryResolveFontFamily(
+				resolveSpanStyle(span, defaults).fontFamily,
+				ctx,
+			);
+			if (family !== undefined) ctx.usedFonts.add(family);
 		}
 	}
 
-	const decor = decorate(defaults.fill, undefined, `${node.id}-rt`);
+	const decor = decorate(defaults.fill, undefined, `${node.id}-rt`, ctx);
 	const attrs = [
 		...commonAttrs(node, ctx),
 		`font-family="${escapeAttr(defaults.fontFamily)}"`,
@@ -824,7 +950,7 @@ export function emitRichText(
 			})
 		: undefined;
 	const body = measured
-		? emitMeasuredLines(node, measured, defaults, defs)
+		? emitMeasuredLines(node, measured, defaults, defs, ctx)
 		: emitUnwrappedParagraphs(node, ctx, defaults, defs);
 
 	// The clip box needs a height. An explicit `height` wins; otherwise the
@@ -890,6 +1016,7 @@ function emitMeasuredLines(
 	measured: MeasuredText,
 	defaults: RichTextStyleDefaults,
 	defs: string[],
+	ctx: SvgEmitContext,
 ): string {
 	const out: string[] = [];
 	for (const line of measured.lines) {
@@ -899,12 +1026,18 @@ function emitMeasuredLines(
 		for (const run of line.runs) {
 			const span = paragraph.spans[run.spanIndex];
 			if (!span) continue;
-			const fill = richSpanFill(node, span, line.paragraphIndex, run.spanIndex);
+			const fill = richSpanFill(
+				node,
+				span,
+				line.paragraphIndex,
+				run.spanIndex,
+				ctx,
+			);
 			if (fill.defs && !defs.includes(fill.defs)) defs.push(fill.defs);
 			const attrs = [
 				`x="${fmt(line.x + run.x)}"`,
 				`y="${fmt(y)}"`,
-				...richSpanAttrs(span, fill.fill),
+				...richSpanAttrs(span, fill.fill, ctx, node.id),
 			];
 			const text = escapeXml(
 				applyTextTransform(
@@ -951,7 +1084,7 @@ function emitUnwrappedParagraphs(
 		if (anchor !== "start") lineAttrs.push(`text-anchor="${anchor}"`);
 
 		lines.push(
-			`<tspan ${lineAttrs.join(" ")}>${emitSpans(node, paragraph, pi, defaults, defs)}</tspan>`,
+			`<tspan ${lineAttrs.join(" ")}>${emitSpans(node, paragraph, pi, defaults, defs, ctx)}</tspan>`,
 		);
 		y += size * (paragraph.lineHeight ?? defaults.lineHeight);
 	}
@@ -965,12 +1098,13 @@ function emitSpans(
 	paragraphIndex: number,
 	defaults: RichTextStyleDefaults,
 	defs: string[],
+	ctx: SvgEmitContext,
 ): string {
 	const out: string[] = [];
 	for (const [si, span] of paragraph.spans.entries()) {
-		const fill = richSpanFill(node, span, paragraphIndex, si);
+		const fill = richSpanFill(node, span, paragraphIndex, si, ctx);
 		if (fill.defs) defs.push(fill.defs);
-		const attrs = richSpanAttrs(span, fill.fill);
+		const attrs = richSpanAttrs(span, fill.fill, ctx, node.id);
 		const text = escapeXml(
 			applyTextTransform(
 				span.text,
@@ -999,6 +1133,18 @@ export interface SvgFontFaceDef {
 export type SvgFetchAsset = (
 	uri: string,
 ) => Promise<{ bytes: Uint8Array; contentType: string }>;
+
+/**
+ * Resolve a `BrandTokenRef` to a concrete value: a fill (color/gradient) for
+ * a `"color"` token, or a font-family string for a `"font"` token. Core never
+ * calls this itself with a default — it is the host's brand-kit lookup,
+ * injected. Return `undefined` (or omit the option) to leave a token
+ * unresolved; the serializer degrades deterministically and records
+ * `BRAND_TOKEN_UNRESOLVED`, never throws.
+ */
+export type SvgResolveBrandToken = (
+	ref: BrandTokenRef,
+) => string | CanvasGradientFill | undefined;
 
 /**
  * - `auto` (default): inline `data:` URIs, reference everything else.
@@ -1044,6 +1190,8 @@ export interface SvgSerializeOptions {
 	 * built-in defaults, which mirror `createText`'s.
 	 */
 	richTextDefaults?: Partial<RichTextStyleDefaults>;
+	/** Resolve `BrandTokenRef` fills/fonts to concrete values. See {@link SvgResolveBrandToken}. */
+	resolveBrandToken?: SvgResolveBrandToken;
 }
 
 export interface SvgSerializeResult {
@@ -1073,6 +1221,10 @@ async function emitNode(
 			return pad + emitRect(node, ctx);
 		case "ellipse":
 			return pad + emitEllipse(node, ctx);
+		case "polygon":
+			return pad + emitPolygon(node, ctx);
+		case "star":
+			return pad + emitStar(node, ctx);
 		case "line":
 			return pad + emitLine(node, ctx);
 		case "path": {
@@ -1231,7 +1383,7 @@ async function emitFrame(
 	if (background !== undefined) {
 		// Reuse the shared fill machinery so a gradient background lands in
 		// `<defs>` exactly like a rect's does.
-		const decor = decorate(background, undefined, `${node.id}-bg`);
+		const decor = decorate(background, undefined, `${node.id}-bg`, ctx);
 		const bgAttrs = [
 			...frameBoxAttrs(node),
 			...paintAttrs(decor.fill, undefined, undefined),

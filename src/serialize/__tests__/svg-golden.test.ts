@@ -566,6 +566,109 @@ describe("serializePageToSvg golden — frames (clip, radius, background, placeh
 });
 
 /**
+ * Golden fixture for polygon/star (canvas-m1-010). Covers:
+ *  - `pentagon` — a plain polygon: stroke + solid fill, no gradient/shadow.
+ *  - `star-gradient` — a star whose fill is a linear GRADIENT, exercising the
+ *                      same `<defs>`/`decorate` machinery rect/ellipse use.
+ *  - `star-shadow` — a star with a drop shadow (`feDropShadow` filter).
+ * Both shapes emit through `<polygon points="...">`, never a dedicated
+ * `<star>`/`<polygon>`-per-kind element pair.
+ */
+const polygonStarFixture: CanvasIR = {
+	version: "2",
+	id: "doc-golden-polygon-star",
+	title: "Golden polygon/star",
+	pages: [
+		{
+			id: "p1",
+			size: { width: 320, height: 120, unit: "px" },
+			background: { kind: "solid", value: "#ffffff" },
+			root: {
+				id: "root",
+				type: "group",
+				transform: t(),
+				bounds: { width: 320, height: 120 },
+				zIndex: 0,
+				children: [
+					{
+						id: "pentagon",
+						type: "polygon",
+						transform: t(10, 10),
+						bounds: { width: 80, height: 80 },
+						zIndex: 0,
+						sides: 5,
+						fill: "#0ea5e9",
+						stroke: "#0c4a6e",
+						strokeWidth: 2,
+					},
+					{
+						id: "star-gradient",
+						type: "star",
+						transform: t(120, 10),
+						bounds: { width: 80, height: 80 },
+						zIndex: 1,
+						points: 5,
+						innerRadiusRatio: 0.5,
+						fill: {
+							kind: "linear",
+							stops: [
+								{ offset: 0, color: "#f59e0b" },
+								{ offset: 1, color: "#ef4444" },
+							],
+							from: { x: 0, y: 0 },
+							to: { x: 1, y: 1 },
+						},
+					},
+					{
+						id: "star-shadow",
+						type: "star",
+						transform: t(230, 10),
+						bounds: { width: 80, height: 80 },
+						zIndex: 2,
+						points: 6,
+						innerRadiusRatio: 0.4,
+						fill: "#8b5cf6",
+						shadow: { color: "#000000", blur: 6, offsetX: 2, offsetY: 4 },
+					},
+				],
+			},
+		},
+	],
+	assets: {},
+	metadata: {
+		createdAt: "2026-05-20T00:00:00.000Z",
+		updatedAt: "2026-05-20T00:00:00.000Z",
+	},
+};
+
+describe("serializePageToSvg golden — polygon and star (gradient fill, shadow)", () => {
+	it("pins <polygon> output for a plain polygon, a gradient star, and a shadowed star", async () => {
+		const { svg, warnings } = await serializePageToSvg(polygonStarFixture, 0, {
+			pretty: true,
+		});
+
+		expect(warnings).toEqual([]);
+		assertWellFormed(svg);
+
+		// Both kinds share the SAME element — no kind-specific tag.
+		expect(svg.match(/<polygon /g)).toHaveLength(3);
+		expect(svg).not.toContain("<star");
+
+		expect(svg).toContain("<linearGradient");
+		expect(svg).toContain("feDropShadow");
+
+		await expect(svg).toMatchFileSnapshot(
+			fileURLToPath(
+				new URL(
+					"./__snapshots__/canvas-polygon-star.snap.svg",
+					import.meta.url,
+				),
+			),
+		);
+	});
+});
+
+/**
  * A deterministic stub measurer: a fixed advance per character, no real shaping.
  * A golden needs the LINE BREAKS to be reproducible, not realistic — core has no
  * layout engine by design, so what is pinned here is that the emitter faithfully
