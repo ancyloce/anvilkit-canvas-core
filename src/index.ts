@@ -6,3 +6,4 @@ export * from "./extensions/index.js";
 export * from "./geometry/index.js";
 export * from "./ir/index.js";
 export * from "./serialize/index.js";
+export * from "./text-contracts.js";
