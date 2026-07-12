@@ -7829,7 +7829,7 @@
 						"kind": "inline-tag",
 						"tag": "@link",
 						"text": "CanvasTextMeasurer",
-						"target": 1547
+						"target": 1555
 					},
 					{
 						"kind": "text",
@@ -11700,14 +11700,14 @@
 			]
 		},
 		{
-			"id": 1535,
+			"id": 1543,
 			"name": "MeasuredLine",
 			"variant": "declaration",
 			"kind": 256,
 			"flags": {},
 			"children": [
 				{
-					"id": 1542,
+					"id": 1550,
 					"name": "baseline",
 					"variant": "declaration",
 					"kind": 1024,
@@ -11726,7 +11726,7 @@
 					}
 				},
 				{
-					"id": 1541,
+					"id": 1549,
 					"name": "height",
 					"variant": "declaration",
 					"kind": 1024,
@@ -11737,7 +11737,7 @@
 					}
 				},
 				{
-					"id": 1536,
+					"id": 1544,
 					"name": "paragraphIndex",
 					"variant": "declaration",
 					"kind": 1024,
@@ -11748,7 +11748,7 @@
 					}
 				},
 				{
-					"id": 1537,
+					"id": 1545,
 					"name": "runs",
 					"variant": "declaration",
 					"kind": 1024,
@@ -11757,14 +11757,14 @@
 						"type": "array",
 						"elementType": {
 							"type": "reference",
-							"target": 1528,
+							"target": 1536,
 							"name": "MeasuredRun",
 							"package": "@anvilkit/canvas-core"
 						}
 					}
 				},
 				{
-					"id": 1540,
+					"id": 1548,
 					"name": "width",
 					"variant": "declaration",
 					"kind": 1024,
@@ -11775,7 +11775,7 @@
 					}
 				},
 				{
-					"id": 1538,
+					"id": 1546,
 					"name": "x",
 					"variant": "declaration",
 					"kind": 1024,
@@ -11802,7 +11802,7 @@
 					}
 				},
 				{
-					"id": 1539,
+					"id": 1547,
 					"name": "y",
 					"variant": "declaration",
 					"kind": 1024,
@@ -11825,19 +11825,19 @@
 				{
 					"title": "Properties",
 					"children": [
-						1542,
-						1541,
-						1536,
-						1537,
-						1540,
-						1538,
-						1539
+						1550,
+						1549,
+						1544,
+						1545,
+						1548,
+						1546,
+						1547
 					]
 				}
 			]
 		},
 		{
-			"id": 1528,
+			"id": 1536,
 			"name": "MeasuredRun",
 			"variant": "declaration",
 			"kind": 256,
@@ -11860,7 +11860,7 @@
 			},
 			"children": [
 				{
-					"id": 1529,
+					"id": 1537,
 					"name": "paragraphIndex",
 					"variant": "declaration",
 					"kind": 1024,
@@ -11871,7 +11871,7 @@
 					}
 				},
 				{
-					"id": 1530,
+					"id": 1538,
 					"name": "spanIndex",
 					"variant": "declaration",
 					"kind": 1024,
@@ -11882,7 +11882,7 @@
 					}
 				},
 				{
-					"id": 1531,
+					"id": 1539,
 					"name": "start",
 					"variant": "declaration",
 					"kind": 1024,
@@ -11909,7 +11909,7 @@
 					}
 				},
 				{
-					"id": 1532,
+					"id": 1540,
 					"name": "text",
 					"variant": "declaration",
 					"kind": 1024,
@@ -11936,7 +11936,7 @@
 					}
 				},
 				{
-					"id": 1534,
+					"id": 1542,
 					"name": "width",
 					"variant": "declaration",
 					"kind": 1024,
@@ -11947,7 +11947,7 @@
 					}
 				},
 				{
-					"id": 1533,
+					"id": 1541,
 					"name": "x",
 					"variant": "declaration",
 					"kind": 1024,
@@ -11970,25 +11970,25 @@
 				{
 					"title": "Properties",
 					"children": [
-						1529,
-						1530,
-						1531,
-						1532,
-						1534,
-						1533
+						1537,
+						1538,
+						1539,
+						1540,
+						1542,
+						1541
 					]
 				}
 			]
 		},
 		{
-			"id": 1543,
+			"id": 1551,
 			"name": "MeasuredText",
 			"variant": "declaration",
 			"kind": 256,
 			"flags": {},
 			"children": [
 				{
-					"id": 1546,
+					"id": 1554,
 					"name": "height",
 					"variant": "declaration",
 					"kind": 1024,
@@ -12015,7 +12015,7 @@
 					}
 				},
 				{
-					"id": 1544,
+					"id": 1552,
 					"name": "lines",
 					"variant": "declaration",
 					"kind": 1024,
@@ -12024,14 +12024,14 @@
 						"type": "array",
 						"elementType": {
 							"type": "reference",
-							"target": 1535,
+							"target": 1543,
 							"name": "MeasuredLine",
 							"package": "@anvilkit/canvas-core"
 						}
 					}
 				},
 				{
-					"id": 1545,
+					"id": 1553,
 					"name": "width",
 					"variant": "declaration",
 					"kind": 1024,
@@ -12070,9 +12070,9 @@
 				{
 					"title": "Properties",
 					"children": [
-						1546,
-						1544,
-						1545
+						1554,
+						1552,
+						1553
 					]
 				}
 			]
@@ -12183,14 +12183,14 @@
 			]
 		},
 		{
-			"id": 1456,
+			"id": 1460,
 			"name": "NormalizeUriOptions",
 			"variant": "declaration",
 			"kind": 256,
 			"flags": {},
 			"children": [
 				{
-					"id": 1457,
+					"id": 1461,
 					"name": "allowSafeDataImage",
 					"variant": "declaration",
 					"kind": 1024,
@@ -12208,7 +12208,7 @@
 				{
 					"title": "Properties",
 					"children": [
-						1457
+						1461
 					]
 				}
 			]
@@ -12484,7 +12484,7 @@
 								"kind": "inline-tag",
 								"tag": "@link",
 								"text": "DEFAULT_DPI",
-								"target": 1455
+								"target": 1459
 							},
 							{
 								"kind": "text",
@@ -13096,7 +13096,7 @@
 			]
 		},
 		{
-			"id": 1503,
+			"id": 1511,
 			"name": "ResolvedSpanStyle",
 			"variant": "declaration",
 			"kind": 256,
@@ -13121,7 +13121,7 @@
 						"kind": "inline-tag",
 						"tag": "@link",
 						"text": "resolveSpanStyle",
-						"target": 1499
+						"target": 1507
 					},
 					{
 						"kind": "text",
@@ -13131,7 +13131,7 @@
 			},
 			"children": [
 				{
-					"id": 1511,
+					"id": 1519,
 					"name": "fill",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13144,7 +13144,7 @@
 					}
 				},
 				{
-					"id": 1504,
+					"id": 1512,
 					"name": "fontFamily",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13155,7 +13155,7 @@
 					}
 				},
 				{
-					"id": 1505,
+					"id": 1513,
 					"name": "fontSize",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13166,7 +13166,7 @@
 					}
 				},
 				{
-					"id": 1506,
+					"id": 1514,
 					"name": "fontWeight",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13177,7 +13177,7 @@
 					}
 				},
 				{
-					"id": 1507,
+					"id": 1515,
 					"name": "italic",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13188,7 +13188,7 @@
 					}
 				},
 				{
-					"id": 1509,
+					"id": 1517,
 					"name": "letterSpacing",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13199,7 +13199,7 @@
 					}
 				},
 				{
-					"id": 1510,
+					"id": 1518,
 					"name": "textTransform",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13233,7 +13233,7 @@
 					}
 				},
 				{
-					"id": 1508,
+					"id": 1516,
 					"name": "underline",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13248,27 +13248,27 @@
 				{
 					"title": "Properties",
 					"children": [
-						1511,
-						1504,
-						1505,
-						1506,
-						1507,
-						1509,
-						1510,
-						1508
+						1519,
+						1512,
+						1513,
+						1514,
+						1515,
+						1517,
+						1518,
+						1516
 					]
 				}
 			],
 			"extendedBy": [
 				{
 					"type": "reference",
-					"target": 1512,
+					"target": 1520,
 					"name": "RichTextStyleDefaults"
 				}
 			]
 		},
 		{
-			"id": 1463,
+			"id": 1467,
 			"name": "ResolvedSvgOptions",
 			"variant": "declaration",
 			"kind": 256,
@@ -13283,7 +13283,7 @@
 			},
 			"children": [
 				{
-					"id": 1468,
+					"id": 1473,
 					"name": "fetchAsset",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13292,13 +13292,13 @@
 					},
 					"type": {
 						"type": "reference",
-						"target": 1480,
+						"target": 1486,
 						"name": "SvgFetchAsset",
 						"package": "@anvilkit/canvas-core"
 					}
 				},
 				{
-					"id": 1467,
+					"id": 1471,
 					"name": "fonts",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13307,27 +13307,27 @@
 						"type": "array",
 						"elementType": {
 							"type": "reference",
-							"target": 1475,
+							"target": 1481,
 							"name": "SvgFontFaceDef",
 							"package": "@anvilkit/canvas-core"
 						}
 					}
 				},
 				{
-					"id": 1464,
+					"id": 1468,
 					"name": "images",
 					"variant": "declaration",
 					"kind": 1024,
 					"flags": {},
 					"type": {
 						"type": "reference",
-						"target": 1487,
+						"target": 1493,
 						"name": "SvgImageMode",
 						"package": "@anvilkit/canvas-core"
 					}
 				},
 				{
-					"id": 1469,
+					"id": 1474,
 					"name": "nodeKinds",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13342,7 +13342,7 @@
 					}
 				},
 				{
-					"id": 1466,
+					"id": 1470,
 					"name": "pretty",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13353,7 +13353,20 @@
 					}
 				},
 				{
-					"id": 1465,
+					"id": 1472,
+					"name": "richTextDefaults",
+					"variant": "declaration",
+					"kind": 1024,
+					"flags": {},
+					"type": {
+						"type": "reference",
+						"target": 1520,
+						"name": "RichTextStyleDefaults",
+						"package": "@anvilkit/canvas-core"
+					}
+				},
+				{
+					"id": 1469,
 					"name": "skipInvisible",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13362,18 +13375,35 @@
 						"type": "intrinsic",
 						"name": "boolean"
 					}
+				},
+				{
+					"id": 1475,
+					"name": "textMeasurer",
+					"variant": "declaration",
+					"kind": 1024,
+					"flags": {
+						"isOptional": true
+					},
+					"type": {
+						"type": "reference",
+						"target": 1555,
+						"name": "CanvasTextMeasurer",
+						"package": "@anvilkit/canvas-core"
+					}
 				}
 			],
 			"groups": [
 				{
 					"title": "Properties",
 					"children": [
+						1473,
+						1471,
 						1468,
-						1467,
-						1464,
+						1474,
+						1470,
+						1472,
 						1469,
-						1466,
-						1465
+						1475
 					]
 				}
 			]
@@ -13610,7 +13640,7 @@
 			]
 		},
 		{
-			"id": 1512,
+			"id": 1520,
 			"name": "RichTextStyleDefaults",
 			"variant": "declaration",
 			"kind": 256,
@@ -13625,7 +13655,7 @@
 			},
 			"children": [
 				{
-					"id": 1514,
+					"id": 1522,
 					"name": "align",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13638,7 +13668,7 @@
 					}
 				},
 				{
-					"id": 1522,
+					"id": 1530,
 					"name": "fill",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13653,12 +13683,12 @@
 					},
 					"inheritedFrom": {
 						"type": "reference",
-						"target": 1511,
+						"target": 1519,
 						"name": "ResolvedSpanStyle.fill"
 					}
 				},
 				{
-					"id": 1515,
+					"id": 1523,
 					"name": "fontFamily",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13671,12 +13701,12 @@
 					},
 					"inheritedFrom": {
 						"type": "reference",
-						"target": 1504,
+						"target": 1512,
 						"name": "ResolvedSpanStyle.fontFamily"
 					}
 				},
 				{
-					"id": 1516,
+					"id": 1524,
 					"name": "fontSize",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13689,12 +13719,12 @@
 					},
 					"inheritedFrom": {
 						"type": "reference",
-						"target": 1505,
+						"target": 1513,
 						"name": "ResolvedSpanStyle.fontSize"
 					}
 				},
 				{
-					"id": 1517,
+					"id": 1525,
 					"name": "fontWeight",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13707,12 +13737,12 @@
 					},
 					"inheritedFrom": {
 						"type": "reference",
-						"target": 1506,
+						"target": 1514,
 						"name": "ResolvedSpanStyle.fontWeight"
 					}
 				},
 				{
-					"id": 1518,
+					"id": 1526,
 					"name": "italic",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13725,12 +13755,12 @@
 					},
 					"inheritedFrom": {
 						"type": "reference",
-						"target": 1507,
+						"target": 1515,
 						"name": "ResolvedSpanStyle.italic"
 					}
 				},
 				{
-					"id": 1520,
+					"id": 1528,
 					"name": "letterSpacing",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13743,12 +13773,12 @@
 					},
 					"inheritedFrom": {
 						"type": "reference",
-						"target": 1509,
+						"target": 1517,
 						"name": "ResolvedSpanStyle.letterSpacing"
 					}
 				},
 				{
-					"id": 1513,
+					"id": 1521,
 					"name": "lineHeight",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13767,7 +13797,7 @@
 					}
 				},
 				{
-					"id": 1521,
+					"id": 1529,
 					"name": "textTransform",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13803,12 +13833,12 @@
 					},
 					"inheritedFrom": {
 						"type": "reference",
-						"target": 1510,
+						"target": 1518,
 						"name": "ResolvedSpanStyle.textTransform"
 					}
 				},
 				{
-					"id": 1519,
+					"id": 1527,
 					"name": "underline",
 					"variant": "declaration",
 					"kind": 1024,
@@ -13821,7 +13851,7 @@
 					},
 					"inheritedFrom": {
 						"type": "reference",
-						"target": 1508,
+						"target": 1516,
 						"name": "ResolvedSpanStyle.underline"
 					}
 				}
@@ -13830,23 +13860,23 @@
 				{
 					"title": "Properties",
 					"children": [
-						1514,
 						1522,
-						1515,
-						1516,
-						1517,
-						1518,
-						1520,
-						1513,
+						1530,
+						1523,
+						1524,
+						1525,
+						1526,
+						1528,
 						1521,
-						1519
+						1529,
+						1527
 					]
 				}
 			],
 			"extendedTypes": [
 				{
 					"type": "reference",
-					"target": 1503,
+					"target": 1511,
 					"name": "ResolvedSpanStyle",
 					"package": "@anvilkit/canvas-core"
 				}
@@ -14277,7 +14307,7 @@
 			]
 		},
 		{
-			"id": 1470,
+			"id": 1476,
 			"name": "SvgEmitContext",
 			"variant": "declaration",
 			"kind": 256,
@@ -14300,7 +14330,7 @@
 			},
 			"children": [
 				{
-					"id": 1474,
+					"id": 1480,
 					"name": "assets",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14331,7 +14361,7 @@
 					}
 				},
 				{
-					"id": 1473,
+					"id": 1479,
 					"name": "options",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14340,13 +14370,13 @@
 					},
 					"type": {
 						"type": "reference",
-						"target": 1463,
+						"target": 1467,
 						"name": "ResolvedSvgOptions",
 						"package": "@anvilkit/canvas-core"
 					}
 				},
 				{
-					"id": 1472,
+					"id": 1478,
 					"name": "usedFonts",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14371,7 +14401,7 @@
 					}
 				},
 				{
-					"id": 1471,
+					"id": 1477,
 					"name": "warnings",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14382,7 +14412,7 @@
 						"type": "array",
 						"elementType": {
 							"type": "reference",
-							"target": 1459,
+							"target": 1463,
 							"name": "SvgSerializeWarning",
 							"package": "@anvilkit/canvas-core"
 						}
@@ -14393,23 +14423,23 @@
 				{
 					"title": "Properties",
 					"children": [
-						1474,
-						1473,
-						1472,
-						1471
+						1480,
+						1479,
+						1478,
+						1477
 					]
 				}
 			]
 		},
 		{
-			"id": 1475,
+			"id": 1481,
 			"name": "SvgFontFaceDef",
 			"variant": "declaration",
 			"kind": 256,
 			"flags": {},
 			"children": [
 				{
-					"id": 1476,
+					"id": 1482,
 					"name": "family",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14420,7 +14450,7 @@
 					}
 				},
 				{
-					"id": 1477,
+					"id": 1483,
 					"name": "src",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14431,7 +14461,7 @@
 					}
 				},
 				{
-					"id": 1479,
+					"id": 1485,
 					"name": "style",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14444,7 +14474,7 @@
 					}
 				},
 				{
-					"id": 1478,
+					"id": 1484,
 					"name": "weight",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14461,23 +14491,23 @@
 				{
 					"title": "Properties",
 					"children": [
-						1476,
-						1477,
-						1479,
-						1478
+						1482,
+						1483,
+						1485,
+						1484
 					]
 				}
 			]
 		},
 		{
-			"id": 1488,
+			"id": 1494,
 			"name": "SvgSerializeOptions",
 			"variant": "declaration",
 			"kind": 256,
 			"flags": {},
 			"children": [
 				{
-					"id": 1490,
+					"id": 1496,
 					"name": "fetchAsset",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14486,13 +14516,13 @@
 					},
 					"type": {
 						"type": "reference",
-						"target": 1480,
+						"target": 1486,
 						"name": "SvgFetchAsset",
 						"package": "@anvilkit/canvas-core"
 					}
 				},
 				{
-					"id": 1491,
+					"id": 1497,
 					"name": "fonts",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14503,14 +14533,14 @@
 						"type": "array",
 						"elementType": {
 							"type": "reference",
-							"target": 1475,
+							"target": 1481,
 							"name": "SvgFontFaceDef",
 							"package": "@anvilkit/canvas-core"
 						}
 					}
 				},
 				{
-					"id": 1489,
+					"id": 1495,
 					"name": "images",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14519,13 +14549,13 @@
 					},
 					"type": {
 						"type": "reference",
-						"target": 1487,
+						"target": 1493,
 						"name": "SvgImageMode",
 						"package": "@anvilkit/canvas-core"
 					}
 				},
 				{
-					"id": 1495,
+					"id": 1501,
 					"name": "nodeKinds",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14580,7 +14610,7 @@
 					}
 				},
 				{
-					"id": 1493,
+					"id": 1499,
 					"name": "pretty",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14609,7 +14639,50 @@
 					}
 				},
 				{
-					"id": 1492,
+					"id": 1503,
+					"name": "richTextDefaults",
+					"variant": "declaration",
+					"kind": 1024,
+					"flags": {
+						"isOptional": true
+					},
+					"comment": {
+						"summary": [
+							{
+								"kind": "text",
+								"text": "Fallbacks for span style fields a document leaves unset. Merged over the\nbuilt-in defaults, which mirror "
+							},
+							{
+								"kind": "code",
+								"text": "`createText`"
+							},
+							{
+								"kind": "text",
+								"text": "'s."
+							}
+						]
+					},
+					"type": {
+						"type": "reference",
+						"target": {
+							"packageName": "typescript",
+							"packagePath": "lib/lib.es5.d.ts",
+							"qualifiedName": "Partial"
+						},
+						"typeArguments": [
+							{
+								"type": "reference",
+								"target": 1520,
+								"name": "RichTextStyleDefaults",
+								"package": "@anvilkit/canvas-core"
+							}
+						],
+						"name": "Partial",
+						"package": "typescript"
+					}
+				},
+				{
+					"id": 1498,
 					"name": "skipInvisible",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14646,7 +14719,56 @@
 					}
 				},
 				{
-					"id": 1494,
+					"id": 1502,
+					"name": "textMeasurer",
+					"variant": "declaration",
+					"kind": 1024,
+					"flags": {
+						"isOptional": true
+					},
+					"comment": {
+						"summary": [
+							{
+								"kind": "text",
+								"text": "Lays out "
+							},
+							{
+								"kind": "code",
+								"text": "`rich-text`"
+							},
+							{
+								"kind": "text",
+								"text": " paragraphs. Core cannot measure glyphs (no DOM, no font\nmetrics — see "
+							},
+							{
+								"kind": "inline-tag",
+								"tag": "@link",
+								"text": "CanvasTextMeasurer",
+								"target": 1555
+							},
+							{
+								"kind": "text",
+								"text": "), so wrapping is only possible when\nthe host injects its measurer here. The editor's measurer is the same one it\nrenders with, which is what makes an export match what the user saw.\n\nOmit it and rich text still exports deterministically — one line per\nparagraph, flagged with "
+							},
+							{
+								"kind": "code",
+								"text": "`RICH_TEXT_WRAP_APPROXIMATE`"
+							},
+							{
+								"kind": "text",
+								"text": "."
+							}
+						]
+					},
+					"type": {
+						"type": "reference",
+						"target": 1555,
+						"name": "CanvasTextMeasurer",
+						"package": "@anvilkit/canvas-core"
+					}
+				},
+				{
+					"id": 1500,
 					"name": "validate",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14713,26 +14835,28 @@
 				{
 					"title": "Properties",
 					"children": [
-						1490,
-						1491,
-						1489,
+						1496,
+						1497,
 						1495,
-						1493,
-						1492,
-						1494
+						1501,
+						1499,
+						1503,
+						1498,
+						1502,
+						1500
 					]
 				}
 			]
 		},
 		{
-			"id": 1496,
+			"id": 1504,
 			"name": "SvgSerializeResult",
 			"variant": "declaration",
 			"kind": 256,
 			"flags": {},
 			"children": [
 				{
-					"id": 1497,
+					"id": 1505,
 					"name": "svg",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14743,7 +14867,7 @@
 					}
 				},
 				{
-					"id": 1498,
+					"id": 1506,
 					"name": "warnings",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14752,7 +14876,7 @@
 						"type": "array",
 						"elementType": {
 							"type": "reference",
-							"target": 1459,
+							"target": 1463,
 							"name": "SvgSerializeWarning",
 							"package": "@anvilkit/canvas-core"
 						}
@@ -14763,34 +14887,34 @@
 				{
 					"title": "Properties",
 					"children": [
-						1497,
-						1498
+						1505,
+						1506
 					]
 				}
 			]
 		},
 		{
-			"id": 1459,
+			"id": 1463,
 			"name": "SvgSerializeWarning",
 			"variant": "declaration",
 			"kind": 256,
 			"flags": {},
 			"children": [
 				{
-					"id": 1460,
+					"id": 1464,
 					"name": "code",
 					"variant": "declaration",
 					"kind": 1024,
 					"flags": {},
 					"type": {
 						"type": "reference",
-						"target": 1458,
+						"target": 1462,
 						"name": "SvgWarningCode",
 						"package": "@anvilkit/canvas-core"
 					}
 				},
 				{
-					"id": 1461,
+					"id": 1465,
 					"name": "message",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14801,7 +14925,7 @@
 					}
 				},
 				{
-					"id": 1462,
+					"id": 1466,
 					"name": "nodeId",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14818,15 +14942,15 @@
 				{
 					"title": "Properties",
 					"children": [
-						1460,
-						1461,
-						1462
+						1464,
+						1465,
+						1466
 					]
 				}
 			]
 		},
 		{
-			"id": 1523,
+			"id": 1531,
 			"name": "TextMeasureRequest",
 			"variant": "declaration",
 			"kind": 256,
@@ -14841,20 +14965,20 @@
 			},
 			"children": [
 				{
-					"id": 1527,
+					"id": 1535,
 					"name": "defaults",
 					"variant": "declaration",
 					"kind": 1024,
 					"flags": {},
 					"type": {
 						"type": "reference",
-						"target": 1512,
+						"target": 1520,
 						"name": "RichTextStyleDefaults",
 						"package": "@anvilkit/canvas-core"
 					}
 				},
 				{
-					"id": 1524,
+					"id": 1532,
 					"name": "paragraphs",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14874,7 +14998,7 @@
 					}
 				},
 				{
-					"id": 1525,
+					"id": 1533,
 					"name": "width",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14893,7 +15017,7 @@
 					}
 				},
 				{
-					"id": 1526,
+					"id": 1534,
 					"name": "wrap",
 					"variant": "declaration",
 					"kind": 1024,
@@ -14910,10 +15034,10 @@
 				{
 					"title": "Properties",
 					"children": [
-						1527,
-						1524,
-						1525,
-						1526
+						1535,
+						1532,
+						1533,
+						1534
 					]
 				}
 			]
@@ -16683,7 +16807,7 @@
 			}
 		},
 		{
-			"id": 1547,
+			"id": 1555,
 			"name": "CanvasTextMeasurer",
 			"variant": "declaration",
 			"kind": 2097152,
@@ -16699,28 +16823,28 @@
 			"type": {
 				"type": "reflection",
 				"declaration": {
-					"id": 1548,
+					"id": 1556,
 					"name": "__type",
 					"variant": "declaration",
 					"kind": 65536,
 					"flags": {},
 					"signatures": [
 						{
-							"id": 1549,
+							"id": 1557,
 							"name": "__type",
 							"variant": "signature",
 							"kind": 4096,
 							"flags": {},
 							"parameters": [
 								{
-									"id": 1550,
+									"id": 1558,
 									"name": "request",
 									"variant": "param",
 									"kind": 32768,
 									"flags": {},
 									"type": {
 										"type": "reference",
-										"target": 1523,
+										"target": 1531,
 										"name": "TextMeasureRequest",
 										"package": "@anvilkit/canvas-core"
 									}
@@ -16728,7 +16852,7 @@
 							],
 							"type": {
 								"type": "reference",
-								"target": 1543,
+								"target": 1551,
 								"name": "MeasuredText",
 								"package": "@anvilkit/canvas-core"
 							}
@@ -17039,7 +17163,7 @@
 			}
 		},
 		{
-			"id": 1480,
+			"id": 1486,
 			"name": "SvgFetchAsset",
 			"variant": "declaration",
 			"kind": 2097152,
@@ -17055,21 +17179,21 @@
 			"type": {
 				"type": "reflection",
 				"declaration": {
-					"id": 1481,
+					"id": 1487,
 					"name": "__type",
 					"variant": "declaration",
 					"kind": 65536,
 					"flags": {},
 					"signatures": [
 						{
-							"id": 1482,
+							"id": 1488,
 							"name": "__type",
 							"variant": "signature",
 							"kind": 4096,
 							"flags": {},
 							"parameters": [
 								{
-									"id": 1486,
+									"id": 1492,
 									"name": "uri",
 									"variant": "param",
 									"kind": 32768,
@@ -17091,14 +17215,14 @@
 									{
 										"type": "reflection",
 										"declaration": {
-											"id": 1483,
+											"id": 1489,
 											"name": "__type",
 											"variant": "declaration",
 											"kind": 65536,
 											"flags": {},
 											"children": [
 												{
-													"id": 1484,
+													"id": 1490,
 													"name": "bytes",
 													"variant": "declaration",
 													"kind": 1024,
@@ -17115,7 +17239,7 @@
 													}
 												},
 												{
-													"id": 1485,
+													"id": 1491,
 													"name": "contentType",
 													"variant": "declaration",
 													"kind": 1024,
@@ -17130,8 +17254,8 @@
 												{
 													"title": "Properties",
 													"children": [
-														1484,
-														1485
+														1490,
+														1491
 													]
 												}
 											]
@@ -17147,7 +17271,7 @@
 			}
 		},
 		{
-			"id": 1487,
+			"id": 1493,
 			"name": "SvgImageMode",
 			"variant": "declaration",
 			"kind": 2097152,
@@ -17227,7 +17351,7 @@
 			}
 		},
 		{
-			"id": 1458,
+			"id": 1462,
 			"name": "SvgWarningCode",
 			"variant": "declaration",
 			"kind": 2097152,
@@ -17290,6 +17414,14 @@
 					{
 						"type": "literal",
 						"value": "FRAME_PLACEHOLDER_UNRESOLVED"
+					},
+					{
+						"type": "literal",
+						"value": "RICH_TEXT_WRAP_APPROXIMATE"
+					},
+					{
+						"type": "literal",
+						"value": "RICH_TEXT_ELLIPSIS_UNSUPPORTED"
 					}
 				]
 			}
@@ -26137,7 +26269,7 @@
 			"defaultValue": "..."
 		},
 		{
-			"id": 1455,
+			"id": 1459,
 			"name": "DEFAULT_DPI",
 			"variant": "declaration",
 			"kind": 32,
@@ -27962,7 +28094,7 @@
 							"flags": {},
 							"type": {
 								"type": "reference",
-								"target": 1488,
+								"target": 1494,
 								"name": "SvgSerializeOptions",
 								"package": "@anvilkit/canvas-core"
 							},
@@ -28001,7 +28133,7 @@
 					],
 					"type": {
 						"type": "reference",
-						"target": 1470,
+						"target": 1476,
 						"name": "SvgEmitContext",
 						"package": "@anvilkit/canvas-core"
 					}
@@ -28746,7 +28878,7 @@
 							"flags": {},
 							"type": {
 								"type": "reference",
-								"target": 1470,
+								"target": 1476,
 								"name": "SvgEmitContext",
 								"package": "@anvilkit/canvas-core"
 							}
@@ -28794,7 +28926,7 @@
 							"flags": {},
 							"type": {
 								"type": "reference",
-								"target": 1470,
+								"target": 1476,
 								"name": "SvgEmitContext",
 								"package": "@anvilkit/canvas-core"
 							}
@@ -28842,7 +28974,7 @@
 							"flags": {},
 							"type": {
 								"type": "reference",
-								"target": 1470,
+								"target": 1476,
 								"name": "SvgEmitContext",
 								"package": "@anvilkit/canvas-core"
 							}
@@ -28890,7 +29022,111 @@
 							"flags": {},
 							"type": {
 								"type": "reference",
-								"target": 1470,
+								"target": 1476,
+								"name": "SvgEmitContext",
+								"package": "@anvilkit/canvas-core"
+							}
+						}
+					],
+					"type": {
+						"type": "intrinsic",
+						"name": "string"
+					}
+				}
+			]
+		},
+		{
+			"id": 1450,
+			"name": "emitRichText",
+			"variant": "declaration",
+			"kind": 64,
+			"flags": {},
+			"signatures": [
+				{
+					"id": 1451,
+					"name": "emitRichText",
+					"variant": "signature",
+					"kind": 4096,
+					"flags": {},
+					"comment": {
+						"summary": [
+							{
+								"kind": "text",
+								"text": "Rich text → "
+							},
+							{
+								"kind": "code",
+								"text": "`<text>`"
+							},
+							{
+								"kind": "text",
+								"text": " with one "
+							},
+							{
+								"kind": "code",
+								"text": "`<tspan>`"
+							},
+							{
+								"kind": "text",
+								"text": " per line.\n\nWithout a "
+							},
+							{
+								"kind": "code",
+								"text": "`textMeasurer`"
+							},
+							{
+								"kind": "text",
+								"text": " core cannot know where lines break (it has no font\nmetrics), so it lays out ONE LINE PER PARAGRAPH and flags the output with\n"
+							},
+							{
+								"kind": "code",
+								"text": "`RICH_TEXT_WRAP_APPROXIMATE`"
+							},
+							{
+								"kind": "text",
+								"text": ". The result is still fully deterministic — it is\nsimply un-wrapped. With a measurer, the measured line boxes drive the tspan\npositions and the two paths differ only in where the breaks land.\n\nPer-span styling rides on nested "
+							},
+							{
+								"kind": "code",
+								"text": "`<tspan>`"
+							},
+							{
+								"kind": "text",
+								"text": "s, which inherit from the "
+							},
+							{
+								"kind": "code",
+								"text": "`<text>`"
+							},
+							{
+								"kind": "text",
+								"text": "\nelement carrying the resolved defaults."
+							}
+						]
+					},
+					"parameters": [
+						{
+							"id": 1452,
+							"name": "node",
+							"variant": "param",
+							"kind": 32768,
+							"flags": {},
+							"type": {
+								"type": "reference",
+								"target": 922,
+								"name": "CanvasRichTextNode",
+								"package": "@anvilkit/canvas-core"
+							}
+						},
+						{
+							"id": 1453,
+							"name": "ctx",
+							"variant": "param",
+							"kind": 32768,
+							"flags": {},
+							"type": {
+								"type": "reference",
+								"target": 1476,
 								"name": "SvgEmitContext",
 								"package": "@anvilkit/canvas-core"
 							}
@@ -28938,7 +29174,7 @@
 							"flags": {},
 							"type": {
 								"type": "reference",
-								"target": 1470,
+								"target": 1476,
 								"name": "SvgEmitContext",
 								"package": "@anvilkit/canvas-core"
 							}
@@ -30393,7 +30629,7 @@
 							"flags": {},
 							"type": {
 								"type": "reference",
-								"target": 1456,
+								"target": 1460,
 								"name": "NormalizeUriOptions",
 								"package": "@anvilkit/canvas-core"
 							},
@@ -30779,14 +31015,14 @@
 			]
 		},
 		{
-			"id": 1499,
+			"id": 1507,
 			"name": "resolveSpanStyle",
 			"variant": "declaration",
 			"kind": 64,
 			"flags": {},
 			"signatures": [
 				{
-					"id": 1500,
+					"id": 1508,
 					"name": "resolveSpanStyle",
 					"variant": "signature",
 					"kind": 4096,
@@ -30801,7 +31037,7 @@
 					},
 					"parameters": [
 						{
-							"id": 1501,
+							"id": 1509,
 							"name": "span",
 							"variant": "param",
 							"kind": 32768,
@@ -30814,14 +31050,14 @@
 							}
 						},
 						{
-							"id": 1502,
+							"id": 1510,
 							"name": "defaults",
 							"variant": "param",
 							"kind": 32768,
 							"flags": {},
 							"type": {
 								"type": "reference",
-								"target": 1512,
+								"target": 1520,
 								"name": "RichTextStyleDefaults",
 								"package": "@anvilkit/canvas-core"
 							}
@@ -30829,7 +31065,7 @@
 					],
 					"type": {
 						"type": "reference",
-						"target": 1503,
+						"target": 1511,
 						"name": "ResolvedSpanStyle",
 						"package": "@anvilkit/canvas-core"
 					}
@@ -31074,14 +31310,14 @@
 			]
 		},
 		{
-			"id": 1450,
+			"id": 1454,
 			"name": "serializePageToSvg",
 			"variant": "declaration",
 			"kind": 64,
 			"flags": {},
 			"signatures": [
 				{
-					"id": 1451,
+					"id": 1455,
 					"name": "serializePageToSvg",
 					"variant": "signature",
 					"kind": 4096,
@@ -31122,7 +31358,7 @@
 					},
 					"parameters": [
 						{
-							"id": 1452,
+							"id": 1456,
 							"name": "ir",
 							"variant": "param",
 							"kind": 32768,
@@ -31135,7 +31371,7 @@
 							}
 						},
 						{
-							"id": 1453,
+							"id": 1457,
 							"name": "pageSelector",
 							"variant": "param",
 							"kind": 32768,
@@ -31155,14 +31391,14 @@
 							}
 						},
 						{
-							"id": 1454,
+							"id": 1458,
 							"name": "options",
 							"variant": "param",
 							"kind": 32768,
 							"flags": {},
 							"type": {
 								"type": "reference",
-								"target": 1488,
+								"target": 1494,
 								"name": "SvgSerializeOptions",
 								"package": "@anvilkit/canvas-core"
 							},
@@ -31179,7 +31415,7 @@
 						"typeArguments": [
 							{
 								"type": "reference",
-								"target": 1496,
+								"target": 1504,
 								"name": "SvgSerializeResult",
 								"package": "@anvilkit/canvas-core"
 							}
@@ -31550,7 +31786,7 @@
 								"kind": "inline-tag",
 								"tag": "@link",
 								"text": "DEFAULT_DPI",
-								"target": 1455
+								"target": 1459
 							},
 							{
 								"kind": "text",
@@ -32047,11 +32283,11 @@
 				740,
 				650,
 				402,
-				1535,
-				1528,
 				1543,
+				1536,
+				1551,
 				669,
-				1456,
+				1460,
 				1351,
 				1364,
 				1368,
@@ -32060,21 +32296,21 @@
 				657,
 				676,
 				683,
-				1503,
-				1463,
+				1511,
+				1467,
 				918,
 				908,
-				1512,
+				1520,
 				423,
 				434,
 				417,
 				439,
-				1470,
-				1475,
-				1488,
-				1496,
-				1459,
-				1523,
+				1476,
+				1481,
+				1494,
+				1504,
+				1463,
+				1531,
 				114,
 				662,
 				456,
@@ -32109,7 +32345,7 @@
 				972,
 				706,
 				707,
-				1547,
+				1555,
 				704,
 				276,
 				799,
@@ -32119,9 +32355,9 @@
 				907,
 				906,
 				422,
-				1480,
-				1487,
-				1458,
+				1486,
+				1493,
+				1462,
 				1344
 			]
 		},
@@ -32161,7 +32397,7 @@
 				1006,
 				1089,
 				995,
-				1455,
+				1459,
 				443,
 				1240,
 				1001,
@@ -32203,6 +32439,7 @@
 				1438,
 				1442,
 				1430,
+				1450,
 				1446,
 				1386,
 				1389,
@@ -32232,11 +32469,11 @@
 				622,
 				635,
 				639,
-				1499,
+				1507,
 				1405,
 				452,
 				1359,
-				1450,
+				1454,
 				1426,
 				343,
 				1419,
@@ -39506,504 +39743,544 @@
 		"1450": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "serializePageToSvg"
+			"qualifiedName": "emitRichText"
 		},
 		"1451": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "serializePageToSvg"
+			"qualifiedName": "emitRichText"
 		},
 		"1452": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "ir"
+			"qualifiedName": "node"
 		},
 		"1453": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "pageSelector"
+			"qualifiedName": "ctx"
 		},
 		"1454": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "options"
+			"qualifiedName": "serializePageToSvg"
 		},
 		"1455": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "DEFAULT_DPI"
+			"qualifiedName": "serializePageToSvg"
 		},
 		"1456": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "NormalizeUriOptions"
+			"qualifiedName": "ir"
 		},
 		"1457": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "NormalizeUriOptions.allowSafeDataImage"
+			"qualifiedName": "pageSelector"
 		},
 		"1458": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgWarningCode"
+			"qualifiedName": "options"
 		},
 		"1459": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeWarning"
+			"qualifiedName": "DEFAULT_DPI"
 		},
 		"1460": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeWarning.code"
+			"qualifiedName": "NormalizeUriOptions"
 		},
 		"1461": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeWarning.message"
+			"qualifiedName": "NormalizeUriOptions.allowSafeDataImage"
 		},
 		"1462": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeWarning.nodeId"
+			"qualifiedName": "SvgWarningCode"
 		},
 		"1463": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "ResolvedSvgOptions"
+			"qualifiedName": "SvgSerializeWarning"
 		},
 		"1464": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "ResolvedSvgOptions.images"
+			"qualifiedName": "SvgSerializeWarning.code"
 		},
 		"1465": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "ResolvedSvgOptions.skipInvisible"
+			"qualifiedName": "SvgSerializeWarning.message"
 		},
 		"1466": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "ResolvedSvgOptions.pretty"
+			"qualifiedName": "SvgSerializeWarning.nodeId"
 		},
 		"1467": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "ResolvedSvgOptions.fonts"
+			"qualifiedName": "ResolvedSvgOptions"
 		},
 		"1468": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "ResolvedSvgOptions.fetchAsset"
+			"qualifiedName": "ResolvedSvgOptions.images"
 		},
 		"1469": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "ResolvedSvgOptions.nodeKinds"
+			"qualifiedName": "ResolvedSvgOptions.skipInvisible"
 		},
 		"1470": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgEmitContext"
+			"qualifiedName": "ResolvedSvgOptions.pretty"
 		},
 		"1471": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgEmitContext.warnings"
+			"qualifiedName": "ResolvedSvgOptions.fonts"
 		},
 		"1472": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgEmitContext.usedFonts"
+			"qualifiedName": "ResolvedSvgOptions.richTextDefaults"
 		},
 		"1473": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgEmitContext.options"
+			"qualifiedName": "ResolvedSvgOptions.fetchAsset"
 		},
 		"1474": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgEmitContext.assets"
+			"qualifiedName": "ResolvedSvgOptions.nodeKinds"
 		},
 		"1475": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgFontFaceDef"
+			"qualifiedName": "ResolvedSvgOptions.textMeasurer"
 		},
 		"1476": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgFontFaceDef.family"
+			"qualifiedName": "SvgEmitContext"
 		},
 		"1477": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgFontFaceDef.src"
+			"qualifiedName": "SvgEmitContext.warnings"
 		},
 		"1478": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgFontFaceDef.weight"
+			"qualifiedName": "SvgEmitContext.usedFonts"
 		},
 		"1479": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgFontFaceDef.style"
+			"qualifiedName": "SvgEmitContext.options"
 		},
 		"1480": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgFetchAsset"
+			"qualifiedName": "SvgEmitContext.assets"
 		},
 		"1481": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "__type"
+			"qualifiedName": "SvgFontFaceDef"
 		},
 		"1482": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "__type"
+			"qualifiedName": "SvgFontFaceDef.family"
 		},
 		"1483": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "__type"
+			"qualifiedName": "SvgFontFaceDef.src"
 		},
 		"1484": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "__type.bytes"
+			"qualifiedName": "SvgFontFaceDef.weight"
 		},
 		"1485": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "__type.contentType"
+			"qualifiedName": "SvgFontFaceDef.style"
 		},
 		"1486": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "uri"
+			"qualifiedName": "SvgFetchAsset"
 		},
 		"1487": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgImageMode"
+			"qualifiedName": "__type"
 		},
 		"1488": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeOptions"
+			"qualifiedName": "__type"
 		},
 		"1489": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeOptions.images"
+			"qualifiedName": "__type"
 		},
 		"1490": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeOptions.fetchAsset"
+			"qualifiedName": "__type.bytes"
 		},
 		"1491": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeOptions.fonts"
+			"qualifiedName": "__type.contentType"
 		},
 		"1492": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeOptions.skipInvisible"
+			"qualifiedName": "uri"
 		},
 		"1493": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeOptions.pretty"
+			"qualifiedName": "SvgImageMode"
 		},
 		"1494": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeOptions.validate"
+			"qualifiedName": "SvgSerializeOptions"
 		},
 		"1495": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeOptions.nodeKinds"
+			"qualifiedName": "SvgSerializeOptions.images"
 		},
 		"1496": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeResult"
+			"qualifiedName": "SvgSerializeOptions.fetchAsset"
 		},
 		"1497": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeResult.svg"
+			"qualifiedName": "SvgSerializeOptions.fonts"
 		},
 		"1498": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/serialize/svg.ts",
-			"qualifiedName": "SvgSerializeResult.warnings"
+			"qualifiedName": "SvgSerializeOptions.skipInvisible"
 		},
 		"1499": {
 			"packageName": "@anvilkit/canvas-core",
-			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "resolveSpanStyle"
+			"packagePath": "src/serialize/svg.ts",
+			"qualifiedName": "SvgSerializeOptions.pretty"
 		},
 		"1500": {
 			"packageName": "@anvilkit/canvas-core",
-			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "resolveSpanStyle"
+			"packagePath": "src/serialize/svg.ts",
+			"qualifiedName": "SvgSerializeOptions.validate"
 		},
 		"1501": {
 			"packageName": "@anvilkit/canvas-core",
-			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "span"
+			"packagePath": "src/serialize/svg.ts",
+			"qualifiedName": "SvgSerializeOptions.nodeKinds"
 		},
 		"1502": {
 			"packageName": "@anvilkit/canvas-core",
-			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "defaults"
+			"packagePath": "src/serialize/svg.ts",
+			"qualifiedName": "SvgSerializeOptions.textMeasurer"
 		},
 		"1503": {
 			"packageName": "@anvilkit/canvas-core",
-			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle"
+			"packagePath": "src/serialize/svg.ts",
+			"qualifiedName": "SvgSerializeOptions.richTextDefaults"
 		},
 		"1504": {
 			"packageName": "@anvilkit/canvas-core",
-			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.fontFamily"
+			"packagePath": "src/serialize/svg.ts",
+			"qualifiedName": "SvgSerializeResult"
 		},
 		"1505": {
 			"packageName": "@anvilkit/canvas-core",
-			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.fontSize"
+			"packagePath": "src/serialize/svg.ts",
+			"qualifiedName": "SvgSerializeResult.svg"
 		},
 		"1506": {
 			"packageName": "@anvilkit/canvas-core",
-			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.fontWeight"
+			"packagePath": "src/serialize/svg.ts",
+			"qualifiedName": "SvgSerializeResult.warnings"
 		},
 		"1507": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.italic"
+			"qualifiedName": "resolveSpanStyle"
 		},
 		"1508": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.underline"
+			"qualifiedName": "resolveSpanStyle"
 		},
 		"1509": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.letterSpacing"
+			"qualifiedName": "span"
 		},
 		"1510": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.textTransform"
+			"qualifiedName": "defaults"
 		},
 		"1511": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.fill"
+			"qualifiedName": "ResolvedSpanStyle"
 		},
 		"1512": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "RichTextStyleDefaults"
+			"qualifiedName": "ResolvedSpanStyle.fontFamily"
 		},
 		"1513": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "RichTextStyleDefaults.lineHeight"
+			"qualifiedName": "ResolvedSpanStyle.fontSize"
 		},
 		"1514": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "RichTextStyleDefaults.align"
+			"qualifiedName": "ResolvedSpanStyle.fontWeight"
 		},
 		"1515": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.fontFamily"
+			"qualifiedName": "ResolvedSpanStyle.italic"
 		},
 		"1516": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.fontSize"
+			"qualifiedName": "ResolvedSpanStyle.underline"
 		},
 		"1517": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.fontWeight"
+			"qualifiedName": "ResolvedSpanStyle.letterSpacing"
 		},
 		"1518": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.italic"
+			"qualifiedName": "ResolvedSpanStyle.textTransform"
 		},
 		"1519": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.underline"
+			"qualifiedName": "ResolvedSpanStyle.fill"
 		},
 		"1520": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.letterSpacing"
+			"qualifiedName": "RichTextStyleDefaults"
 		},
 		"1521": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.textTransform"
+			"qualifiedName": "RichTextStyleDefaults.lineHeight"
 		},
 		"1522": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "ResolvedSpanStyle.fill"
+			"qualifiedName": "RichTextStyleDefaults.align"
 		},
 		"1523": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "TextMeasureRequest"
+			"qualifiedName": "ResolvedSpanStyle.fontFamily"
 		},
 		"1524": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "TextMeasureRequest.paragraphs"
+			"qualifiedName": "ResolvedSpanStyle.fontSize"
 		},
 		"1525": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "TextMeasureRequest.width"
+			"qualifiedName": "ResolvedSpanStyle.fontWeight"
 		},
 		"1526": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "TextMeasureRequest.wrap"
+			"qualifiedName": "ResolvedSpanStyle.italic"
 		},
 		"1527": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "TextMeasureRequest.defaults"
+			"qualifiedName": "ResolvedSpanStyle.underline"
 		},
 		"1528": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredRun"
+			"qualifiedName": "ResolvedSpanStyle.letterSpacing"
 		},
 		"1529": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredRun.paragraphIndex"
+			"qualifiedName": "ResolvedSpanStyle.textTransform"
 		},
 		"1530": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredRun.spanIndex"
+			"qualifiedName": "ResolvedSpanStyle.fill"
 		},
 		"1531": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredRun.start"
+			"qualifiedName": "TextMeasureRequest"
 		},
 		"1532": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredRun.text"
+			"qualifiedName": "TextMeasureRequest.paragraphs"
 		},
 		"1533": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredRun.x"
+			"qualifiedName": "TextMeasureRequest.width"
 		},
 		"1534": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredRun.width"
+			"qualifiedName": "TextMeasureRequest.wrap"
 		},
 		"1535": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredLine"
+			"qualifiedName": "TextMeasureRequest.defaults"
 		},
 		"1536": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredLine.paragraphIndex"
+			"qualifiedName": "MeasuredRun"
 		},
 		"1537": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredLine.runs"
+			"qualifiedName": "MeasuredRun.paragraphIndex"
 		},
 		"1538": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredLine.x"
+			"qualifiedName": "MeasuredRun.spanIndex"
 		},
 		"1539": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredLine.y"
+			"qualifiedName": "MeasuredRun.start"
 		},
 		"1540": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredLine.width"
+			"qualifiedName": "MeasuredRun.text"
 		},
 		"1541": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredLine.height"
+			"qualifiedName": "MeasuredRun.x"
 		},
 		"1542": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredLine.baseline"
+			"qualifiedName": "MeasuredRun.width"
 		},
 		"1543": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredText"
+			"qualifiedName": "MeasuredLine"
 		},
 		"1544": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredText.lines"
+			"qualifiedName": "MeasuredLine.paragraphIndex"
 		},
 		"1545": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredText.width"
+			"qualifiedName": "MeasuredLine.runs"
 		},
 		"1546": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "MeasuredText.height"
+			"qualifiedName": "MeasuredLine.x"
 		},
 		"1547": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "CanvasTextMeasurer"
+			"qualifiedName": "MeasuredLine.y"
 		},
 		"1548": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "__type"
+			"qualifiedName": "MeasuredLine.width"
 		},
 		"1549": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
-			"qualifiedName": "__type"
+			"qualifiedName": "MeasuredLine.height"
 		},
 		"1550": {
+			"packageName": "@anvilkit/canvas-core",
+			"packagePath": "src/text-contracts.ts",
+			"qualifiedName": "MeasuredLine.baseline"
+		},
+		"1551": {
+			"packageName": "@anvilkit/canvas-core",
+			"packagePath": "src/text-contracts.ts",
+			"qualifiedName": "MeasuredText"
+		},
+		"1552": {
+			"packageName": "@anvilkit/canvas-core",
+			"packagePath": "src/text-contracts.ts",
+			"qualifiedName": "MeasuredText.lines"
+		},
+		"1553": {
+			"packageName": "@anvilkit/canvas-core",
+			"packagePath": "src/text-contracts.ts",
+			"qualifiedName": "MeasuredText.width"
+		},
+		"1554": {
+			"packageName": "@anvilkit/canvas-core",
+			"packagePath": "src/text-contracts.ts",
+			"qualifiedName": "MeasuredText.height"
+		},
+		"1555": {
+			"packageName": "@anvilkit/canvas-core",
+			"packagePath": "src/text-contracts.ts",
+			"qualifiedName": "CanvasTextMeasurer"
+		},
+		"1556": {
+			"packageName": "@anvilkit/canvas-core",
+			"packagePath": "src/text-contracts.ts",
+			"qualifiedName": "__type"
+		},
+		"1557": {
+			"packageName": "@anvilkit/canvas-core",
+			"packagePath": "src/text-contracts.ts",
+			"qualifiedName": "__type"
+		},
+		"1558": {
 			"packageName": "@anvilkit/canvas-core",
 			"packagePath": "src/text-contracts.ts",
 			"qualifiedName": "request"
