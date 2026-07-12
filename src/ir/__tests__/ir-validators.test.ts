@@ -7,6 +7,7 @@ import type {
 	CanvasNode,
 	CanvasPage,
 	CanvasRectNode,
+	CanvasRichTextNode,
 	CanvasTextNode,
 } from "../types.js";
 import {
@@ -19,6 +20,7 @@ import {
 	CanvasNodeSchema,
 	CanvasPageSchema,
 	CanvasRectNodeSchema,
+	CanvasRichTextNodeSchema,
 	CanvasTextNodeSchema,
 	CanvasTransformSchema,
 	migrateCanvasIR,
@@ -53,6 +55,16 @@ const makeText = (id: string, text: string): CanvasTextNode => ({
 	fontFamily: "Inter",
 	fontSize: 16,
 	fill: "#000000",
+});
+
+const makeRichText = (id: string): CanvasRichTextNode => ({
+	id,
+	type: "rich-text",
+	transform: identityTransform,
+	bounds: { width: 200, height: 60 },
+	zIndex: 0,
+	width: 200,
+	paragraphs: [{ spans: [{ text: "hi" }] }],
 });
 
 const makeImage = (id: string, assetId: string): CanvasImageNode => ({
@@ -148,7 +160,7 @@ describe("CanvasIRSchema", () => {
 });
 
 describe("CanvasNodeSchema discriminated union", () => {
-	it("accepts each of the 9 node kinds", () => {
+	it("accepts each of the 10 node kinds", () => {
 		const nodes: CanvasNode[] = [
 			makeGroup("g1", []),
 			makeFrame("f1", []),
@@ -178,6 +190,7 @@ describe("CanvasNodeSchema discriminated union", () => {
 				d: "M 0 0 L 10 10",
 			},
 			makeText("t1", "hi"),
+			makeRichText("rt1"),
 			makeImage("i1", "a1"),
 			{
 				id: "ai1",
@@ -438,5 +451,124 @@ describe("migrateCanvasIR (migration seam)", () => {
 	it("throws for non-object / version-less input", () => {
 		expect(() => migrateCanvasIR(null)).toThrow(/Unsupported CanvasIR version/);
 		expect(() => migrateCanvasIR(42)).toThrow(/Unsupported CanvasIR version/);
+	});
+});
+
+describe("CanvasRichTextNodeSchema", () => {
+	const base = makeRichText("rt1");
+
+	it("accepts a minimal rich-text node", () => {
+		expect(CanvasRichTextNodeSchema.safeParse(base).success).toBe(true);
+	});
+
+	it("accepts every field populated", () => {
+		const full: CanvasRichTextNode = {
+			...base,
+			name: "Heading",
+			height: 80,
+			overflow: "ellipsis",
+			wrap: "word",
+			paragraphs: [
+				{
+					align: "center",
+					lineHeight: 1.4,
+					spans: [
+						{
+							text: "Hello",
+							fontFamily: "Inter",
+							fontSize: 24,
+							fontWeight: "700",
+							italic: true,
+							underline: true,
+							letterSpacing: -0.5,
+							textTransform: "uppercase",
+							fill: "#ff0000",
+						},
+						{
+							text: " world",
+							fill: {
+								kind: "linear",
+								from: { x: 0, y: 0 },
+								to: { x: 1, y: 0 },
+								stops: [
+									{ offset: 0, color: "#000" },
+									{ offset: 1, color: "#fff" },
+								],
+							},
+						},
+					],
+				},
+				{ spans: [] },
+			],
+		};
+		expect(CanvasRichTextNodeSchema.safeParse(full).success).toBe(true);
+	});
+
+	// An empty span is how an editor represents a caret in a freshly-split
+	// paragraph, and an empty paragraph list must not be a parse error either.
+	it("accepts empty spans and empty paragraph lists", () => {
+		expect(
+			CanvasRichTextNodeSchema.safeParse({
+				...base,
+				paragraphs: [{ spans: [{ text: "" }] }],
+			}).success,
+		).toBe(true);
+		expect(
+			CanvasRichTextNodeSchema.safeParse({ ...base, paragraphs: [] }).success,
+		).toBe(true);
+	});
+
+	// letterSpacing tightens as well as loosens, so it must admit negatives —
+	// unlike fontSize/width/height, which are non-negative.
+	it("allows negative letterSpacing but rejects a negative fontSize", () => {
+		const neg = (span: Record<string, unknown>) =>
+			CanvasRichTextNodeSchema.safeParse({
+				...base,
+				paragraphs: [{ spans: [{ text: "x", ...span }] }],
+			}).success;
+		expect(neg({ letterSpacing: -2 })).toBe(true);
+		expect(neg({ fontSize: -2 })).toBe(false);
+	});
+
+	it("rejects each invalid field", () => {
+		const bad: Array<Record<string, unknown>> = [
+			{ width: -1 },
+			{ width: Number.POSITIVE_INFINITY },
+			{ height: -1 },
+			{ paragraphs: "nope" },
+			{ paragraphs: [{ spans: [{ text: 42 }] }] },
+			{ paragraphs: [{ spans: [{ text: "x" }], lineHeight: -1 }] },
+			{ paragraphs: [{ spans: [{ text: "x" }], align: "justify" }] },
+			{ paragraphs: [{ spans: [{ text: "x", textTransform: "smallcaps" }] }] },
+			{ overflow: "scroll" },
+			{ wrap: "anywhere" },
+		];
+		for (const patch of bad) {
+			expect(
+				CanvasRichTextNodeSchema.safeParse({ ...base, ...patch }).success,
+				`expected ${JSON.stringify(patch)} to be rejected`,
+			).toBe(false);
+		}
+	});
+
+	// The looseObject posture is the CRDT/forward-compat contract: a newer peer's
+	// extra fields must survive an older build's round-trip, not be stripped.
+	it("preserves unknown fields through a round-trip", () => {
+		const withExtra = {
+			...base,
+			futureField: "keep me",
+			paragraphs: [
+				{ spans: [{ text: "hi", futureSpanField: 7 }], futureParaField: true },
+			],
+		};
+		const parsed = CanvasRichTextNodeSchema.parse(withExtra);
+		expect(parsed).toEqual(withExtra);
+	});
+
+	it("round-trips through JSON unchanged", () => {
+		const parsed = CanvasRichTextNodeSchema.parse(
+			JSON.parse(JSON.stringify(base)),
+		);
+		expect(parsed).toEqual(base);
 	});
 });

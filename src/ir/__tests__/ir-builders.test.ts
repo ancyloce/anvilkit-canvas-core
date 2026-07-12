@@ -9,6 +9,7 @@ import {
 	createPage,
 	createPath,
 	createRect,
+	createRichText,
 	createText,
 } from "../builders.js";
 import {
@@ -21,6 +22,7 @@ import {
 	CanvasPageSchema,
 	CanvasPathNodeSchema,
 	CanvasRectNodeSchema,
+	CanvasRichTextNodeSchema,
 	CanvasTextNodeSchema,
 } from "../validators.js";
 
@@ -255,5 +257,89 @@ describe("createImage", () => {
 		});
 		expect(CanvasImageNodeSchema.safeParse(i).success).toBe(true);
 		expect(i.assetId).toBe("asset-1");
+	});
+});
+
+describe("createRichText", () => {
+	it("produces a schema-valid node from bounds alone", () => {
+		const rt = createRichText({ bounds: { width: 200, height: 60 } });
+		expect(CanvasRichTextNodeSchema.safeParse(rt).success).toBe(true);
+		expect(rt.type).toBe("rich-text");
+		expect(rt.zIndex).toBe(0);
+	});
+
+	// An empty `paragraphs: []` has no caret position, so an editor would have to
+	// special-case it before the user can type. One empty paragraph is the
+	// natural "empty text block".
+	it("defaults to a single empty paragraph, not an empty paragraph list", () => {
+		expect(
+			createRichText({ bounds: { width: 10, height: 10 } }).paragraphs,
+		).toEqual([{ spans: [] }]);
+	});
+
+	it("defaults the wrap width to bounds.width", () => {
+		expect(createRichText({ bounds: { width: 320, height: 60 } }).width).toBe(
+			320,
+		);
+	});
+
+	it("lets width diverge from bounds.width when asked", () => {
+		const rt = createRichText({
+			bounds: { width: 320, height: 60 },
+			width: 200,
+		});
+		expect(rt.width).toBe(200);
+		expect(rt.bounds.width).toBe(320);
+	});
+
+	it("omits every optional field rather than emitting `undefined` values", () => {
+		const rt = createRichText({ bounds: { width: 10, height: 10 } });
+		const keys = Object.keys(rt);
+		expect(keys).not.toContain("name");
+		expect(keys).not.toContain("height");
+		expect(keys).not.toContain("overflow");
+		expect(keys).not.toContain("wrap");
+		// JSON round-trip is the real contract — an explicit `undefined` would be
+		// dropped by JSON but would still differ under a deep-equal comparison.
+		expect(JSON.parse(JSON.stringify(rt))).toEqual(rt);
+	});
+
+	it("carries every field through", () => {
+		const rt = createRichText({
+			id: "rt-1",
+			name: "Heading",
+			transform: { x: 5, y: 6 },
+			bounds: { width: 200, height: 60 },
+			zIndex: 3,
+			width: 180,
+			height: 50,
+			overflow: "ellipsis",
+			wrap: "character",
+			paragraphs: [{ align: "center", spans: [{ text: "hi" }] }],
+		});
+		expect(rt).toMatchObject({
+			id: "rt-1",
+			name: "Heading",
+			zIndex: 3,
+			width: 180,
+			height: 50,
+			overflow: "ellipsis",
+			wrap: "character",
+		});
+		expect(rt.transform).toEqual({
+			x: 5,
+			y: 6,
+			rotation: 0,
+			scaleX: 1,
+			scaleY: 1,
+		});
+		expect(rt.paragraphs[0]?.spans[0]?.text).toBe("hi");
+	});
+
+	it("generates a unique id when none is given", () => {
+		const a = createRichText({ bounds: { width: 10, height: 10 } });
+		const b = createRichText({ bounds: { width: 10, height: 10 } });
+		expect(a.id).not.toBe(b.id);
+		expect(a.id).toBeTruthy();
 	});
 });
