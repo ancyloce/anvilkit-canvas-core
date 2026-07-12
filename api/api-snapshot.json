@@ -15313,6 +15313,10 @@
 					{
 						"type": "literal",
 						"value": "CUSTOM_KIND"
+					},
+					{
+						"type": "literal",
+						"value": "FRAME_PLACEHOLDER_UNRESOLVED"
 					}
 				]
 			}
