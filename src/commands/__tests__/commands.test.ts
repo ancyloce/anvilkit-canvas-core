@@ -6,6 +6,7 @@ import {
 	createImage,
 	createPage,
 	createRect,
+	createRichText,
 	createText,
 } from "../../ir/builders.js";
 import type {
@@ -13,8 +14,10 @@ import type {
 	CanvasImageNode,
 	CanvasIR,
 	CanvasRectNode,
+	CanvasRichTextNode,
 } from "../../ir/types.js";
 import { findNode } from "../../ir/walkers.js";
+import { commandToChange } from "../change-events.js";
 import { applyCommand, CanvasCommandError } from "../runtime.js";
 import type {
 	CanvasAnyNodeUpdateCommand,
@@ -1214,9 +1217,11 @@ describe("applyCommand: node.update inverse restores absent optionals (P3-1)", (
 			patch: { stroke: "#000" },
 		};
 		const applied = applyCommand(ir, cmd, { now });
-		expect((findNode(applied.ir, "rectA")?.node as CanvasRectNode).stroke).toBe(
-			"#000",
-		);
+		const updated = findNode(applied.ir, "rectA")?.node as
+			| CanvasRectNode
+			| undefined;
+		if (!updated) throw new Error("expected rectA to exist after the update");
+		expect(updated.stroke).toBe("#000");
 
 		const undone = applyCommand(applied.ir, applied.inverse, { now });
 		const restored = findNode(undone.ir, "rectA")?.node as CanvasRectNode;
@@ -1250,5 +1255,166 @@ describe("applyCommand: node.group transform-aware bounds (P3-2)", () => {
 		const group = findNode(result.ir, "grp")?.node as CanvasGroupNode;
 		expect(Math.round(group.bounds.width)).toBe(40);
 		expect(Math.round(group.bounds.height)).toBe(100);
+	});
+});
+
+describe("applyCommand: node.update over rich-text paragraphs", () => {
+	/**
+	 * `paragraphs` is the first ARRAY-valued patch key any built-in kind has. The
+	 * inverse capture in `applyNodeUpdate` is a shallow, top-level key copy — it
+	 * stores a *reference* to the prior array — and `mergeNodePatch` is a shallow
+	 * spread that REPLACES the array rather than mutating it. Together those two
+	 * facts make undo correct, but only so long as nobody mutates an array that is
+	 * (or was) inside the IR.
+	 *
+	 * Hence the contract, which these tests pin: **never mutate a paragraph array
+	 * in place.** Build a new one and patch with that. An editor that did
+	 * `node.paragraphs.push(p)` and then dispatched `node.update` with the same
+	 * array would corrupt undo silently — the "prior" value the inverse captured
+	 * would be the very array it was meant to restore.
+	 */
+	function richFixture(): CanvasIR {
+		const rt = createRichText({
+			id: "rt1",
+			bounds: { width: 200, height: 60 },
+			paragraphs: [{ spans: [{ text: "hello" }] }],
+		});
+		const page = createPage({ id: "pg" });
+		page.root = createGroup({
+			id: "pg-root",
+			bounds: { width: 500, height: 500 },
+			children: [rt],
+		});
+		return createCanvasIR({ id: "doc", title: "t", pages: [page], now });
+	}
+
+	const richTextAt = (ir: CanvasIR, id = "rt1"): CanvasRichTextNode => {
+		const found = findNode(ir, id);
+		if (!found || found.node.type !== "rich-text") {
+			throw new Error(`expected a rich-text node "${id}"`);
+		}
+		return found.node;
+	};
+
+	const update = (
+		paragraphs: CanvasRichTextNode["paragraphs"],
+	): CanvasAnyNodeUpdateCommand => ({
+		type: "node.update",
+		nodeId: "rt1",
+		kind: "rich-text",
+		patch: { paragraphs },
+	});
+
+	it("replaces the whole paragraph array and undoes back to the original IR", () => {
+		const ir = richFixture();
+		const before = snapshot(ir);
+
+		const applied = applyCommand(
+			ir,
+			update([
+				{ align: "center", spans: [{ text: "goodbye", fontSize: 24 }] },
+				{ spans: [{ text: "second" }] },
+			]),
+			{ now },
+		);
+		expect(richTextAt(applied.ir).paragraphs).toHaveLength(2);
+		expect(richTextAt(applied.ir).paragraphs[0]?.spans[0]?.text).toBe(
+			"goodbye",
+		);
+
+		const undone = applyCommand(applied.ir, applied.inverse, { now });
+		expect(snapshot(undone.ir)).toBe(before);
+	});
+
+	it("does not mutate the source IR's paragraph array", () => {
+		const ir = richFixture();
+		const original = richTextAt(ir).paragraphs;
+		applyCommand(ir, update([{ spans: [{ text: "changed" }] }]), { now });
+		// Structural sharing means the OLD node object must still hold the OLD array.
+		expect(original).toEqual([{ spans: [{ text: "hello" }] }]);
+		expect(richTextAt(ir).paragraphs[0]?.spans[0]?.text).toBe("hello");
+	});
+
+	it("round-trips adding a span", () => {
+		const ir = richFixture();
+		const before = snapshot(ir);
+		const applied = applyCommand(
+			ir,
+			update([
+				{ spans: [{ text: "hello" }, { text: " world", italic: true }] },
+			]),
+			{ now },
+		);
+		expect(richTextAt(applied.ir).paragraphs[0]?.spans).toHaveLength(2);
+		const undone = applyCommand(applied.ir, applied.inverse, { now });
+		expect(snapshot(undone.ir)).toBe(before);
+	});
+
+	it("round-trips removing every paragraph", () => {
+		const ir = richFixture();
+		const before = snapshot(ir);
+		const applied = applyCommand(ir, update([]), { now });
+		expect(richTextAt(applied.ir).paragraphs).toEqual([]);
+		const undone = applyCommand(applied.ir, applied.inverse, { now });
+		expect(snapshot(undone.ir)).toBe(before);
+	});
+
+	it("round-trips the non-paragraph fields too (width / overflow / wrap)", () => {
+		const ir = richFixture();
+		const before = snapshot(ir);
+		const applied = applyCommand(
+			ir,
+			{
+				type: "node.update",
+				nodeId: "rt1",
+				kind: "rich-text",
+				patch: { width: 320, overflow: "ellipsis", wrap: "character" },
+			},
+			{ now },
+		);
+		expect(richTextAt(applied.ir)).toMatchObject({
+			width: 320,
+			overflow: "ellipsis",
+			wrap: "character",
+		});
+
+		const undone = applyCommand(applied.ir, applied.inverse, { now });
+		// `overflow`/`wrap` were ABSENT before, so undo must delete the keys rather
+		// than leave them as `key: undefined`.
+		const restored = richTextAt(undone.ir);
+		expect("overflow" in restored).toBe(false);
+		expect("wrap" in restored).toBe(false);
+		expect(snapshot(undone.ir)).toBe(before);
+	});
+
+	it("survives a batch of successive paragraph edits, undone as one composite", () => {
+		const ir = richFixture();
+		const before = snapshot(ir);
+		const applied = applyCommand(
+			ir,
+			{
+				type: "batch",
+				label: "Type",
+				commands: [
+					update([{ spans: [{ text: "h" }] }]),
+					update([{ spans: [{ text: "he" }] }]),
+					update([{ spans: [{ text: "hel" }] }]),
+				],
+			},
+			{ now },
+		);
+		expect(richTextAt(applied.ir).paragraphs[0]?.spans[0]?.text).toBe("hel");
+
+		const undone = applyCommand(applied.ir, applied.inverse, { now });
+		expect(snapshot(undone.ir)).toBe(before);
+	});
+
+	it("emits an `updated` change naming the patched keys", () => {
+		const change = commandToChange(update([{ spans: [{ text: "x" }] }]));
+		expect(change).toEqual({
+			kind: "updated",
+			nodeId: "rt1",
+			keys: ["paragraphs"],
+		});
 	});
 });
