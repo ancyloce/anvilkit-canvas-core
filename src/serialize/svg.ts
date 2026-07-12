@@ -19,15 +19,25 @@ import type {
 	CanvasPage,
 	CanvasPathNode,
 	CanvasRectNode,
+	CanvasRichTextNode,
 	CanvasShadow,
 	CanvasTextAlign,
 	CanvasTextNode,
 	CanvasTransform,
 	CanvasUnit,
 	FramePlaceholder,
+	RichTextParagraph,
+	RichTextSpan,
 } from "../ir/types.js";
 import { CanvasIRSchema } from "../ir/validators.js";
 import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir/walkers.js";
+import {
+	type CanvasTextMeasurer,
+	type MeasuredText,
+	type ResolvedSpanStyle,
+	type RichTextStyleDefaults,
+	resolveSpanStyle,
+} from "../text-contracts.js";
 
 /**
  * SVG serializer for `@anvilkit/canvas-core`.
@@ -282,7 +292,22 @@ export type SvgWarningCode =
 	// IS losslessly representable as an SVG `<clipPath>`. A code that can never be
 	// emitted would be dead API. Image masks keep warning via
 	// `IMAGE_MASK_UNSUPPORTED`, which is unchanged.
-	| "FRAME_PLACEHOLDER_UNRESOLVED";
+	| "FRAME_PLACEHOLDER_UNRESOLVED"
+	// Added for rich text (canvas-m1-007). Same grow-only rule.
+	//
+	// `RICH_TEXT_WRAP_APPROXIMATE` — no `textMeasurer` was supplied, so the
+	// serializer cannot know where lines break: it falls back to one line per
+	// paragraph. The output is still deterministic, it just is not wrapped.
+	//
+	// `RICH_TEXT_ELLIPSIS_UNSUPPORTED` — static SVG has no `text-overflow`. An
+	// `ellipsis` overflow is emitted clipped (best effort), without the ellipsis
+	// glyph, so the caller knows the truncation marker is missing.
+	//
+	// There is deliberately no `RICH_TEXT_CLIP_UNSUPPORTED`: `overflow: "clip"` IS
+	// losslessly representable as a `<clipPath>`, exactly like a frame's, so a code
+	// for it could never fire — dead API, which the frame work already ruled out.
+	| "RICH_TEXT_WRAP_APPROXIMATE"
+	| "RICH_TEXT_ELLIPSIS_UNSUPPORTED";
 
 export interface SvgSerializeWarning {
 	code: SvgWarningCode;
@@ -290,14 +315,34 @@ export interface SvgSerializeWarning {
 	nodeId?: string;
 }
 
+/**
+ * Fallbacks for the rich-text style fields a document leaves unset. Chosen to
+ * match `createText`'s defaults (`ir/builders.ts`) so a rich-text block with no
+ * explicit styling renders like a plain `text` node would.
+ */
+const DEFAULT_RICH_TEXT_STYLE: RichTextStyleDefaults = {
+	fontFamily: "Inter",
+	fontSize: 16,
+	fontWeight: "400",
+	italic: false,
+	underline: false,
+	letterSpacing: 0,
+	textTransform: "none",
+	fill: "#000000",
+	lineHeight: 1.4,
+	align: "left",
+};
+
 /** Options resolved to concrete values, threaded through emission. */
 export interface ResolvedSvgOptions {
 	images: SvgImageMode;
 	skipInvisible: boolean;
 	pretty: boolean;
 	fonts: SvgFontFaceDef[];
+	richTextDefaults: RichTextStyleDefaults;
 	fetchAsset?: SvgFetchAsset;
 	nodeKinds?: CanvasNodeKindRegistry;
+	textMeasurer?: CanvasTextMeasurer;
 }
 
 /**
@@ -322,9 +367,14 @@ export function createEmitContext(
 		skipInvisible: options.skipInvisible ?? true,
 		pretty: options.pretty ?? false,
 		fonts: options.fonts ?? [],
+		richTextDefaults: {
+			...DEFAULT_RICH_TEXT_STYLE,
+			...(options.richTextDefaults ?? {}),
+		},
 	};
 	if (options.fetchAsset) resolved.fetchAsset = options.fetchAsset;
 	if (options.nodeKinds) resolved.nodeKinds = options.nodeKinds;
+	if (options.textMeasurer) resolved.textMeasurer = options.textMeasurer;
 	return {
 		warnings: [],
 		usedFonts: new Set<string>(),
@@ -618,6 +668,324 @@ export function emitText(node: CanvasTextNode, ctx: SvgEmitContext): string {
 	return `${decor.defs}<text ${attrs.join(" ")}${decor.filterAttr}>${escapeXml(node.text)}</text>`;
 }
 
+// --- rich text ---------------------------------------------------------------
+
+/**
+ * Apply a span's `textTransform` to the string being emitted.
+ *
+ * SVG has no `text-transform`, so unlike CSS this has to happen at serialize
+ * time. The IR's `span.text` is never rewritten — only the emitted glyphs are —
+ * so the original casing survives a round-trip.
+ *
+ * `capitalize` upper-cases the first letter of each whitespace-separated word,
+ * matching CSS. It deliberately does not try to be clever about punctuation.
+ */
+function applyTextTransform(
+	text: string,
+	transform: ResolvedSpanStyle["textTransform"],
+): string {
+	switch (transform) {
+		case "uppercase":
+			return text.toUpperCase();
+		case "lowercase":
+			return text.toLowerCase();
+		case "capitalize":
+			return text.replace(
+				/(^|\s)(\S)/g,
+				(_m, lead: string, ch: string) => lead + ch.toUpperCase(),
+			);
+		default:
+			return text;
+	}
+}
+
+/**
+ * Presentation attributes for ONE span's `<tspan>`.
+ *
+ * Only fields the document explicitly set are emitted; everything else is left
+ * to inherit from the parent `<text>`, which carries the resolved defaults. So
+ * the attribute set mirrors the document rather than a fully-expanded style, and
+ * a span that sets nothing emits a bare `<tspan>`.
+ */
+function richSpanAttrs(
+	span: RichTextSpan,
+	fillValue: string | undefined,
+): string[] {
+	const attrs: string[] = [];
+	if (span.fontFamily !== undefined) {
+		attrs.push(`font-family="${escapeAttr(span.fontFamily)}"`);
+	}
+	if (span.fontSize !== undefined) {
+		attrs.push(`font-size="${fmt(span.fontSize)}"`);
+	}
+	if (span.fontWeight !== undefined) {
+		attrs.push(`font-weight="${escapeAttr(span.fontWeight)}"`);
+	}
+	if (span.italic !== undefined) {
+		attrs.push(`font-style="${span.italic ? "italic" : "normal"}"`);
+	}
+	if (span.underline !== undefined) {
+		attrs.push(`text-decoration="${span.underline ? "underline" : "none"}"`);
+	}
+	if (span.letterSpacing !== undefined) {
+		attrs.push(`letter-spacing="${fmt(span.letterSpacing)}"`);
+	}
+	if (fillValue !== undefined) {
+		attrs.push(`fill="${escapeAttr(fillValue)}"`);
+	}
+	return attrs;
+}
+
+/**
+ * A span's fill, resolved through the shared gradient machinery.
+ *
+ * `decorate` derives its `<defs>` ids from the node id — one gradient per node —
+ * so a rich-text node with several gradient spans would emit colliding
+ * `grad-<id>` ids. Passing a SYNTHETIC per-span id is the established fix; the
+ * frame background does the same thing with `${node.id}-bg`.
+ */
+function richSpanFill(
+	node: CanvasRichTextNode,
+	span: RichTextSpan,
+	paragraphIndex: number,
+	spanIndex: number,
+): { defs: string; fill: string | undefined } {
+	if (span.fill === undefined) return { defs: "", fill: undefined };
+	const decor = decorate(
+		span.fill,
+		undefined,
+		`${node.id}-p${paragraphIndex}s${spanIndex}`,
+	);
+	return { defs: decor.defs, fill: decor.fill };
+}
+
+/** The largest resolved font size in a paragraph — what drives its line height. */
+function paragraphFontSize(
+	paragraph: RichTextParagraph,
+	defaults: RichTextStyleDefaults,
+): number {
+	let size = 0;
+	for (const span of paragraph.spans) {
+		size = Math.max(size, resolveSpanStyle(span, defaults).fontSize);
+	}
+	// An empty paragraph still occupies a line — a blank line between two
+	// paragraphs is content, not nothing.
+	return size > 0 ? size : defaults.fontSize;
+}
+
+/**
+ * Rich text → `<text>` with one `<tspan>` per line.
+ *
+ * Without a `textMeasurer` core cannot know where lines break (it has no font
+ * metrics), so it lays out ONE LINE PER PARAGRAPH and flags the output with
+ * `RICH_TEXT_WRAP_APPROXIMATE`. The result is still fully deterministic — it is
+ * simply un-wrapped. With a measurer, the measured line boxes drive the tspan
+ * positions and the two paths differ only in where the breaks land.
+ *
+ * Per-span styling rides on nested `<tspan>`s, which inherit from the `<text>`
+ * element carrying the resolved defaults.
+ */
+export function emitRichText(
+	node: CanvasRichTextNode,
+	ctx: SvgEmitContext,
+): string {
+	if (node.paragraphs.length === 0) return "";
+	const defaults = ctx.options.richTextDefaults;
+
+	// Every family that will actually be painted, so `@font-face` emission (and
+	// the FONT_NOT_IN_MANIFEST check) sees rich text too — `emitText` was the only
+	// producer of `usedFonts` before this.
+	ctx.usedFonts.add(defaults.fontFamily);
+	for (const paragraph of node.paragraphs) {
+		for (const span of paragraph.spans) {
+			ctx.usedFonts.add(resolveSpanStyle(span, defaults).fontFamily);
+		}
+	}
+
+	const decor = decorate(defaults.fill, undefined, `${node.id}-rt`);
+	const attrs = [
+		...commonAttrs(node, ctx),
+		`font-family="${escapeAttr(defaults.fontFamily)}"`,
+		`font-size="${fmt(defaults.fontSize)}"`,
+		`font-weight="${escapeAttr(defaults.fontWeight)}"`,
+		`fill="${escapeAttr(decor.fill ?? "")}"`,
+	];
+
+	const defs: string[] = [];
+	if (decor.defs) defs.push(decor.defs);
+
+	const measurer = ctx.options.textMeasurer;
+	const measured = measurer
+		? measurer({
+				paragraphs: node.paragraphs,
+				width: node.width,
+				wrap: node.wrap ?? "word",
+				defaults,
+			})
+		: undefined;
+	const body = measured
+		? emitMeasuredLines(node, measured, defaults, defs)
+		: emitUnwrappedParagraphs(node, ctx, defaults, defs);
+
+	// The clip box needs a height. An explicit `height` wins; otherwise the
+	// measured height is the only honest answer, and without a measurer there is
+	// none — so an unmeasured, unsized block simply cannot be clipped.
+	const clipHeight = node.height ?? measured?.height;
+	const clip = richTextClip(node, ctx, clipHeight);
+	if (clip.attr) attrs.push(clip.attr);
+	if (clip.defs) defs.push(clip.defs);
+
+	return `${defs.join("")}<text ${attrs.join(" ")}>${body}</text>`;
+}
+
+/**
+ * `overflow` → an SVG `<clipPath>`, reusing the mechanism a frame's `clip` uses.
+ *
+ * `"clip"` is losslessly representable, so it needs no warning. `"ellipsis"` is
+ * NOT: static SVG has no `text-overflow`, so the text is clipped at the box edge
+ * without a `…` marker, and the caller is told so. `"visible"`/`"auto-height"`
+ * (and the unset default) clip nothing — `auto-height` means the box grew to fit,
+ * so there is by definition no overflow to trim.
+ */
+function richTextClip(
+	node: CanvasRichTextNode,
+	ctx: SvgEmitContext,
+	height: number | undefined,
+): { defs: string; attr: string } {
+	const overflow = node.overflow ?? "visible";
+	if (overflow !== "clip" && overflow !== "ellipsis") {
+		return { defs: "", attr: "" };
+	}
+	if (overflow === "ellipsis") {
+		warn(
+			ctx,
+			"RICH_TEXT_ELLIPSIS_UNSUPPORTED",
+			"SVG has no text-overflow; the block is clipped at its box without an ellipsis marker.",
+			node.id,
+		);
+	}
+	// Nothing to clip against: no explicit height, and no measurer to derive one.
+	if (height === undefined) return { defs: "", attr: "" };
+
+	const clipId = `richtext-clip-${sanitizeId(node.id)}`;
+	return {
+		defs: `<defs><clipPath id="${clipId}"><rect width="${fmt(node.width)}" height="${fmt(height)}" /></clipPath></defs>`,
+		attr: `clip-path="url(#${clipId})"`,
+	};
+}
+
+/**
+ * The measurer path: every measured line becomes one absolutely-positioned
+ * `<tspan>` per run.
+ *
+ * A run is a slice of ONE span that landed on ONE line, so a wrapped span
+ * produces several runs — each carrying its source span's styling, recovered via
+ * `spanIndex`. Runs are placed absolutely (`x`/`y`) rather than flowed, because
+ * the measurer has already decided exactly where every piece goes; re-flowing
+ * them would throw that away. Alignment is baked into `line.x` by the measurer,
+ * so no `text-anchor` is emitted on this path.
+ */
+function emitMeasuredLines(
+	node: CanvasRichTextNode,
+	measured: MeasuredText,
+	defaults: RichTextStyleDefaults,
+	defs: string[],
+): string {
+	const out: string[] = [];
+	for (const line of measured.lines) {
+		const paragraph = node.paragraphs[line.paragraphIndex];
+		if (!paragraph) continue;
+		const y = line.y + line.baseline;
+		for (const run of line.runs) {
+			const span = paragraph.spans[run.spanIndex];
+			if (!span) continue;
+			const fill = richSpanFill(node, span, line.paragraphIndex, run.spanIndex);
+			if (fill.defs && !defs.includes(fill.defs)) defs.push(fill.defs);
+			const attrs = [
+				`x="${fmt(line.x + run.x)}"`,
+				`y="${fmt(y)}"`,
+				...richSpanAttrs(span, fill.fill),
+			];
+			const text = escapeXml(
+				applyTextTransform(
+					run.text,
+					resolveSpanStyle(span, defaults).textTransform,
+				),
+			);
+			out.push(`<tspan ${attrs.join(" ")}>${text}</tspan>`);
+		}
+	}
+	return out.join("");
+}
+
+/**
+ * The no-measurer path: one line per paragraph, laid out from the defaults'
+ * line height. Paragraph `align` becomes `text-anchor`, so alignment still works
+ * without any glyph measurement.
+ */
+function emitUnwrappedParagraphs(
+	node: CanvasRichTextNode,
+	ctx: SvgEmitContext,
+	defaults: RichTextStyleDefaults,
+	defs: string[],
+): string {
+	warn(
+		ctx,
+		"RICH_TEXT_WRAP_APPROXIMATE",
+		"No text measurer was supplied; rich text is emitted as one line per paragraph, without width-based wrapping.",
+		node.id,
+	);
+
+	const lines: string[] = [];
+	let y = 0;
+	for (const [pi, paragraph] of node.paragraphs.entries()) {
+		const size = paragraphFontSize(paragraph, defaults);
+		const align = paragraph.align ?? defaults.align;
+		const anchor = textAnchor(align);
+		const x = textAnchorX(align, node.width);
+
+		const lineAttrs = [
+			`x="${fmt(x)}"`,
+			`y="${fmt(y + size * TEXT_ASCENT_RATIO)}"`,
+		];
+		if (anchor !== "start") lineAttrs.push(`text-anchor="${anchor}"`);
+
+		lines.push(
+			`<tspan ${lineAttrs.join(" ")}>${emitSpans(node, paragraph, pi, defaults, defs)}</tspan>`,
+		);
+		y += size * (paragraph.lineHeight ?? defaults.lineHeight);
+	}
+	return lines.join("");
+}
+
+/** The spans of one paragraph, as inline `<tspan>`s that flow after each other. */
+function emitSpans(
+	node: CanvasRichTextNode,
+	paragraph: RichTextParagraph,
+	paragraphIndex: number,
+	defaults: RichTextStyleDefaults,
+	defs: string[],
+): string {
+	const out: string[] = [];
+	for (const [si, span] of paragraph.spans.entries()) {
+		const fill = richSpanFill(node, span, paragraphIndex, si);
+		if (fill.defs) defs.push(fill.defs);
+		const attrs = richSpanAttrs(span, fill.fill);
+		const text = escapeXml(
+			applyTextTransform(
+				span.text,
+				resolveSpanStyle(span, defaults).textTransform,
+			),
+		);
+		out.push(
+			attrs.length > 0
+				? `<tspan ${attrs.join(" ")}>${text}</tspan>`
+				: `<tspan>${text}</tspan>`,
+		);
+	}
+	return out.join("");
+}
+
 // --- public options / result -------------------------------------------------
 
 export interface SvgFontFaceDef {
@@ -661,6 +1029,21 @@ export interface SvgSerializeOptions {
 	 * it is skipped with an `UNKNOWN_KIND_SKIPPED` warning.
 	 */
 	nodeKinds?: CanvasNodeKindRegistry;
+	/**
+	 * Lays out `rich-text` paragraphs. Core cannot measure glyphs (no DOM, no font
+	 * metrics — see {@link CanvasTextMeasurer}), so wrapping is only possible when
+	 * the host injects its measurer here. The editor's measurer is the same one it
+	 * renders with, which is what makes an export match what the user saw.
+	 *
+	 * Omit it and rich text still exports deterministically — one line per
+	 * paragraph, flagged with `RICH_TEXT_WRAP_APPROXIMATE`.
+	 */
+	textMeasurer?: CanvasTextMeasurer;
+	/**
+	 * Fallbacks for span style fields a document leaves unset. Merged over the
+	 * built-in defaults, which mirror `createText`'s.
+	 */
+	richTextDefaults?: Partial<RichTextStyleDefaults>;
 }
 
 export interface SvgSerializeResult {
@@ -698,6 +1081,13 @@ async function emitNode(
 		}
 		case "text":
 			return pad + emitText(node, ctx);
+		case "rich-text": {
+			// May be empty (a node with no paragraphs has nothing to paint), so it
+			// follows the `path`/`image` precedent rather than the unconditional
+			// `pad + …` the always-emitting leaves use.
+			const richText = emitRichText(node, ctx);
+			return richText ? pad + richText : "";
+		}
 		case "image": {
 			const image = await emitImage(node, ctx);
 			return image ? pad + image : "";

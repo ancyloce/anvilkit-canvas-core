@@ -12,10 +12,17 @@ import type {
 	CanvasPageSize,
 	CanvasPathNode,
 	CanvasRectNode,
+	CanvasRichTextNode,
 	CanvasTextNode,
 	CanvasTransform,
 } from "../../ir/types.js";
 import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../../ir/walkers.js";
+import type {
+	CanvasTextMeasurer,
+	MeasuredLine,
+	MeasuredRun,
+	TextMeasureRequest,
+} from "../../text-contracts.js";
 import {
 	bytesToBase64,
 	createEmitContext,
@@ -23,6 +30,7 @@ import {
 	emitLine,
 	emitPath,
 	emitRect,
+	emitRichText,
 	emitText,
 	escapeAttr,
 	escapeCssString,
@@ -777,5 +785,385 @@ describe("serializePageToSvg accessibility", () => {
 		const { svg } = await serializePageToSvg(ir, 0);
 		expect(svg).not.toContain('role="img"');
 		expect(svg).not.toContain("<title>");
+	});
+});
+
+const richText: CanvasRichTextNode = {
+	id: "rt1",
+	type: "rich-text",
+	transform: identity,
+	bounds: { width: 200, height: 60 },
+	zIndex: 0,
+	width: 200,
+	paragraphs: [{ spans: [{ text: "Hi" }] }],
+};
+
+describe("emitRichText — without a measurer", () => {
+	it("emits one <tspan> line per paragraph and warns that wrapping is approximate", () => {
+		const ctx = createEmitContext();
+		const out = emitRichText(
+			{
+				...richText,
+				paragraphs: [
+					{ spans: [{ text: "one" }] },
+					{ spans: [{ text: "two" }] },
+				],
+			},
+			ctx,
+		);
+		// Defaults live on <text>; each paragraph is a positioned <tspan> line.
+		expect(out).toContain('font-family="Inter" font-size="16"');
+		expect(out).toContain('<tspan x="0" y="12.8"><tspan>one</tspan></tspan>');
+		// Second line advances by fontSize × lineHeight (16 × 1.4 = 22.4).
+		expect(out).toContain('<tspan x="0" y="35.2"><tspan>two</tspan></tspan>');
+		expect(ctx.warnings.map((w) => w.code)).toEqual([
+			"RICH_TEXT_WRAP_APPROXIMATE",
+		]);
+		expect(ctx.warnings[0]?.nodeId).toBe("rt1");
+	});
+
+	it("emits nothing at all for a node with no paragraphs", () => {
+		const ctx = createEmitContext();
+		expect(emitRichText({ ...richText, paragraphs: [] }, ctx)).toBe("");
+		// ...and does not warn about a document that has no rich text to wrap.
+		expect(ctx.warnings).toEqual([]);
+	});
+
+	it("emits only the span attributes the document actually set", () => {
+		const out = emitRichText(
+			{
+				...richText,
+				paragraphs: [
+					{
+						spans: [
+							{ text: "plain" },
+							{
+								text: "styled",
+								fontFamily: "Georgia",
+								fontSize: 24,
+								fontWeight: "700",
+								italic: true,
+								underline: true,
+								letterSpacing: -0.5,
+								fill: "#ff0000",
+							},
+						],
+					},
+				],
+			},
+			createEmitContext(),
+		);
+		// An unstyled span inherits everything from <text>.
+		expect(out).toContain("<tspan>plain</tspan>");
+		expect(out).toContain(
+			'<tspan font-family="Georgia" font-size="24" font-weight="700" font-style="italic" text-decoration="underline" letter-spacing="-0.5" fill="#ff0000">styled</tspan>',
+		);
+	});
+
+	it("maps paragraph align to text-anchor and x", () => {
+		const out = emitRichText(
+			{
+				...richText,
+				paragraphs: [
+					{ align: "center", spans: [{ text: "c" }] },
+					{ align: "right", spans: [{ text: "r" }] },
+				],
+			},
+			createEmitContext(),
+		);
+		expect(out).toContain('x="100" y="12.8" text-anchor="middle"');
+		expect(out).toContain('x="200" y="35.2" text-anchor="end"');
+	});
+
+	// SVG has no `text-transform`, so it must be baked into the emitted glyphs.
+	// The IR's `span.text` is never rewritten.
+	it("applies textTransform to the emitted string, not to the IR", () => {
+		const node: CanvasRichTextNode = {
+			...richText,
+			paragraphs: [
+				{
+					spans: [
+						{ text: "shout", textTransform: "uppercase" },
+						{ text: "QUIET", textTransform: "lowercase" },
+						{ text: "two words", textTransform: "capitalize" },
+					],
+				},
+			],
+		};
+		const out = emitRichText(node, createEmitContext());
+		expect(out).toContain(">SHOUT<");
+		expect(out).toContain(">quiet<");
+		expect(out).toContain(">Two Words<");
+		// The source document is untouched.
+		expect(node.paragraphs[0]?.spans[0]?.text).toBe("shout");
+	});
+
+	it("escapes span text", () => {
+		const out = emitRichText(
+			{ ...richText, paragraphs: [{ spans: [{ text: "a < b & c" }] }] },
+			createEmitContext(),
+		);
+		expect(out).toContain(">a &lt; b &amp; c<");
+	});
+
+	// `decorate` derives its gradient id from the node id, so two gradient spans
+	// on one node would collide without a synthetic per-span id.
+	it("gives each gradient span its own <defs> id", () => {
+		const gradient = (color: string) => ({
+			kind: "linear" as const,
+			from: { x: 0, y: 0 },
+			to: { x: 1, y: 0 },
+			stops: [
+				{ offset: 0, color },
+				{ offset: 1, color: "#fff" },
+			],
+		});
+		const out = emitRichText(
+			{
+				...richText,
+				paragraphs: [
+					{
+						spans: [
+							{ text: "a", fill: gradient("#f00") },
+							{ text: "b", fill: gradient("#0f0") },
+						],
+					},
+				],
+			},
+			createEmitContext(),
+		);
+		expect(out).toContain('id="grad-rt1-p0s0"');
+		expect(out).toContain('id="grad-rt1-p0s1"');
+		expect(out).toContain('fill="url(#grad-rt1-p0s0)"');
+		expect(out).toContain('fill="url(#grad-rt1-p0s1)"');
+	});
+
+	// `emitText` was the only producer of `usedFonts`; without this, rich text
+	// would silently emit no @font-face and never trip FONT_NOT_IN_MANIFEST.
+	it("registers every resolved span family as a used font", () => {
+		const ctx = createEmitContext();
+		emitRichText(
+			{
+				...richText,
+				paragraphs: [
+					{ spans: [{ text: "a" }, { text: "b", fontFamily: "Georgia" }] },
+				],
+			},
+			ctx,
+		);
+		expect([...ctx.usedFonts].sort()).toEqual(["Georgia", "Inter"]);
+	});
+
+	it("advances an empty paragraph as a blank line rather than collapsing it", () => {
+		const out = emitRichText(
+			{
+				...richText,
+				paragraphs: [
+					{ spans: [{ text: "one" }] },
+					{ spans: [] },
+					{ spans: [{ text: "three" }] },
+				],
+			},
+			createEmitContext(),
+		);
+		// Blank line occupies its slot: 12.8 → 35.2 → 57.6.
+		expect(out).toContain('y="12.8"');
+		expect(out).toContain('y="35.2"');
+		expect(out).toContain('y="57.6"');
+	});
+
+	it("honours richTextDefaults overrides", () => {
+		const out = emitRichText(
+			richText,
+			createEmitContext({
+				richTextDefaults: { fontFamily: "Georgia", fontSize: 32 },
+			}),
+		);
+		expect(out).toContain('font-family="Georgia" font-size="32"');
+	});
+});
+
+/**
+ * A deterministic stub measurer. It does no real shaping — it assigns each span
+ * a fixed advance per character — which is exactly what a golden needs: the
+ * point is to prove the emitter honours whatever the measurer decides, not to
+ * test a layout algorithm (core has none, by design).
+ *
+ * It breaks a paragraph into lines of at most `width / CHAR_W` characters,
+ * emitting one run per span slice.
+ */
+const CHAR_W = 10;
+const stubMeasurer: CanvasTextMeasurer = ({ paragraphs, width, defaults }) => {
+	const perLine = Math.max(1, Math.floor(width / CHAR_W));
+	const lines: MeasuredLine[] = [];
+	let y = 0;
+	paragraphs.forEach((paragraph, paragraphIndex) => {
+		let col = 0;
+		let runs: MeasuredRun[] = [];
+		const flush = () => {
+			lines.push({
+				paragraphIndex,
+				runs,
+				x: 0,
+				y,
+				width: col * CHAR_W,
+				height: defaults.fontSize * defaults.lineHeight,
+				baseline: defaults.fontSize,
+			});
+			y += defaults.fontSize * defaults.lineHeight;
+			runs = [];
+			col = 0;
+		};
+		paragraph.spans.forEach((span, spanIndex) => {
+			let start = 0;
+			while (start < span.text.length) {
+				const room = perLine - col;
+				if (room <= 0) {
+					flush();
+					continue;
+				}
+				const slice = span.text.slice(start, start + room);
+				runs.push({
+					paragraphIndex,
+					spanIndex,
+					start,
+					text: slice,
+					x: col * CHAR_W,
+					width: slice.length * CHAR_W,
+				});
+				start += slice.length;
+				col += slice.length;
+			}
+		});
+		flush();
+	});
+	return {
+		lines,
+		width,
+		height: y,
+	};
+};
+
+describe("emitRichText — with a measurer", () => {
+	it("lets the measured line boxes drive tspan positions, and does not warn", () => {
+		const ctx = createEmitContext({ textMeasurer: stubMeasurer });
+		// width 200 ⇒ 20 chars per line; "aaaaaaaaaaaaaaaaaaaaaaaaa" is 25 ⇒ 2 lines.
+		const out = emitRichText(
+			{ ...richText, paragraphs: [{ spans: [{ text: "a".repeat(25) }] }] },
+			ctx,
+		);
+		expect(out).toContain(`<tspan x="0" y="16">${"a".repeat(20)}</tspan>`);
+		expect(out).toContain(`<tspan x="0" y="38.4">${"a".repeat(5)}</tspan>`);
+		// The whole point: a measured export is NOT flagged as approximate.
+		expect(ctx.warnings).toEqual([]);
+	});
+
+	// A span that wraps is split into several runs, each of which must still carry
+	// the styling of the span it came from.
+	it("carries span styling onto every run of a wrapped span", () => {
+		const out = emitRichText(
+			{
+				...richText,
+				paragraphs: [
+					{ spans: [{ text: "b".repeat(25), italic: true, fill: "#f00" }] },
+				],
+			},
+			createEmitContext({ textMeasurer: stubMeasurer }),
+		);
+		const runs = out.match(/<tspan [^>]*font-style="italic"[^>]*>/g) ?? [];
+		expect(runs).toHaveLength(2);
+		for (const run of runs) expect(run).toContain('fill="#f00"');
+	});
+
+	it("passes the node's wrap mode and width through to the measurer", () => {
+		const seen: TextMeasureRequest[] = [];
+		const spy: CanvasTextMeasurer = (req) => {
+			seen.push(req);
+			return { lines: [], width: 0, height: 0 };
+		};
+		emitRichText(
+			{ ...richText, width: 320, wrap: "character" },
+			createEmitContext({ textMeasurer: spy }),
+		);
+		expect(seen[0]?.width).toBe(320);
+		expect(seen[0]?.wrap).toBe("character");
+		// `word` is the sensible default for an unset wrap mode.
+		emitRichText(richText, createEmitContext({ textMeasurer: spy }));
+		expect(seen[1]?.wrap).toBe("word");
+	});
+});
+
+describe("emitRichText — overflow", () => {
+	it("clips to the box, reusing the frame clipPath mechanism", () => {
+		const out = emitRichText(
+			{ ...richText, overflow: "clip", height: 40 },
+			createEmitContext(),
+		);
+		expect(out).toContain(
+			'<defs><clipPath id="richtext-clip-rt1"><rect width="200" height="40" /></clipPath></defs>',
+		);
+		expect(out).toContain('clip-path="url(#richtext-clip-rt1)"');
+	});
+
+	it("derives the clip height from the measurer when the node has none", () => {
+		const out = emitRichText(
+			{ ...richText, overflow: "clip" },
+			createEmitContext({ textMeasurer: stubMeasurer }),
+		);
+		// One line ⇒ measured height 16 × 1.4 = 22.4.
+		expect(out).toContain('<rect width="200" height="22.4" />');
+	});
+
+	// Honest degradation: with neither an explicit height nor a measurer there is
+	// nothing to clip against, so no bogus clip box is invented.
+	it("emits no clip when it has neither a height nor a measurer", () => {
+		const out = emitRichText(
+			{ ...richText, overflow: "clip" },
+			createEmitContext(),
+		);
+		expect(out).not.toContain("clipPath");
+		expect(out).not.toContain("clip-path");
+	});
+
+	it("clips an ellipsis overflow and warns that the marker is missing", () => {
+		const ctx = createEmitContext({ textMeasurer: stubMeasurer });
+		const out = emitRichText(
+			{ ...richText, overflow: "ellipsis", height: 20 },
+			ctx,
+		);
+		expect(out).toContain('clip-path="url(#richtext-clip-rt1)"');
+		expect(ctx.warnings.map((w) => w.code)).toEqual([
+			"RICH_TEXT_ELLIPSIS_UNSUPPORTED",
+		]);
+		expect(ctx.warnings[0]?.nodeId).toBe("rt1");
+	});
+
+	it("clips nothing for visible or auto-height", () => {
+		for (const overflow of ["visible", "auto-height"] as const) {
+			const ctx = createEmitContext({ textMeasurer: stubMeasurer });
+			const out = emitRichText({ ...richText, overflow, height: 40 }, ctx);
+			expect(out).not.toContain("clip-path");
+			expect(ctx.warnings).toEqual([]);
+		}
+	});
+});
+
+describe("emitRichText — font manifest", () => {
+	it("reports a span family that is missing from the manifest", async () => {
+		const ir = makeIR(
+			group([
+				{
+					...richText,
+					paragraphs: [{ spans: [{ text: "x", fontFamily: "Georgia" }] }],
+				},
+			]),
+		);
+		const { warnings } = await serializePageToSvg(ir, 0, {
+			textMeasurer: stubMeasurer,
+			fonts: [{ family: "Inter", src: "https://example.com/inter.woff2" }],
+		});
+		const missing = warnings.filter((w) => w.code === "FONT_NOT_IN_MANIFEST");
+		expect(missing).toHaveLength(1);
+		expect(missing[0]?.message).toContain("Georgia");
 	});
 });

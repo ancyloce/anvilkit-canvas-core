@@ -1,6 +1,11 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { CanvasIR, CanvasTransform } from "../../ir/types.js";
+import type {
+	CanvasTextMeasurer,
+	MeasuredLine,
+	MeasuredRun,
+} from "../../text-contracts.js";
 import { serializePageToSvg } from "../svg.js";
 
 /**
@@ -557,5 +562,305 @@ describe("serializePageToSvg golden — frames (clip, radius, background, placeh
 			"FRAME_PLACEHOLDER_UNRESOLVED",
 		);
 		expect(svg).toContain('fill="#123456"');
+	});
+});
+
+/**
+ * A deterministic stub measurer: a fixed advance per character, no real shaping.
+ * A golden needs the LINE BREAKS to be reproducible, not realistic — core has no
+ * layout engine by design, so what is pinned here is that the emitter faithfully
+ * honours whatever the host's measurer decides.
+ */
+const GOLDEN_CHAR_W = 8;
+const goldenMeasurer: CanvasTextMeasurer = ({
+	paragraphs,
+	width,
+	defaults,
+}) => {
+	const perLine = Math.max(1, Math.floor(width / GOLDEN_CHAR_W));
+	const lines: MeasuredLine[] = [];
+	let y = 0;
+	paragraphs.forEach((paragraph, paragraphIndex) => {
+		const lineHeight =
+			defaults.fontSize * (paragraph.lineHeight ?? defaults.lineHeight);
+		const align = paragraph.align ?? defaults.align;
+		let col = 0;
+		let runs: MeasuredRun[] = [];
+		const flush = () => {
+			// Alignment is the MEASURER's job on this path — it knows the line's real
+			// width, so it bakes the offset into `line.x` and the emitter just places
+			// runs at it. (The no-measurer path can't, so it falls back to
+			// `text-anchor`, which needs no measurement.)
+			const lineWidth = col * GOLDEN_CHAR_W;
+			const x =
+				align === "center"
+					? (width - lineWidth) / 2
+					: align === "right"
+						? width - lineWidth
+						: 0;
+			lines.push({
+				paragraphIndex,
+				runs,
+				x,
+				y,
+				width: lineWidth,
+				height: lineHeight,
+				baseline: defaults.fontSize,
+			});
+			y += lineHeight;
+			runs = [];
+			col = 0;
+		};
+		paragraph.spans.forEach((span, spanIndex) => {
+			let start = 0;
+			while (start < span.text.length) {
+				const room = perLine - col;
+				if (room <= 0) {
+					flush();
+					continue;
+				}
+				const slice = span.text.slice(start, start + room);
+				runs.push({
+					paragraphIndex,
+					spanIndex,
+					start,
+					text: slice,
+					x: col * GOLDEN_CHAR_W,
+					width: slice.length * GOLDEN_CHAR_W,
+				});
+				start += slice.length;
+				col += slice.length;
+			}
+		});
+		flush();
+	});
+	return { lines, width, height: y };
+};
+
+/**
+ * Golden fixture for rich text (canvas-m1-007). Covers every branch of
+ * `emitRichText` in one page so the snapshot pins their exact bytes:
+ *  - `styled`   — multi-span paragraph: family/size/weight/italic/underline/
+ *                 letter-spacing/textTransform, plus a GRADIENT span whose defs
+ *                 id must be per-span (`grad-styled-p0s3`), not per-node.
+ *  - `aligned`  — centre- and right-aligned paragraphs on the no-measurer path:
+ *                 alignment survives without any glyph measurement, as
+ *                 `text-anchor` + an anchored `x`.
+ *  - `wrapped`  — laid out by the stub measurer: one absolutely-positioned
+ *                 <tspan> per run, and a span that wraps keeps its styling on
+ *                 BOTH of its runs.
+ *  - `clipped`  — `overflow: "clip"`: a <clipPath> exactly like a frame's.
+ *  - `ellipsis` — best-effort clip + RICH_TEXT_ELLIPSIS_UNSUPPORTED, since SVG
+ *                 has no text-overflow.
+ */
+const richTextFixture: CanvasIR = {
+	version: "2",
+	id: "doc-golden-rich-text",
+	title: "Golden rich text",
+	pages: [
+		{
+			id: "p1",
+			size: { width: 320, height: 320, unit: "px" },
+			background: { kind: "solid", value: "#ffffff" },
+			root: {
+				id: "root",
+				type: "group",
+				transform: t(),
+				bounds: { width: 320, height: 320 },
+				zIndex: 0,
+				children: [
+					{
+						id: "styled",
+						type: "rich-text",
+						transform: t(8, 8),
+						bounds: { width: 200, height: 60 },
+						zIndex: 0,
+						width: 200,
+						paragraphs: [
+							{
+								spans: [
+									{ text: "plain " },
+									{ text: "bold ", fontWeight: "700" },
+									{
+										text: "loud ",
+										textTransform: "uppercase",
+										italic: true,
+										underline: true,
+										letterSpacing: 1.5,
+										fontFamily: "Georgia",
+										fontSize: 20,
+									},
+									{
+										text: "grad",
+										fill: {
+											kind: "linear",
+											from: { x: 0, y: 0 },
+											to: { x: 1, y: 0 },
+											stops: [
+												{ offset: 0, color: "#ff0000" },
+												{ offset: 1, color: "#0000ff" },
+											],
+										},
+									},
+								],
+							},
+						],
+					},
+					{
+						id: "aligned",
+						type: "rich-text",
+						transform: t(8, 80),
+						bounds: { width: 200, height: 60 },
+						zIndex: 1,
+						width: 200,
+						paragraphs: [
+							{ align: "center", spans: [{ text: "centered" }] },
+							{ align: "right", lineHeight: 2, spans: [{ text: "right" }] },
+						],
+					},
+					{
+						id: "wrapped",
+						type: "rich-text",
+						transform: t(8, 152),
+						bounds: { width: 160, height: 60 },
+						zIndex: 2,
+						width: 160,
+						wrap: "word",
+						paragraphs: [
+							{
+								spans: [
+									{ text: "wrapping across lines", italic: true },
+									{ text: " tail" },
+								],
+							},
+						],
+					},
+					{
+						id: "clipped",
+						type: "rich-text",
+						transform: t(8, 224),
+						bounds: { width: 120, height: 24 },
+						zIndex: 3,
+						width: 120,
+						height: 24,
+						overflow: "clip",
+						paragraphs: [{ spans: [{ text: "clipped to its box" }] }],
+					},
+					{
+						id: "ellipsis",
+						type: "rich-text",
+						transform: t(152, 224),
+						bounds: { width: 120, height: 24 },
+						zIndex: 4,
+						width: 120,
+						height: 24,
+						overflow: "ellipsis",
+						paragraphs: [{ spans: [{ text: "truncated somehow" }] }],
+					},
+				],
+			},
+		},
+	],
+	assets: {},
+	metadata: {
+		createdAt: "2026-01-01T00:00:00.000Z",
+		updatedAt: "2026-01-01T00:00:00.000Z",
+	},
+};
+
+describe("serializePageToSvg golden — rich text (measured)", () => {
+	it("pins span styling, per-span gradient defs, wrapping, and clipping", async () => {
+		const { svg, warnings } = await serializePageToSvg(richTextFixture, 0, {
+			pretty: true,
+			textMeasurer: goldenMeasurer,
+			fonts: [
+				{ family: "Inter", src: "https://example.com/inter.woff2" },
+				{ family: "Georgia", src: "https://example.com/georgia.woff2" },
+			],
+		});
+
+		assertWellFormed(svg);
+
+		// Rich text must be handled by its own emitter, not fall through to the
+		// unknown-kind path — that fall-through is exactly what this task removes.
+		const codes = warnings.map((w) => w.code);
+		expect(codes).not.toContain("UNKNOWN_KIND_SKIPPED");
+		// With a measurer supplied, wrapping is EXACT — nothing is approximate.
+		expect(codes).not.toContain("RICH_TEXT_WRAP_APPROXIMATE");
+		// ...but SVG still cannot draw an ellipsis marker.
+		const ellipsis = warnings.filter(
+			(w) => w.code === "RICH_TEXT_ELLIPSIS_UNSUPPORTED",
+		);
+		expect(ellipsis).toHaveLength(1);
+		expect(ellipsis[0]?.nodeId).toBe("ellipsis");
+
+		// Both span families reached the manifest, so neither is missing.
+		expect(codes).not.toContain("FONT_NOT_IN_MANIFEST");
+
+		// Per-SPAN gradient id — a per-node id would collide across spans.
+		expect(svg).toContain('id="grad-styled-p0s3"');
+		expect(svg).toContain('fill="url(#grad-styled-p0s3)"');
+
+		// textTransform is baked into the emitted glyphs (SVG has no text-transform).
+		expect(svg).toContain(">LOUD <");
+
+		// On the measured path the emitter places runs at the measurer's `line.x`
+		// and emits NO text-anchor — alignment already happened during measurement.
+		// "centered" is 8 chars × 8px = 64 in a 200-wide box ⇒ x = (200-64)/2 = 68.
+		expect(svg).toContain('<tspan x="68" y="16">centered</tspan>');
+		// "right" is 5 × 8 = 40 ⇒ x = 200-40 = 160.
+		expect(svg).toContain('<tspan x="160" y="38.4">right</tspan>');
+		expect(svg).not.toContain('text-anchor="middle"');
+
+		// Clip paths, one namespace per node, exactly like a frame's.
+		expect(svg).toContain('<clipPath id="richtext-clip-clipped">');
+		expect(svg).toContain('clip-path="url(#richtext-clip-clipped)"');
+		expect(svg).toContain('<clipPath id="richtext-clip-ellipsis">');
+
+		await expect(svg).toMatchFileSnapshot(
+			fileURLToPath(
+				new URL("./__snapshots__/canvas-rich-text.snap.svg", import.meta.url),
+			),
+		);
+	});
+});
+
+describe("serializePageToSvg golden — rich text (no measurer)", () => {
+	it("degrades to one line per paragraph and flags it, deterministically", async () => {
+		const { svg, warnings } = await serializePageToSvg(richTextFixture, 0, {
+			pretty: true,
+			fonts: [
+				{ family: "Inter", src: "https://example.com/inter.woff2" },
+				{ family: "Georgia", src: "https://example.com/georgia.woff2" },
+			],
+		});
+
+		assertWellFormed(svg);
+
+		// One warning per rich-text node: the degradation is machine-readable, and
+		// it is the ONLY thing that differs from the measured path.
+		const approximate = warnings.filter(
+			(w) => w.code === "RICH_TEXT_WRAP_APPROXIMATE",
+		);
+		expect(approximate.map((w) => w.nodeId)).toEqual([
+			"styled",
+			"aligned",
+			"wrapped",
+			"clipped",
+			"ellipsis",
+		]);
+
+		// Alignment survives with no measurement at all.
+		expect(svg).toContain('text-anchor="middle"');
+		expect(svg).toContain('text-anchor="end"');
+
+		await expect(svg).toMatchFileSnapshot(
+			fileURLToPath(
+				new URL(
+					"./__snapshots__/canvas-rich-text-unmeasured.snap.svg",
+					import.meta.url,
+				),
+			),
+		);
 	});
 });

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320" role="img">
+	<title>Golden rich text</title>
+	<defs><style>@font-face{font-family:"Inter";src:https://example.com/inter.woff2;}@font-face{font-family:"Georgia";src:https://example.com/georgia.woff2;}</style></defs>
+	<rect x="0" y="0" width="320" height="320" fill="#ffffff" />
+	<defs><linearGradient id="grad-styled-p0s3" gradientUnits="objectBoundingBox" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff0000" /><stop offset="1" stop-color="#0000ff" /></linearGradient></defs><text transform="translate(8 8)" font-family="Inter" font-size="16" font-weight="400" fill="#000000"><tspan x="0" y="16"><tspan>plain </tspan><tspan font-weight="700">bold </tspan><tspan font-family="Georgia" font-size="20" font-style="italic" text-decoration="underline" letter-spacing="1.5">LOUD </tspan><tspan fill="url(#grad-styled-p0s3)">grad</tspan></tspan></text>
+	<text transform="translate(8 80)" font-family="Inter" font-size="16" font-weight="400" fill="#000000"><tspan x="100" y="12.8" text-anchor="middle"><tspan>centered</tspan></tspan><tspan x="200" y="35.2" text-anchor="end"><tspan>right</tspan></tspan></text>
+	<text transform="translate(8 152)" font-family="Inter" font-size="16" font-weight="400" fill="#000000"><tspan x="0" y="12.8"><tspan font-style="italic">wrapping across lines</tspan><tspan> tail</tspan></tspan></text>
+	<defs><clipPath id="richtext-clip-clipped"><rect width="120" height="24" /></clipPath></defs><text transform="translate(8 224)" font-family="Inter" font-size="16" font-weight="400" fill="#000000" clip-path="url(#richtext-clip-clipped)"><tspan x="0" y="12.8"><tspan>clipped to its box</tspan></tspan></text>
+	<defs><clipPath id="richtext-clip-ellipsis"><rect width="120" height="24" /></clipPath></defs><text transform="translate(152 224)" font-family="Inter" font-size="16" font-weight="400" fill="#000000" clip-path="url(#richtext-clip-ellipsis)"><tspan x="0" y="12.8"><tspan>truncated somehow</tspan></tspan></text>
+</svg>
