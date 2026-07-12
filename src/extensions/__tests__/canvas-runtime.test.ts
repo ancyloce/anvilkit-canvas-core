@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { createCanvasIR, createPage, createRect } from "../../ir/builders.js";
+import {
+	createCanvasIR,
+	createEllipse,
+	createFrame,
+	createGroup,
+	createImage,
+	createLine,
+	createPage,
+	createPath,
+	createRect,
+	createRichText,
+	createText,
+} from "../../ir/builders.js";
 import { insertNode } from "../../ir/mutations.js";
 import type { CanvasIR, CanvasNode } from "../../ir/types.js";
 import { CanvasIRSchema, CanvasNodeSchema } from "../../ir/validators.js";
@@ -26,6 +38,41 @@ function fixtureIR(extra?: CanvasUnknownNode): CanvasIR {
 		ir = insertNode(ir, { parentId: page.root.id, node: extra as never });
 	}
 	return ir;
+}
+
+/**
+ * One valid node per BUILT-IN kind. Kept as a literal list (not derived from the
+ * registry) on purpose: the point is to detect a kind that the registry knows
+ * about but the extension-aware union does not, so deriving it from the registry
+ * would defeat the test.
+ */
+function oneNodePerBuiltinKind(): CanvasNode[] {
+	const box = { width: 10, height: 10 };
+	return [
+		createGroup({ id: "n-group", bounds: box }),
+		createFrame({ id: "n-frame", bounds: box }),
+		createRect({ id: "n-rect", bounds: box }),
+		createEllipse({ id: "n-ellipse", bounds: box }),
+		createLine({ id: "n-line", points: [0, 0, 1, 1] }),
+		createPath({ id: "n-path", bounds: box, d: "M0 0 L1 1" }),
+		createText({ id: "n-text", bounds: box, text: "hi" }),
+		createRichText({
+			id: "n-rich-text",
+			bounds: box,
+			width: 10,
+			paragraphs: [{ spans: [{ text: "hi" }] }],
+		}),
+		createImage({ id: "n-image", bounds: box, assetId: "a1" }),
+		{
+			id: "n-ai",
+			type: "ai-placeholder",
+			transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+			bounds: box,
+			zIndex: 0,
+			jobId: "job-1",
+			status: "pending",
+		},
+	];
 }
 
 interface StarNode extends CanvasUnknownNode {
@@ -82,6 +129,7 @@ describe("createCanvasRuntime — default (no extensions)", () => {
 			"line",
 			"path",
 			"text",
+			"rich-text",
 			"image",
 			"ai-placeholder",
 		]) {
@@ -258,7 +306,7 @@ describe("container predicate ↔ kind-registry parity", () => {
 		}
 	});
 
-	it("registers all 9 built-in kinds", () => {
+	it("registers all 10 built-in kinds", () => {
 		const kinds = createCanvasRuntime()
 			.nodeKinds.list()
 			.map((d) => d.kind)
@@ -272,8 +320,39 @@ describe("container predicate ↔ kind-registry parity", () => {
 			"line",
 			"path",
 			"rect",
+			"rich-text",
 			"text",
 		]);
+	});
+});
+
+describe("static schema ↔ extension-aware schema parity", () => {
+	/**
+	 * A new built-in kind has to be added in THREE places in this file: the
+	 * validators import, `BUILTIN_KIND_DEFS`, and the separate `members` array
+	 * inside `buildExtendedSchemas` (which rebuilds the union so a container's
+	 * `children` can admit extension kinds). Nothing in the type system ties the
+	 * third to the first two.
+	 *
+	 * Forget it and the failure is the nastiest kind: the DEFAULT runtime accepts
+	 * the node, while any runtime with an extension kind registered silently
+	 * REJECTS it — so the bug only appears for hosts that use extensions. This
+	 * test is the tie: every kind the registry claims to know must parse through
+	 * the extension-aware schema, not just the static one.
+	 */
+	it("the extension-aware union accepts every registered built-in kind", () => {
+		// Registering ANY extension kind swaps the static union for the one
+		// `buildExtendedSchemas` assembles — which is the union under test here.
+		const rt = createCanvasRuntime([starExt]);
+		expect(rt.nodeSchema).not.toBe(CanvasNodeSchema);
+
+		for (const node of oneNodePerBuiltinKind()) {
+			const result = rt.nodeSchema.safeParse(node);
+			expect(
+				result.success,
+				`the extension-aware schema rejected built-in kind "${node.type}" — is it missing from buildExtendedSchemas' \`members\` array?`,
+			).toBe(true);
+		}
 	});
 });
 

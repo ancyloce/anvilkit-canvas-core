@@ -30,6 +30,7 @@ import {
 	CanvasPageSizeSchema,
 	CanvasPathNodeSchema,
 	CanvasRectNodeSchema,
+	CanvasRichTextNodeSchema,
 	CanvasTextNodeSchema,
 } from "../ir/validators.js";
 import {
@@ -130,6 +131,10 @@ const BUILTIN_KIND_DEFS: CanvasNodeKindDefinition[] = [
 	{ kind: "line", schema: asKindSchema(CanvasLineNodeSchema) },
 	{ kind: "path", schema: asKindSchema(CanvasPathNodeSchema) },
 	{ kind: "text", schema: asKindSchema(CanvasTextNodeSchema) },
+	// A leaf, so `isContainer` stays omitted (it defaults to false). Setting it
+	// would silently make walkers recurse into a node with no `children` — the
+	// container↔registry parity test exists to catch exactly that.
+	{ kind: "rich-text", schema: asKindSchema(CanvasRichTextNodeSchema) },
 	{ kind: "image", schema: asKindSchema(CanvasImageNodeSchema) },
 	{
 		kind: "ai-placeholder",
@@ -171,6 +176,7 @@ function buildExtendedSchemas(
 		CanvasLineNodeSchema,
 		CanvasPathNodeSchema,
 		CanvasTextNodeSchema,
+		CanvasRichTextNodeSchema,
 		CanvasImageNodeSchema,
 		CanvasAiPlaceholderNodeSchema,
 		...extraSchemas,
