@@ -7,6 +7,8 @@ export type CanvasNodeKind =
 	| "frame"
 	| "rect"
 	| "ellipse"
+	| "polygon"
+	| "star"
 	| "line"
 	| "path"
 	| "text"
@@ -83,8 +85,30 @@ export interface CanvasGradientFill {
 	to: { x: number; y: number };
 }
 
-/** A node fill: a plain CSS color string (back-compat) or a structured gradient. */
-export type CanvasFill = string | CanvasGradientFill;
+export type BrandTokenType = "color" | "font" | "spacing" | "asset" | "logo";
+
+/**
+ * A reference to a value owned by an external brand kit (PRD §12.4) — a
+ * color, font, spacing value, asset, or logo — identified by `id` alone.
+ * Resolution is deliberately EXTERNAL to core: this is just the SHAPE of a
+ * reference, never a lookup table or a brand-kit type. A consumer (the SVG
+ * serializer's `resolveBrandToken` option, or a future editor equivalent)
+ * turns it into a concrete value; core never resolves one itself.
+ */
+export interface BrandTokenRef {
+	type: "brand-token";
+	tokenType: BrandTokenType;
+	id: string;
+}
+
+/**
+ * A node fill: a plain CSS color string (back-compat), a structured gradient,
+ * or a brand-token reference (unresolved until a consumer looks it up).
+ */
+export type CanvasFill = string | CanvasGradientFill | BrandTokenRef;
+
+/** A font family: a literal name, or a brand-token reference to one. */
+export type CanvasFontFamily = string | BrandTokenRef;
 
 export interface CanvasShadow {
 	color: string;
@@ -141,6 +165,12 @@ export interface FramePlaceholder {
 	kind: FramePlaceholderKind;
 	/** Asset currently filling the placeholder, when one has been chosen. */
 	assetId?: string;
+	/**
+	 * Live binding to a brand-kit asset/logo token, when this placeholder should
+	 * track a token rather than (or alongside) a fixed `assetId`. Resolution is
+	 * external to core.
+	 */
+	assetToken?: BrandTokenRef;
 }
 
 /**
@@ -185,6 +215,28 @@ export interface CanvasEllipseNode extends CanvasNodeBase {
 	shadow?: CanvasShadow;
 }
 
+export interface CanvasPolygonNode extends CanvasNodeBase {
+	type: "polygon";
+	/** Vertex count. Must be an integer >= 3. */
+	sides: number;
+	fill?: CanvasFill;
+	stroke?: string;
+	strokeWidth?: number;
+	shadow?: CanvasShadow;
+}
+
+export interface CanvasStarNode extends CanvasNodeBase {
+	type: "star";
+	/** Number of outer tips. Must be an integer >= 3. */
+	points: number;
+	/** Inner-vertex radius as a fraction of the outer radius, 0..1. */
+	innerRadiusRatio: number;
+	fill?: CanvasFill;
+	stroke?: string;
+	strokeWidth?: number;
+	shadow?: CanvasShadow;
+}
+
 export interface CanvasLineNode extends CanvasNodeBase {
 	type: "line";
 	points: [number, number, number, number];
@@ -204,7 +256,7 @@ export interface CanvasPathNode extends CanvasNodeBase {
 export interface CanvasTextNode extends CanvasNodeBase {
 	type: "text";
 	text: string;
-	fontFamily: string;
+	fontFamily: CanvasFontFamily;
 	fontSize: number;
 	fontWeight?: string;
 	fill: CanvasFill;
@@ -233,7 +285,7 @@ export type RichTextTransform =
  */
 export interface RichTextSpan {
 	text: string;
-	fontFamily?: string;
+	fontFamily?: CanvasFontFamily;
 	fontSize?: number;
 	fontWeight?: string;
 	italic?: boolean;
@@ -285,6 +337,12 @@ export interface CanvasImageNode extends CanvasNodeBase {
 	crop?: CanvasImageCrop;
 	filters?: ImageFilter[];
 	maskAssetId?: string;
+	/**
+	 * Live binding to a brand-kit asset/logo token, when this image should track
+	 * a token rather than (or alongside) a fixed `assetId`. Resolution is
+	 * external to core.
+	 */
+	assetToken?: BrandTokenRef;
 }
 
 export interface CanvasAiPlaceholderNode extends CanvasNodeBase {
@@ -299,6 +357,8 @@ export type CanvasNode =
 	| CanvasFrameNode
 	| CanvasRectNode
 	| CanvasEllipseNode
+	| CanvasPolygonNode
+	| CanvasStarNode
 	| CanvasLineNode
 	| CanvasPathNode
 	| CanvasTextNode

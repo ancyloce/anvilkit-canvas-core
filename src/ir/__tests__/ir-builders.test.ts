@@ -8,10 +8,13 @@ import {
 	createLine,
 	createPage,
 	createPath,
+	createPolygon,
 	createRect,
 	createRichText,
+	createStar,
 	createText,
 } from "../builders.js";
+import type { BrandTokenRef } from "../types.js";
 import {
 	CanvasEllipseNodeSchema,
 	CanvasFrameNodeSchema,
@@ -21,8 +24,10 @@ import {
 	CanvasLineNodeSchema,
 	CanvasPageSchema,
 	CanvasPathNodeSchema,
+	CanvasPolygonNodeSchema,
 	CanvasRectNodeSchema,
 	CanvasRichTextNodeSchema,
+	CanvasStarNodeSchema,
 	CanvasTextNodeSchema,
 } from "../validators.js";
 
@@ -176,6 +181,38 @@ describe("createRect / createEllipse", () => {
 	});
 });
 
+describe("createPolygon / createStar", () => {
+	it("createPolygon returns a schema-valid polygon, defaulting sides to 5", () => {
+		const p = createPolygon({ bounds: { width: 50, height: 50 } });
+		expect(CanvasPolygonNodeSchema.safeParse(p).success).toBe(true);
+		expect(p.sides).toBe(5);
+	});
+
+	it("createPolygon honors a caller-provided sides count", () => {
+		const p = createPolygon({ bounds: { width: 50, height: 50 }, sides: 8 });
+		expect(p.sides).toBe(8);
+	});
+
+	it("createStar returns a schema-valid star, defaulting points/innerRadiusRatio", () => {
+		const s = createStar({ bounds: { width: 50, height: 50 } });
+		expect(CanvasStarNodeSchema.safeParse(s).success).toBe(true);
+		expect(s.points).toBe(5);
+		expect(s.innerRadiusRatio).toBe(0.5);
+	});
+
+	it("createStar honors caller-provided points/innerRadiusRatio/fill", () => {
+		const s = createStar({
+			bounds: { width: 50, height: 50 },
+			points: 7,
+			innerRadiusRatio: 0.35,
+			fill: "#abc",
+		});
+		expect(s.points).toBe(7);
+		expect(s.innerRadiusRatio).toBe(0.35);
+		expect(s.fill).toBe("#abc");
+	});
+});
+
 describe("createLine", () => {
 	it("derives bounds from points and defaults stroke", () => {
 		const l = createLine({ points: [0, 0, 100, 50] });
@@ -247,6 +284,28 @@ describe("createText", () => {
 		expect(t.fill).toBe("#000000");
 		expect(t.text).toBe("Hello");
 	});
+
+	it("accepts a brand-token ref for fontFamily and fill", () => {
+		const fontToken: BrandTokenRef = {
+			type: "brand-token",
+			tokenType: "font",
+			id: "b.heading",
+		};
+		const fillToken: BrandTokenRef = {
+			type: "brand-token",
+			tokenType: "color",
+			id: "b.ink",
+		};
+		const t = createText({
+			bounds: { width: 100, height: 24 },
+			text: "Hello",
+			fontFamily: fontToken,
+			fill: fillToken,
+		});
+		expect(CanvasTextNodeSchema.safeParse(t).success).toBe(true);
+		expect(t.fontFamily).toEqual(fontToken);
+		expect(t.fill).toEqual(fillToken);
+	});
 });
 
 describe("createImage", () => {
@@ -257,6 +316,74 @@ describe("createImage", () => {
 		});
 		expect(CanvasImageNodeSchema.safeParse(i).success).toBe(true);
 		expect(i.assetId).toBe("asset-1");
+	});
+
+	it("accepts an optional brand-token assetToken", () => {
+		const assetToken: BrandTokenRef = {
+			type: "brand-token",
+			tokenType: "logo",
+			id: "b.logo",
+		};
+		const i = createImage({
+			bounds: { width: 300, height: 200 },
+			assetId: "asset-1",
+			assetToken,
+		});
+		expect(CanvasImageNodeSchema.safeParse(i).success).toBe(true);
+		expect(i.assetToken).toEqual(assetToken);
+	});
+
+	it("omits assetToken entirely when not provided (no stray undefined key)", () => {
+		const i = createImage({
+			bounds: { width: 300, height: 200 },
+			assetId: "asset-1",
+		});
+		expect("assetToken" in i).toBe(false);
+	});
+});
+
+describe("createRect / createPolygon / createStar / createPath — brand-token fill", () => {
+	const fillToken: BrandTokenRef = {
+		type: "brand-token",
+		tokenType: "color",
+		id: "b.surface",
+	};
+
+	it("createRect accepts a brand-token fill", () => {
+		const r = createRect({
+			bounds: { width: 10, height: 10 },
+			fill: fillToken,
+		});
+		expect(CanvasRectNodeSchema.safeParse(r).success).toBe(true);
+		expect(r.fill).toEqual(fillToken);
+	});
+
+	it("createPolygon accepts a brand-token fill", () => {
+		const p = createPolygon({
+			bounds: { width: 10, height: 10 },
+			fill: fillToken,
+		});
+		expect(CanvasPolygonNodeSchema.safeParse(p).success).toBe(true);
+		expect(p.fill).toEqual(fillToken);
+	});
+
+	it("createStar accepts a brand-token fill", () => {
+		const s = createStar({
+			bounds: { width: 10, height: 10 },
+			fill: fillToken,
+		});
+		expect(CanvasStarNodeSchema.safeParse(s).success).toBe(true);
+		expect(s.fill).toEqual(fillToken);
+	});
+
+	it("createPath accepts a brand-token fill", () => {
+		const p = createPath({
+			bounds: { width: 10, height: 10 },
+			d: "M 0 0 L 1 1",
+			fill: fillToken,
+		});
+		expect(CanvasPathNodeSchema.safeParse(p).success).toBe(true);
+		expect(p.fill).toEqual(fillToken);
 	});
 });
 

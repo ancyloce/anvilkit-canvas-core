@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { createMigrationRegistry } from "./migrations.js";
 import type {
+	BrandTokenRef,
 	CanvasAssetRef,
 	CanvasBounds,
 	CanvasDocumentKind,
 	CanvasFill,
+	CanvasFontFamily,
 	CanvasGradientFill,
 	CanvasGradientStop,
 	CanvasGroupNode,
@@ -41,6 +43,17 @@ const FiniteNumber = z.number().refine((v) => Number.isFinite(v), {
 
 const NonNegativeFiniteNumber = FiniteNumber.refine((v) => v >= 0, {
 	message: "must be >= 0",
+});
+
+/** Shared floor for polygon `sides` and star `points` (FR-014). */
+const IntegerAtLeastThree = FiniteNumber.refine(
+	(v) => Number.isInteger(v) && v >= 3,
+	{ message: "must be an integer >= 3" },
+);
+
+/** Star `innerRadiusRatio`: a fraction of the outer radius. */
+const UnitInterval = FiniteNumber.refine((v) => v >= 0 && v <= 1, {
+	message: "must be between 0 and 1",
 });
 
 export const CanvasTransformSchema: z.ZodType<CanvasTransform> = z.looseObject({
@@ -115,10 +128,35 @@ export const CanvasGradientFillSchema: z.ZodType<CanvasGradientFill> =
 		to: z.looseObject({ x: FiniteNumber, y: FiniteNumber }),
 	});
 
-/** A fill is either a plain color string (back-compat) or a structured gradient. */
+/** Values a `BrandTokenRef` may point at (PRD §12.4). */
+const BRAND_TOKEN_TYPES = [
+	"color",
+	"font",
+	"spacing",
+	"asset",
+	"logo",
+] as const;
+
+export const BrandTokenRefSchema: z.ZodType<BrandTokenRef> = z.looseObject({
+	type: z.literal("brand-token"),
+	tokenType: z.enum(BRAND_TOKEN_TYPES),
+	id: z.string().min(1),
+});
+
+/**
+ * A fill is a plain color string (back-compat), a structured gradient, or an
+ * unresolved brand-token reference.
+ */
 export const CanvasFillSchema: z.ZodType<CanvasFill> = z.union([
 	z.string(),
 	CanvasGradientFillSchema,
+	BrandTokenRefSchema,
+]);
+
+/** A font family is a literal name, or a brand-token reference to one. */
+export const CanvasFontFamilySchema: z.ZodType<CanvasFontFamily> = z.union([
+	z.string().min(1),
+	BrandTokenRefSchema,
 ]);
 
 export const CanvasShadowSchema: z.ZodType<CanvasShadow> = z.looseObject({
@@ -164,6 +202,27 @@ export const CanvasEllipseNodeSchema = z.looseObject({
 	strokeWidth: NonNegativeFiniteNumber.optional(),
 });
 
+export const CanvasPolygonNodeSchema = z.looseObject({
+	...CanvasNodeBaseShape,
+	type: z.literal("polygon"),
+	sides: IntegerAtLeastThree,
+	fill: CanvasFillSchema.optional(),
+	shadow: CanvasShadowSchema.optional(),
+	stroke: z.string().optional(),
+	strokeWidth: NonNegativeFiniteNumber.optional(),
+});
+
+export const CanvasStarNodeSchema = z.looseObject({
+	...CanvasNodeBaseShape,
+	type: z.literal("star"),
+	points: IntegerAtLeastThree,
+	innerRadiusRatio: UnitInterval,
+	fill: CanvasFillSchema.optional(),
+	shadow: CanvasShadowSchema.optional(),
+	stroke: z.string().optional(),
+	strokeWidth: NonNegativeFiniteNumber.optional(),
+});
+
 export const CanvasLineNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("line"),
@@ -186,7 +245,7 @@ export const CanvasTextNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("text"),
 	text: z.string(),
-	fontFamily: z.string().min(1),
+	fontFamily: CanvasFontFamilySchema,
 	fontSize: NonNegativeFiniteNumber,
 	fontWeight: z.string().optional(),
 	fill: CanvasFillSchema,
@@ -202,7 +261,7 @@ export const CanvasTextNodeSchema = z.looseObject({
  */
 export const RichTextSpanSchema = z.looseObject({
 	text: z.string(),
-	fontFamily: z.string().min(1).optional(),
+	fontFamily: CanvasFontFamilySchema.optional(),
 	fontSize: NonNegativeFiniteNumber.optional(),
 	fontWeight: z.string().optional(),
 	italic: z.boolean().optional(),
@@ -239,6 +298,7 @@ export const CanvasImageNodeSchema = z.looseObject({
 	crop: CanvasImageCropSchema.optional(),
 	filters: z.array(ImageFilterSchema).optional(),
 	maskAssetId: z.string().min(1).optional(),
+	assetToken: BrandTokenRefSchema.optional(),
 });
 
 export const CanvasAiPlaceholderNodeSchema = z.looseObject({
@@ -253,6 +313,7 @@ export const FramePlaceholderSchema: z.ZodType<FramePlaceholder> =
 	z.looseObject({
 		kind: z.enum(["image", "logo"]),
 		assetId: z.string().min(1).optional(),
+		assetToken: BrandTokenRefSchema.optional(),
 	});
 
 // Recursive members. `CanvasGroupNodeSchema` / `CanvasFrameNodeSchema` stay
@@ -293,6 +354,8 @@ export const CanvasNodeSchema: z.ZodType<CanvasNode> = z.discriminatedUnion(
 		CanvasFrameNodeSchema,
 		CanvasRectNodeSchema,
 		CanvasEllipseNodeSchema,
+		CanvasPolygonNodeSchema,
+		CanvasStarNodeSchema,
 		CanvasLineNodeSchema,
 		CanvasPathNodeSchema,
 		CanvasTextNodeSchema,

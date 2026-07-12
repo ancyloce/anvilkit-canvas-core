@@ -1,8 +1,10 @@
 import { nowIso } from "../clock.js";
 import type {
+	BrandTokenRef,
 	CanvasBounds,
 	CanvasEllipseNode,
 	CanvasFill,
+	CanvasFontFamily,
 	CanvasFrameNode,
 	CanvasGroupNode,
 	CanvasImageCrop,
@@ -14,8 +16,10 @@ import type {
 	CanvasPageBackground,
 	CanvasPageSize,
 	CanvasPathNode,
+	CanvasPolygonNode,
 	CanvasRectNode,
 	CanvasRichTextNode,
+	CanvasStarNode,
 	CanvasTextAlign,
 	CanvasTextNode,
 	CanvasTransform,
@@ -177,7 +181,7 @@ export interface CreateRectOptions {
 	transform?: Partial<CanvasTransform>;
 	bounds: CanvasBounds;
 	zIndex?: number;
-	fill?: string;
+	fill?: CanvasFill;
 	stroke?: string;
 	strokeWidth?: number;
 	radius?: number;
@@ -206,7 +210,7 @@ export interface CreateEllipseOptions {
 	transform?: Partial<CanvasTransform>;
 	bounds: CanvasBounds;
 	zIndex?: number;
-	fill?: string;
+	fill?: CanvasFill;
 	stroke?: string;
 	strokeWidth?: number;
 }
@@ -221,6 +225,71 @@ export function createEllipse(
 		transform: clonePartialTransform(options.transform),
 		bounds: options.bounds,
 		zIndex: options.zIndex ?? 0,
+		...(options.fill !== undefined ? { fill: options.fill } : {}),
+		...(options.stroke !== undefined ? { stroke: options.stroke } : {}),
+		...(options.strokeWidth !== undefined
+			? { strokeWidth: options.strokeWidth }
+			: {}),
+	};
+}
+
+export interface CreatePolygonOptions {
+	id?: string;
+	name?: string;
+	transform?: Partial<CanvasTransform>;
+	bounds: CanvasBounds;
+	zIndex?: number;
+	/** Vertex count. Must be an integer >= 3; defaults to a pentagon. */
+	sides?: number;
+	fill?: CanvasFill;
+	stroke?: string;
+	strokeWidth?: number;
+}
+
+export function createPolygon(
+	options: CreatePolygonOptions,
+): CanvasPolygonNode {
+	return {
+		id: options.id ?? generateId(),
+		...(options.name !== undefined ? { name: options.name } : {}),
+		type: "polygon",
+		transform: clonePartialTransform(options.transform),
+		bounds: options.bounds,
+		zIndex: options.zIndex ?? 0,
+		sides: options.sides ?? 5,
+		...(options.fill !== undefined ? { fill: options.fill } : {}),
+		...(options.stroke !== undefined ? { stroke: options.stroke } : {}),
+		...(options.strokeWidth !== undefined
+			? { strokeWidth: options.strokeWidth }
+			: {}),
+	};
+}
+
+export interface CreateStarOptions {
+	id?: string;
+	name?: string;
+	transform?: Partial<CanvasTransform>;
+	bounds: CanvasBounds;
+	zIndex?: number;
+	/** Number of outer tips. Must be an integer >= 3; defaults to 5. */
+	points?: number;
+	/** Inner-vertex radius as a fraction of the outer radius; defaults to 0.5. */
+	innerRadiusRatio?: number;
+	fill?: CanvasFill;
+	stroke?: string;
+	strokeWidth?: number;
+}
+
+export function createStar(options: CreateStarOptions): CanvasStarNode {
+	return {
+		id: options.id ?? generateId(),
+		...(options.name !== undefined ? { name: options.name } : {}),
+		type: "star",
+		transform: clonePartialTransform(options.transform),
+		bounds: options.bounds,
+		zIndex: options.zIndex ?? 0,
+		points: options.points ?? 5,
+		innerRadiusRatio: options.innerRadiusRatio ?? 0.5,
 		...(options.fill !== undefined ? { fill: options.fill } : {}),
 		...(options.stroke !== undefined ? { stroke: options.stroke } : {}),
 		...(options.strokeWidth !== undefined
@@ -269,7 +338,7 @@ export interface CreatePathOptions {
 	zIndex?: number;
 	/** SVG path data. Must be non-empty (matches `CanvasPathNodeSchema`). */
 	d: string;
-	fill?: string;
+	fill?: CanvasFill;
 	stroke?: string;
 	strokeWidth?: number;
 }
@@ -298,10 +367,10 @@ export interface CreateTextOptions {
 	bounds: CanvasBounds;
 	zIndex?: number;
 	text: string;
-	fontFamily?: string;
+	fontFamily?: CanvasFontFamily;
 	fontSize?: number;
 	fontWeight?: string;
-	fill?: string;
+	fill?: CanvasFill;
 	align?: CanvasTextAlign;
 }
 
@@ -376,6 +445,7 @@ export interface CreateImageOptions {
 	crop?: CanvasImageCrop;
 	filters?: ImageFilter[];
 	maskAssetId?: string;
+	assetToken?: BrandTokenRef;
 }
 
 export function createImage(options: CreateImageOptions): CanvasImageNode {
@@ -391,6 +461,9 @@ export function createImage(options: CreateImageOptions): CanvasImageNode {
 		...(options.filters !== undefined ? { filters: options.filters } : {}),
 		...(options.maskAssetId !== undefined
 			? { maskAssetId: options.maskAssetId }
+			: {}),
+		...(options.assetToken !== undefined
+			? { assetToken: options.assetToken }
 			: {}),
 	};
 }

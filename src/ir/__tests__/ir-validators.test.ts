@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import type {
+	BrandTokenRef,
 	CanvasFrameNode,
 	CanvasGroupNode,
 	CanvasImageNode,
 	CanvasIR,
 	CanvasNode,
 	CanvasPage,
+	CanvasPolygonNode,
 	CanvasRectNode,
 	CanvasRichTextNode,
+	CanvasStarNode,
 	CanvasTextNode,
 } from "../types.js";
 import {
+	BrandTokenRefSchema,
 	CANVAS_IR_VERSION,
+	CanvasFillSchema,
 	CanvasFrameNodeSchema,
 	CanvasGroupNodeSchema,
 	CanvasImageNodeSchema,
@@ -19,10 +24,13 @@ import {
 	CanvasLineNodeSchema,
 	CanvasNodeSchema,
 	CanvasPageSchema,
+	CanvasPolygonNodeSchema,
 	CanvasRectNodeSchema,
 	CanvasRichTextNodeSchema,
+	CanvasStarNodeSchema,
 	CanvasTextNodeSchema,
 	CanvasTransformSchema,
+	FramePlaceholderSchema,
 	migrateCanvasIR,
 } from "../validators.js";
 
@@ -43,6 +51,25 @@ const makeRect = (id: string): CanvasRectNode => ({
 	bounds: { width: 100, height: 50 },
 	zIndex: 0,
 	fill: "#ff0000",
+});
+
+const makePolygon = (id: string): CanvasPolygonNode => ({
+	id,
+	type: "polygon",
+	transform: identityTransform,
+	bounds: { width: 60, height: 60 },
+	zIndex: 0,
+	sides: 5,
+});
+
+const makeStar = (id: string): CanvasStarNode => ({
+	id,
+	type: "star",
+	transform: identityTransform,
+	bounds: { width: 60, height: 60 },
+	zIndex: 0,
+	points: 5,
+	innerRadiusRatio: 0.5,
 });
 
 const makeText = (id: string, text: string): CanvasTextNode => ({
@@ -160,7 +187,7 @@ describe("CanvasIRSchema", () => {
 });
 
 describe("CanvasNodeSchema discriminated union", () => {
-	it("accepts each of the 10 node kinds", () => {
+	it("accepts each of the 12 node kinds", () => {
 		const nodes: CanvasNode[] = [
 			makeGroup("g1", []),
 			makeFrame("f1", []),
@@ -172,6 +199,8 @@ describe("CanvasNodeSchema discriminated union", () => {
 				bounds: { width: 50, height: 50 },
 				zIndex: 0,
 			},
+			makePolygon("poly1"),
+			makeStar("star1"),
 			{
 				id: "l1",
 				type: "line",
@@ -570,5 +599,269 @@ describe("CanvasRichTextNodeSchema", () => {
 			JSON.parse(JSON.stringify(base)),
 		);
 		expect(parsed).toEqual(base);
+	});
+});
+
+describe("CanvasPolygonNodeSchema", () => {
+	const base = makePolygon("poly1");
+
+	it("accepts a minimal polygon (fill/stroke/shadow all optional)", () => {
+		expect(CanvasPolygonNodeSchema.safeParse(base).success).toBe(true);
+	});
+
+	it("accepts every field populated, including a gradient fill and shadow", () => {
+		const full: CanvasPolygonNode = {
+			...base,
+			sides: 8,
+			fill: {
+				kind: "radial",
+				stops: [
+					{ offset: 0, color: "#fff" },
+					{ offset: 1, color: "#000" },
+				],
+				from: { x: 0.5, y: 0.5 },
+				to: { x: 1, y: 1 },
+			},
+			stroke: "#333333",
+			strokeWidth: 2,
+			shadow: { color: "#000000", blur: 4, offsetX: 2, offsetY: 2 },
+		};
+		expect(CanvasPolygonNodeSchema.safeParse(full).success).toBe(true);
+	});
+
+	it("rejects sides below the floor of 3", () => {
+		expect(
+			CanvasPolygonNodeSchema.safeParse({ ...base, sides: 2 }).success,
+		).toBe(false);
+	});
+
+	it("rejects a non-integer sides count", () => {
+		expect(
+			CanvasPolygonNodeSchema.safeParse({ ...base, sides: 4.5 }).success,
+		).toBe(false);
+	});
+
+	it("round-trips through JSON unchanged", () => {
+		const parsed = CanvasPolygonNodeSchema.parse(
+			JSON.parse(JSON.stringify(base)),
+		);
+		expect(parsed).toEqual(base);
+	});
+
+	it("preserves unknown fields (forward-compat)", () => {
+		const withExtra = { ...base, futureField: "keep me" };
+		expect(CanvasPolygonNodeSchema.parse(withExtra)).toEqual(withExtra);
+	});
+});
+
+describe("CanvasStarNodeSchema", () => {
+	const base = makeStar("star1");
+
+	it("accepts a minimal star (fill/stroke/shadow all optional)", () => {
+		expect(CanvasStarNodeSchema.safeParse(base).success).toBe(true);
+	});
+
+	it("accepts every field populated, including a gradient fill and shadow", () => {
+		const full: CanvasStarNode = {
+			...base,
+			points: 6,
+			innerRadiusRatio: 0.4,
+			fill: {
+				kind: "linear",
+				stops: [
+					{ offset: 0, color: "#fff" },
+					{ offset: 1, color: "#000" },
+				],
+				from: { x: 0, y: 0 },
+				to: { x: 1, y: 1 },
+			},
+			stroke: "#333333",
+			strokeWidth: 2,
+			shadow: { color: "#000000", blur: 4, offsetX: 2, offsetY: 2 },
+		};
+		expect(CanvasStarNodeSchema.safeParse(full).success).toBe(true);
+	});
+
+	it("rejects points below the floor of 3", () => {
+		expect(CanvasStarNodeSchema.safeParse({ ...base, points: 2 }).success).toBe(
+			false,
+		);
+	});
+
+	it("rejects a non-integer points count", () => {
+		expect(
+			CanvasStarNodeSchema.safeParse({ ...base, points: 4.5 }).success,
+		).toBe(false);
+	});
+
+	it("rejects innerRadiusRatio outside 0..1", () => {
+		expect(
+			CanvasStarNodeSchema.safeParse({ ...base, innerRadiusRatio: -0.1 })
+				.success,
+		).toBe(false);
+		expect(
+			CanvasStarNodeSchema.safeParse({ ...base, innerRadiusRatio: 1.1 })
+				.success,
+		).toBe(false);
+	});
+
+	it("accepts the innerRadiusRatio boundaries 0 and 1", () => {
+		expect(
+			CanvasStarNodeSchema.safeParse({ ...base, innerRadiusRatio: 0 }).success,
+		).toBe(true);
+		expect(
+			CanvasStarNodeSchema.safeParse({ ...base, innerRadiusRatio: 1 }).success,
+		).toBe(true);
+	});
+
+	it("round-trips through JSON unchanged", () => {
+		const parsed = CanvasStarNodeSchema.parse(JSON.parse(JSON.stringify(base)));
+		expect(parsed).toEqual(base);
+	});
+
+	it("preserves unknown fields (forward-compat)", () => {
+		const withExtra = { ...base, futureField: "keep me" };
+		expect(CanvasStarNodeSchema.parse(withExtra)).toEqual(withExtra);
+	});
+});
+
+describe("BrandTokenRefSchema", () => {
+	const colorToken: BrandTokenRef = {
+		type: "brand-token",
+		tokenType: "color",
+		id: "brand.primary",
+	};
+
+	it("accepts a valid token for every tokenType", () => {
+		for (const tokenType of [
+			"color",
+			"font",
+			"spacing",
+			"asset",
+			"logo",
+		] as const) {
+			expect(
+				BrandTokenRefSchema.safeParse({
+					type: "brand-token",
+					tokenType,
+					id: "x",
+				}).success,
+			).toBe(true);
+		}
+	});
+
+	it("rejects an unknown tokenType", () => {
+		expect(
+			BrandTokenRefSchema.safeParse({
+				type: "brand-token",
+				tokenType: "bogus",
+				id: "x",
+			}).success,
+		).toBe(false);
+	});
+
+	it("rejects a missing/empty id", () => {
+		expect(
+			BrandTokenRefSchema.safeParse({ type: "brand-token", tokenType: "color" })
+				.success,
+		).toBe(false);
+		expect(
+			BrandTokenRefSchema.safeParse({
+				type: "brand-token",
+				tokenType: "color",
+				id: "",
+			}).success,
+		).toBe(false);
+	});
+
+	it("preserves unknown fields (forward-compat)", () => {
+		const withExtra = { ...colorToken, futureField: "keep me" };
+		expect(BrandTokenRefSchema.parse(withExtra)).toEqual(withExtra);
+	});
+});
+
+describe("CanvasFillSchema — brand-token member", () => {
+	const token: BrandTokenRef = {
+		type: "brand-token",
+		tokenType: "color",
+		id: "brand.accent",
+	};
+
+	it("accepts a brand-token ref alongside string and gradient fills", () => {
+		expect(CanvasFillSchema.safeParse(token).success).toBe(true);
+		expect(CanvasFillSchema.safeParse("#ff0000").success).toBe(true);
+	});
+
+	it("a rect's fill accepts a brand-token ref", () => {
+		const rect = { ...makeRect("r1"), fill: token };
+		expect(CanvasRectNodeSchema.safeParse(rect).success).toBe(true);
+	});
+});
+
+describe("fontFamily — brand-token ref", () => {
+	const fontToken: BrandTokenRef = {
+		type: "brand-token",
+		tokenType: "font",
+		id: "brand.heading-font",
+	};
+
+	it("CanvasTextNodeSchema accepts a token fontFamily", () => {
+		const text = { ...makeText("t1", "hi"), fontFamily: fontToken };
+		expect(CanvasTextNodeSchema.safeParse(text).success).toBe(true);
+	});
+
+	it("a rich-text span accepts a token fontFamily and fill", () => {
+		const richText = {
+			...makeRichText("rt1"),
+			paragraphs: [
+				{
+					spans: [{ text: "hi", fontFamily: fontToken, fill: fontToken }],
+				},
+			],
+		};
+		expect(CanvasRichTextNodeSchema.safeParse(richText).success).toBe(true);
+	});
+});
+
+describe("assetToken — frame placeholder + image", () => {
+	const assetToken: BrandTokenRef = {
+		type: "brand-token",
+		tokenType: "logo",
+		id: "brand.logo",
+	};
+
+	it("FramePlaceholderSchema accepts assetToken alongside assetId", () => {
+		expect(
+			FramePlaceholderSchema.safeParse({ kind: "logo", assetToken }).success,
+		).toBe(true);
+		expect(
+			FramePlaceholderSchema.safeParse({
+				kind: "logo",
+				assetId: "a1",
+				assetToken,
+			}).success,
+		).toBe(true);
+	});
+
+	it("CanvasImageNodeSchema accepts an optional assetToken", () => {
+		const image = { ...makeImage("i1", "a1"), assetToken };
+		expect(CanvasImageNodeSchema.safeParse(image).success).toBe(true);
+	});
+
+	it("round-trips a document with token fills/fonts/assetTokens through JSON unchanged", () => {
+		const frame: CanvasFrameNode = {
+			...makeFrame("f1", [
+				{ ...makeRect("r1"), fill: assetToken },
+				{
+					...makeText("t1", "hi"),
+					fontFamily: { type: "brand-token", tokenType: "font", id: "b.f" },
+				},
+			]),
+			placeholder: { kind: "logo", assetToken },
+		};
+		const parsed = CanvasFrameNodeSchema.parse(
+			JSON.parse(JSON.stringify(frame)),
+		);
+		expect(parsed).toEqual(frame);
 	});
 });
