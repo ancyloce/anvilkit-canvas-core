@@ -10,9 +10,15 @@ import {
 	toAffineMatrix,
 } from "../geometry/affine.js";
 import { screenToWorld, worldToScreen } from "../geometry/viewport.js";
-import { createCanvasIR, createPage, createRect } from "../ir/builders.js";
+import {
+	createCanvasIR,
+	createPage,
+	createRect,
+	createRichText,
+} from "../ir/builders.js";
 import { insertNode } from "../ir/mutations.js";
 import type { CanvasIR, CanvasTransform } from "../ir/types.js";
+import { CanvasIRSchema } from "../ir/validators.js";
 import { findNode } from "../ir/walkers.js";
 
 /**
@@ -23,6 +29,7 @@ import { findNode } from "../ir/walkers.js";
  *   3. screenToWorld ∘ worldToScreen ≈ id (zoom > 0)
  *   4. batch then composite-inverse ≡ original document
  *   5. a failing batch leaves the caller's document untouched
+ *   6. rich-text paragraph arrays survive a batch + composite inverse
  *
  * Bounded runs keep suite time low; fast-check logs a seed + shrunken
  * counterexample on failure, which reproduces deterministically.
@@ -210,6 +217,115 @@ describe("batch transaction round-trips (property)", () => {
 				expect(base).toEqual(snapshot);
 			}),
 			{ numRuns: 50 },
+		);
+	});
+});
+
+/**
+ * Property 6 — rich-text paragraph arrays survive a batch + composite inverse.
+ *
+ * `paragraphs` is the first ARRAY-valued patch key any built-in kind has, and
+ * `node.update`'s inverse capture is a shallow, top-level key copy that stores a
+ * *reference* to the prior array. That is only sound because the IR layer never
+ * mutates in place. This property hammers that with randomly-shaped documents:
+ * if any code path ever starts mutating a paragraph array instead of replacing
+ * it, the composite inverse stops restoring the original and this goes red.
+ */
+const spanArb = fc.record(
+	{
+		text: fc.string({ maxLength: 12 }),
+		fontSize: fc.option(fc.integer({ min: 1, max: 96 }), { nil: undefined }),
+		italic: fc.option(fc.boolean(), { nil: undefined }),
+		letterSpacing: fc.option(fc.integer({ min: -4, max: 8 }), {
+			nil: undefined,
+		}),
+	},
+	{ requiredKeys: ["text"] },
+);
+
+const paragraphsArb = fc.array(
+	fc.record(
+		{
+			align: fc.option(fc.constantFrom("left", "center", "right"), {
+				nil: undefined,
+			}),
+			spans: fc.array(spanArb, { maxLength: 4 }),
+		},
+		{ requiredKeys: ["spans"] },
+	),
+	{ maxLength: 4 },
+);
+
+function richBaseIR(): CanvasIR {
+	const page = createPage({ id: "p1" });
+	let ir = createCanvasIR({
+		id: "doc",
+		title: "prop-rich",
+		pages: [page],
+		now: NOW,
+	});
+	ir = insertNode(ir, {
+		parentId: page.root.id,
+		node: createRichText({
+			id: "rt0",
+			bounds: { width: 200, height: 60 },
+			paragraphs: [{ spans: [{ text: "seed" }] }],
+		}),
+		now: NOW,
+	});
+	return ir;
+}
+
+describe("rich-text paragraph round-trips (property)", () => {
+	it("a batch of paragraph edits, then its composite inverse, ≡ original", () => {
+		fc.assert(
+			fc.property(
+				fc.array(paragraphsArb, { minLength: 1, maxLength: 5 }),
+				(edits) => {
+					const base = richBaseIR();
+					const before = JSON.stringify(base);
+
+					const commands: CanvasCommand[] = edits.map((paragraphs) => ({
+						type: "node.update",
+						nodeId: "rt0",
+						kind: "rich-text",
+						patch: { paragraphs },
+					}));
+
+					const applied = applyCommand(
+						base,
+						{ type: "batch", commands },
+						{ now: NOW },
+					);
+					const undone = applyCommand(applied.ir, applied.inverse, {
+						now: NOW,
+					});
+
+					expect(JSON.stringify(undone.ir)).toBe(before);
+					// And the caller's document was never touched.
+					expect(JSON.stringify(base)).toBe(before);
+				},
+			),
+			RUNS,
+		);
+	});
+
+	it("every intermediate paragraph document validates", () => {
+		fc.assert(
+			fc.property(paragraphsArb, (paragraphs) => {
+				const applied = applyCommand(
+					richBaseIR(),
+					{
+						type: "node.update",
+						nodeId: "rt0",
+						kind: "rich-text",
+						patch: { paragraphs },
+					},
+					{ now: NOW },
+				);
+				expect(CanvasIRSchema.safeParse(applied.ir).success).toBe(true);
+			}),
+			RUNS,
 		);
 	});
 });
