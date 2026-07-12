@@ -29,8 +29,10 @@ import {
 	CanvasPageBackgroundSchema,
 	CanvasPageSizeSchema,
 	CanvasPathNodeSchema,
+	CanvasPolygonNodeSchema,
 	CanvasRectNodeSchema,
 	CanvasRichTextNodeSchema,
+	CanvasStarNodeSchema,
 	CanvasTextNodeSchema,
 } from "../ir/validators.js";
 import {
@@ -128,6 +130,8 @@ const BUILTIN_KIND_DEFS: CanvasNodeKindDefinition[] = [
 	},
 	{ kind: "rect", schema: asKindSchema(CanvasRectNodeSchema) },
 	{ kind: "ellipse", schema: asKindSchema(CanvasEllipseNodeSchema) },
+	{ kind: "polygon", schema: asKindSchema(CanvasPolygonNodeSchema) },
+	{ kind: "star", schema: asKindSchema(CanvasStarNodeSchema) },
 	{ kind: "line", schema: asKindSchema(CanvasLineNodeSchema) },
 	{ kind: "path", schema: asKindSchema(CanvasPathNodeSchema) },
 	{ kind: "text", schema: asKindSchema(CanvasTextNodeSchema) },
@@ -173,6 +177,8 @@ function buildExtendedSchemas(
 		frame,
 		CanvasRectNodeSchema,
 		CanvasEllipseNodeSchema,
+		CanvasPolygonNodeSchema,
+		CanvasStarNodeSchema,
 		CanvasLineNodeSchema,
 		CanvasPathNodeSchema,
 		CanvasTextNodeSchema,

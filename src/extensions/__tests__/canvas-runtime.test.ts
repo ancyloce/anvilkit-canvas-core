@@ -9,8 +9,10 @@ import {
 	createLine,
 	createPage,
 	createPath,
+	createPolygon,
 	createRect,
 	createRichText,
+	createStar,
 	createText,
 } from "../../ir/builders.js";
 import { insertNode } from "../../ir/mutations.js";
@@ -53,6 +55,8 @@ function oneNodePerBuiltinKind(): CanvasNode[] {
 		createFrame({ id: "n-frame", bounds: box }),
 		createRect({ id: "n-rect", bounds: box }),
 		createEllipse({ id: "n-ellipse", bounds: box }),
+		createPolygon({ id: "n-polygon", bounds: box }),
+		createStar({ id: "n-star", bounds: box }),
 		createLine({ id: "n-line", points: [0, 0, 1, 1] }),
 		createPath({ id: "n-path", bounds: box, d: "M0 0 L1 1" }),
 		createText({ id: "n-text", bounds: box, text: "hi" }),
@@ -75,13 +79,20 @@ function oneNodePerBuiltinKind(): CanvasNode[] {
 	];
 }
 
-interface StarNode extends CanvasUnknownNode {
-	type: "star";
+/**
+ * Fake CUSTOM (non-built-in) extension kind used to exercise the extension
+ * registry machinery below. Named "pinwheel", not "star" — "star" is now a
+ * real built-in kind (canvas-m1-010) and registering it as an extension would
+ * throw `builtin-kind-shadowed`, which is the opposite of what these tests
+ * need.
+ */
+interface PinwheelNode extends CanvasUnknownNode {
+	type: "pinwheel";
 	points: number;
 }
 
-const starDef: CanvasNodeKindDefinition<StarNode> = {
-	kind: "star",
+const pinwheelDef: CanvasNodeKindDefinition<PinwheelNode> = {
+	kind: "pinwheel",
 	schema: z.looseObject({
 		id: z.string().min(1),
 		name: z.string().optional(),
@@ -94,17 +105,20 @@ const starDef: CanvasNodeKindDefinition<StarNode> = {
 		}),
 		bounds: z.looseObject({ width: z.number(), height: z.number() }),
 		zIndex: z.number(),
-		type: z.literal("star"),
+		type: z.literal("pinwheel"),
 		points: z.number(),
-	}) as unknown as z.ZodType<StarNode>,
+	}) as unknown as z.ZodType<PinwheelNode>,
 };
 
-const starExt: CanvasExtension = { id: "star-ext", nodeKinds: [starDef] };
+const pinwheelExt: CanvasExtension = {
+	id: "pinwheel-ext",
+	nodeKinds: [pinwheelDef],
+};
 
-function makeStar(): StarNode {
+function makePinwheel(): PinwheelNode {
 	return {
 		id: "s1",
-		type: "star",
+		type: "pinwheel",
 		transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
 		bounds: { width: 20, height: 20 },
 		zIndex: 0,
@@ -126,6 +140,8 @@ describe("createCanvasRuntime — default (no extensions)", () => {
 			"frame",
 			"rect",
 			"ellipse",
+			"polygon",
+			"star",
 			"line",
 			"path",
 			"text",
@@ -135,7 +151,7 @@ describe("createCanvasRuntime — default (no extensions)", () => {
 		]) {
 			expect(rt.nodeKinds.has(k)).toBe(true);
 		}
-		expect(rt.nodeKinds.has("star")).toBe(false);
+		expect(rt.nodeKinds.has("pinwheel")).toBe(false);
 	});
 
 	it("parses an existing IR identically to the static schema", () => {
@@ -147,32 +163,32 @@ describe("createCanvasRuntime — default (no extensions)", () => {
 
 describe("createCanvasRuntime — with a custom node kind", () => {
 	it("registers the custom kind and rebuilds a fresh schema pair", () => {
-		const rt = createCanvasRuntime([starExt]);
-		expect(rt.nodeKinds.has("star")).toBe(true);
+		const rt = createCanvasRuntime([pinwheelExt]);
+		expect(rt.nodeKinds.has("pinwheel")).toBe(true);
 		expect(rt.nodeSchema).not.toBe(CanvasNodeSchema);
 		expect(rt.irSchema).not.toBe(CanvasIRSchema);
 	});
 
 	it("parses a custom node where the static union rejects it", () => {
-		const rt = createCanvasRuntime([starExt]);
-		expect(rt.nodeSchema.parse(makeStar())).toMatchObject({
-			type: "star",
+		const rt = createCanvasRuntime([pinwheelExt]);
+		expect(rt.nodeSchema.parse(makePinwheel())).toMatchObject({
+			type: "pinwheel",
 			points: 5,
 		});
-		// The closed static union has no "star" member.
-		expect(() => CanvasNodeSchema.parse(makeStar())).toThrow();
+		// The closed static union has no "pinwheel" member.
+		expect(() => CanvasNodeSchema.parse(makePinwheel())).toThrow();
 	});
 
 	it("accepts an IR whose page contains a custom node", () => {
-		const ir = fixtureIR(makeStar());
-		const rt = createCanvasRuntime([starExt]);
+		const ir = fixtureIR(makePinwheel());
+		const rt = createCanvasRuntime([pinwheelExt]);
 		expect(() => rt.irSchema.parse(ir)).not.toThrow();
-		// Same IR fails the static schema (star is unknown to the closed union).
+		// Same IR fails the static schema (pinwheel is unknown to the closed union).
 		expect(() => CanvasIRSchema.parse(ir)).toThrow();
 	});
 
 	it("still parses built-in nodes in the extended runtime", () => {
-		const rt = createCanvasRuntime([starExt]);
+		const rt = createCanvasRuntime([pinwheelExt]);
 		expect(() => rt.irSchema.parse(fixtureIR())).not.toThrow();
 	});
 });
@@ -306,7 +322,7 @@ describe("container predicate ↔ kind-registry parity", () => {
 		}
 	});
 
-	it("registers all 10 built-in kinds", () => {
+	it("registers all 12 built-in kinds", () => {
 		const kinds = createCanvasRuntime()
 			.nodeKinds.list()
 			.map((d) => d.kind)
@@ -319,8 +335,10 @@ describe("container predicate ↔ kind-registry parity", () => {
 			"image",
 			"line",
 			"path",
+			"polygon",
 			"rect",
 			"rich-text",
+			"star",
 			"text",
 		]);
 	});
@@ -343,7 +361,7 @@ describe("static schema ↔ extension-aware schema parity", () => {
 	it("the extension-aware union accepts every registered built-in kind", () => {
 		// Registering ANY extension kind swaps the static union for the one
 		// `buildExtendedSchemas` assembles — which is the union under test here.
-		const rt = createCanvasRuntime([starExt]);
+		const rt = createCanvasRuntime([pinwheelExt]);
 		expect(rt.nodeSchema).not.toBe(CanvasNodeSchema);
 
 		for (const node of oneNodePerBuiltinKind()) {
@@ -393,6 +411,35 @@ describe("createCanvasRuntime — built-in kind protection", () => {
 		);
 		try {
 			createCanvasRuntime([frameShadow]);
+			expect.unreachable("registering a built-in kind must throw");
+		} catch (error) {
+			expect((error as CanvasExtensionError).code).toBe(
+				"builtin-kind-shadowed",
+			);
+		}
+	});
+
+	it.each([
+		"polygon",
+		"star",
+	] as const)("rejects an extension that registers `%s` (now a built-in kind)", (kind) => {
+		const shadow: CanvasExtension = {
+			id: `hostile-${kind}`,
+			nodeKinds: [
+				{
+					kind,
+					schema: z.looseObject({
+						id: z.string(),
+						type: z.literal(kind),
+					}) as unknown as z.ZodType<CanvasUnknownNode>,
+				},
+			],
+		};
+		expect(() => createCanvasRuntime([shadow])).toThrowError(
+			/built-in kinds cannot be shadowed/,
+		);
+		try {
+			createCanvasRuntime([shadow]);
 			expect.unreachable("registering a built-in kind must throw");
 		} catch (error) {
 			expect((error as CanvasExtensionError).code).toBe(
