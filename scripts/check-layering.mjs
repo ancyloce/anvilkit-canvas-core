@@ -25,6 +25,10 @@ const LAYERS = [
 	{ domain: "clock", rank: 0, match: (p) => p === "clock.ts" },
 	{ domain: "ir", rank: 1, match: (p) => p.startsWith("ir/") },
 	{ domain: "ai-contracts", rank: 2, match: (p) => p === "ai-contracts.ts" },
+	// The headless text-measurement port. A host-implemented contract over IR
+	// types, exactly like ai-contracts — so it sits at the same rank: it may read
+	// `ir/` (rank 1) and nothing above.
+	{ domain: "text-contracts", rank: 2, match: (p) => p === "text-contracts.ts" },
 	{ domain: "geometry", rank: 2, match: (p) => p.startsWith("geometry/") },
 	{ domain: "commands", rank: 3, match: (p) => p.startsWith("commands/") },
 	{ domain: "extensions", rank: 4, match: (p) => p.startsWith("extensions/") },
