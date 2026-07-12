@@ -298,3 +298,264 @@ describe("serializePageToSvg golden — gradients, shadows, image modes", () => 
 		);
 	});
 });
+
+/**
+ * Golden fixture for frames (canvas-m1-003). Covers every branch of `emitFrame`
+ * in one page so the snapshot pins their exact bytes:
+ *  - `plain`       — no clip, no background: must degrade to a bare <g>, i.e. a
+ *                    frame costs nothing when it isn't clipping or painting.
+ *  - `clipped`     — clip + solid background: <clipPath> with a square rect.
+ *  - `rounded`     — clip + radius + GRADIENT background: the rounded clip rect
+ *                    and the gradient must both land in <defs>.
+ *  - `outer/inner` — nested frames, each clipping: clip paths must not collide.
+ *  - `unresolved`  — a placeholder with no asset: deterministic fallback fill
+ *                    plus a FRAME_PLACEHOLDER_UNRESOLVED warning.
+ *  - `filled`      — a RESOLVED placeholder whose image sits as a child: the
+ *                    child must stay a real <image> clipped by the frame, and
+ *                    must NOT be baked into the fallback. This is the
+ *                    "never flatten content" guarantee.
+ */
+const framesFixture: CanvasIR = {
+	version: "2",
+	id: "doc-golden-frames",
+	title: "Golden frames",
+	pages: [
+		{
+			id: "p1",
+			size: { width: 320, height: 260, unit: "px" },
+			background: { kind: "solid", value: "#ffffff" },
+			root: {
+				id: "root",
+				type: "group",
+				transform: t(),
+				bounds: { width: 320, height: 260 },
+				zIndex: 0,
+				children: [
+					{
+						id: "plain",
+						type: "frame",
+						transform: t(8, 8),
+						bounds: { width: 80, height: 60 },
+						zIndex: 0,
+						children: [
+							{
+								id: "plain-child",
+								type: "rect",
+								transform: t(4, 4),
+								bounds: { width: 40, height: 20 },
+								zIndex: 0,
+								fill: "#0ea5e9",
+							},
+						],
+					},
+					{
+						id: "clipped",
+						type: "frame",
+						transform: t(100, 8),
+						bounds: { width: 80, height: 60 },
+						zIndex: 1,
+						clip: true,
+						background: "#f1f5f9",
+						children: [
+							{
+								id: "overflowing",
+								type: "rect",
+								transform: t(60, 40),
+								bounds: { width: 60, height: 60 },
+								zIndex: 0,
+								fill: "#ef4444",
+							},
+						],
+					},
+					{
+						id: "rounded",
+						type: "frame",
+						transform: t(192, 8),
+						bounds: { width: 80, height: 60 },
+						zIndex: 2,
+						clip: true,
+						radius: 12,
+						background: {
+							kind: "linear",
+							stops: [
+								{ offset: 0, color: "#0ea5e9" },
+								{ offset: 1, color: "#8b5cf6" },
+							],
+							from: { x: 0, y: 0 },
+							to: { x: 1, y: 1 },
+						},
+						children: [],
+					},
+					{
+						id: "outer",
+						type: "frame",
+						transform: t(8, 88),
+						bounds: { width: 120, height: 80 },
+						zIndex: 3,
+						clip: true,
+						background: "#e2e8f0",
+						children: [
+							{
+								id: "inner",
+								type: "frame",
+								transform: t(16, 16),
+								bounds: { width: 60, height: 40 },
+								zIndex: 0,
+								clip: true,
+								radius: 6,
+								background: "#fde047",
+								children: [
+									{
+										id: "inner-child",
+										type: "text",
+										transform: t(4, 4),
+										bounds: { width: 50, height: 16 },
+										zIndex: 0,
+										text: "nested",
+										fontFamily: "Inter",
+										fontSize: 12,
+										fill: "#0f172a",
+									},
+								],
+							},
+						],
+					},
+					{
+						id: "unresolved",
+						type: "frame",
+						transform: t(140, 88),
+						bounds: { width: 70, height: 70 },
+						zIndex: 4,
+						clip: true,
+						placeholder: { kind: "image" },
+						children: [],
+					},
+					{
+						id: "filled",
+						type: "frame",
+						transform: t(222, 88),
+						bounds: { width: 70, height: 70 },
+						zIndex: 5,
+						clip: true,
+						radius: 8,
+						placeholder: { kind: "image", assetId: "pixel-asset" },
+						children: [
+							{
+								id: "filled-image",
+								type: "image",
+								transform: t(),
+								bounds: { width: 90, height: 90 },
+								zIndex: 0,
+								assetId: "pixel-asset",
+							},
+						],
+					},
+				],
+			},
+		},
+	],
+	assets: {
+		"pixel-asset": {
+			id: "pixel-asset",
+			uri: PIXEL_PNG,
+			mimeType: "image/png",
+			width: 1,
+			height: 1,
+		},
+	},
+	metadata: {
+		createdAt: "2026-01-01T00:00:00.000Z",
+		updatedAt: "2026-01-01T00:00:00.000Z",
+	},
+};
+
+describe("serializePageToSvg golden — frames (clip, radius, background, placeholder)", () => {
+	it("pins clip paths, backgrounds, nesting, and placeholder fallback", async () => {
+		const { svg, warnings } = await serializePageToSvg(framesFixture, 0, {
+			pretty: true,
+			images: "embed",
+		});
+
+		assertWellFormed(svg);
+
+		// Frames must be handled by their own emitter, NOT fall through to the
+		// unknown-kind path — that fall-through is exactly what this task removes.
+		// (FONT_NOT_IN_MANIFEST also fires here: the nested text asks for Inter and
+		// this case passes no font manifest. Pre-existing, frame-independent.)
+		const codes = warnings.map((w) => w.code);
+		expect(codes).not.toContain("UNKNOWN_KIND_SKIPPED");
+		expect(
+			codes.filter((c) => c === "FRAME_PLACEHOLDER_UNRESOLVED"),
+		).toHaveLength(1);
+
+		// An unclipped, unpainted frame is just a group — no clipPath, no rect.
+		expect(svg).not.toContain('id="frame-clip-plain"');
+
+		// Clipped frames each get their own clip path; nesting must not collide.
+		expect(svg).toContain('<clipPath id="frame-clip-clipped">');
+		expect(svg).toContain('<clipPath id="frame-clip-outer">');
+		expect(svg).toContain('<clipPath id="frame-clip-inner">');
+		expect(svg).toContain('clip-path="url(#frame-clip-clipped)"');
+
+		// Radius rounds the clip rect (and the background rect with it).
+		expect(svg).toContain('<clipPath id="frame-clip-rounded">');
+		expect(svg).toContain('rx="12" ry="12"');
+
+		// A gradient background runs through the shared <defs> machinery.
+		expect(svg).toContain('<linearGradient id="grad-rounded-bg"');
+		expect(svg).toContain('fill="url(#grad-rounded-bg)"');
+
+		// The placed image is still an <image>, clipped by the frame — not baked
+		// into a raster and not replaced by the placeholder fallback.
+		expect(svg).toContain("<image ");
+		expect(svg).toContain('clip-path="url(#frame-clip-filled)"');
+
+		await expect(svg).toMatchFileSnapshot(
+			fileURLToPath(
+				new URL("./__snapshots__/canvas-frames.snap.svg", import.meta.url),
+			),
+		);
+	});
+
+	it("warns exactly once for the unresolved placeholder, and not for the filled one", async () => {
+		const { warnings } = await serializePageToSvg(framesFixture, 0, {
+			images: "embed",
+		});
+
+		const placeholderWarnings = warnings.filter(
+			(w) => w.code === "FRAME_PLACEHOLDER_UNRESOLVED",
+		);
+		expect(placeholderWarnings).toHaveLength(1);
+		// Structured: carries the offending node's id, never a silent drop.
+		expect(placeholderWarnings[0]?.nodeId).toBe("unresolved");
+		// The frame whose placeholder IS resolved must not warn.
+		expect(placeholderWarnings.map((w) => w.nodeId)).not.toContain("filled");
+	});
+
+	it("paints the fallback fill for an unresolved placeholder with no background", async () => {
+		const { svg } = await serializePageToSvg(framesFixture, 0, {
+			images: "embed",
+		});
+		// Deterministic constant, so the same document always yields the same bytes.
+		expect(svg).toContain('fill="#e2e8f0"');
+	});
+
+	it("prefers the frame's own background over the fallback when both apply", async () => {
+		const withBackground: CanvasIR = structuredClone(framesFixture);
+		const frame = withBackground.pages[0]?.root.children.find(
+			(c) => c.id === "unresolved",
+		);
+		if (frame?.type !== "frame") throw new Error("fixture drift");
+		frame.background = "#123456";
+
+		const { svg, warnings } = await serializePageToSvg(withBackground, 0, {
+			images: "embed",
+		});
+		// Still warns (the content is genuinely missing) but respects the author's
+		// background rather than overriding it with the neutral fallback.
+		expect(warnings.map((w) => w.code)).toContain(
+			"FRAME_PLACEHOLDER_UNRESOLVED",
+		);
+		expect(svg).toContain('fill="#123456"');
+	});
+});

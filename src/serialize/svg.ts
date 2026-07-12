@@ -8,6 +8,7 @@ import type {
 	CanvasAssetRef,
 	CanvasEllipseNode,
 	CanvasFill,
+	CanvasFrameNode,
 	CanvasGradientFill,
 	CanvasGroupNode,
 	CanvasImageNode,
@@ -23,6 +24,7 @@ import type {
 	CanvasTextNode,
 	CanvasTransform,
 	CanvasUnit,
+	FramePlaceholder,
 } from "../ir/types.js";
 import { CanvasIRSchema } from "../ir/validators.js";
 import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir/walkers.js";
@@ -46,7 +48,17 @@ import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir/walkers.js";
  *  - `blendMode` maps to `mix-blend-mode` only for CSS-valid values.
  *  - Image `crop` maps to an SVG `<clipPath>` over the rendered element, which
  *    differs from Konva's source-rect sampling once the image is scaled.
- *  - Image `maskAssetId` / `filters` are not represented (out of scope here).
+ *  - Image `maskAssetId` / `filters` are not represented. Per FR-012's
+ *    "preserved or migrated" clause these are deliberately WARN-ONLY
+ *    (`IMAGE_MASK_UNSUPPORTED` / `IMAGE_FILTERS_UNSUPPORTED`): the node still
+ *    serializes, the unrepresentable aspect is reported, and the field survives
+ *    in the IR — it is never silently dropped, and the image is never flattened
+ *    to hide the gap. A future vector-mask implementation can start emitting
+ *    real markup without changing the IR or breaking existing consumers.
+ *  - Frame `clip` IS fully representable (an SVG `<clipPath>` over the frame's
+ *    box, rounded when `radius` is set), so it carries no fidelity warning. A
+ *    frame whose `placeholder` has no resolved asset warns with
+ *    `FRAME_PLACEHOLDER_UNRESOLVED` and paints a deterministic fallback.
  */
 
 // --- URL / scheme safety -----------------------------------------------------
@@ -260,7 +272,17 @@ export type SvgWarningCode =
 	| "IMAGE_FILTERS_UNSUPPORTED"
 	| "BACKGROUND_UNSUPPORTED"
 	| "UNKNOWN_KIND_SKIPPED"
-	| "CUSTOM_KIND";
+	| "CUSTOM_KIND"
+	// Added for frames (canvas-m1-003). The union only ever grows: FR-041 requires
+	// that every pre-existing code and its emit sites keep working unchanged, so a
+	// consumer switching on `SvgWarningCode` is never broken by a new member.
+	//
+	// There is deliberately no `FRAME_MASK_UNSUPPORTED`: a frame has no mask field
+	// (PRD §12.2 — `clip`/`background`/`placeholder`/`radius`), and frame clipping
+	// IS losslessly representable as an SVG `<clipPath>`. A code that can never be
+	// emitted would be dead API. Image masks keep warning via
+	// `IMAGE_MASK_UNSUPPORTED`, which is unchanged.
+	| "FRAME_PLACEHOLDER_UNRESOLVED";
 
 export interface SvgSerializeWarning {
 	code: SvgWarningCode;
@@ -662,6 +684,8 @@ async function emitNode(
 	switch (node.type) {
 		case "group":
 			return emitGroup(node, ctx, depth);
+		case "frame":
+			return emitFrame(node, ctx, depth);
 		case "rect":
 			return pad + emitRect(node, ctx);
 		case "ellipse":
@@ -720,6 +744,118 @@ async function emitGroup(
 	if (children.length === 0) return `${pad}<g${attrStr} />`;
 	if (!ctx.options.pretty) return `${pad}<g${attrStr}>${children.join("")}</g>`;
 	return `${pad}<g${attrStr}>\n${children.join("\n")}\n${pad}</g>`;
+}
+
+/**
+ * The neutral fill painted for a frame whose placeholder has no resolved asset
+ * and which declares no background of its own. A fixed constant (not a random
+ * or theme-derived colour) so the same document always serializes to the same
+ * bytes — the golden snapshots depend on it.
+ */
+const FRAME_PLACEHOLDER_FALLBACK_FILL = "#e2e8f0";
+
+/** True when a placeholder actually points at an asset present in the document. */
+function isPlaceholderFilled(
+	placeholder: FramePlaceholder,
+	ctx: SvgEmitContext,
+): boolean {
+	return (
+		placeholder.assetId !== undefined &&
+		ctx.assets[placeholder.assetId] !== undefined
+	);
+}
+
+/**
+ * The fill to paint behind a frame's children, if any.
+ *
+ * An unresolved placeholder (no `assetId`, or one absent from the document's
+ * asset map) is a fidelity gap: the frame is meant to show content that isn't
+ * there. Rather than drop it silently, emit the frame's own background — or a
+ * deterministic neutral fallback when it has none — and record a structured
+ * warning. A *resolved* placeholder needs nothing special here: the asset is
+ * carried by an `<image>` CHILD of the frame, which serializes normally and is
+ * clipped by the frame rather than baked into it.
+ */
+function resolveFrameBackground(
+	node: CanvasFrameNode,
+	ctx: SvgEmitContext,
+): CanvasFill | undefined {
+	const placeholder = node.placeholder;
+	if (placeholder && !isPlaceholderFilled(placeholder, ctx)) {
+		warn(
+			ctx,
+			"FRAME_PLACEHOLDER_UNRESOLVED",
+			`Frame placeholder ("${placeholder.kind}") has no resolved asset; painting a fallback background instead.`,
+			node.id,
+		);
+		return node.background ?? FRAME_PLACEHOLDER_FALLBACK_FILL;
+	}
+	return node.background;
+}
+
+/**
+ * Geometry attributes for the frame's own box — shared by the clip path and the
+ * background rect so the two can never disagree about the rounding.
+ */
+function frameBoxAttrs(node: CanvasFrameNode): string[] {
+	const attrs = [
+		`width="${fmt(node.bounds.width)}"`,
+		`height="${fmt(node.bounds.height)}"`,
+	];
+	if (node.radius !== undefined && node.radius > 0) {
+		attrs.push(`rx="${fmt(node.radius)}"`, `ry="${fmt(node.radius)}"`);
+	}
+	return attrs;
+}
+
+/**
+ * A frame is a group that owns a box: it can paint a background and clip its
+ * children to that box.
+ *
+ * The clip is a `<clipPath>` applied to the `<g>` — the same mechanism the image
+ * `crop` path uses. Applying it to the group (rather than compositing children
+ * into a raster) is what lets a placed image child stay a real `<image>` element
+ * that is *clipped* by the frame: a frame never flattens or bakes its content.
+ * An unclipped frame emits a plain `<g>`, byte-identical in shape to a group.
+ *
+ * Children paint over the background, matching the editor's stacking order.
+ */
+async function emitFrame(
+	node: CanvasFrameNode,
+	ctx: SvgEmitContext,
+	depth: number,
+): Promise<string> {
+	const pad = ctx.options.pretty ? "\t".repeat(depth) : "";
+	const childPad = ctx.options.pretty ? "\t".repeat(depth + 1) : "";
+	const attrs = commonAttrs(node, ctx);
+
+	let clipDefs = "";
+	if (node.clip) {
+		const clipId = `frame-clip-${sanitizeId(node.id)}`;
+		clipDefs = `<defs><clipPath id="${clipId}"><rect ${frameBoxAttrs(node).join(" ")} /></clipPath></defs>`;
+		attrs.push(`clip-path="url(#${clipId})"`);
+	}
+
+	const body: string[] = [];
+	const background = resolveFrameBackground(node, ctx);
+	if (background !== undefined) {
+		// Reuse the shared fill machinery so a gradient background lands in
+		// `<defs>` exactly like a rect's does.
+		const decor = decorate(background, undefined, `${node.id}-bg`);
+		const bgAttrs = [
+			...frameBoxAttrs(node),
+			...paintAttrs(decor.fill, undefined, undefined),
+		];
+		body.push(`${childPad}${decor.defs}<rect ${bgAttrs.join(" ")} />`);
+	}
+	body.push(...(await emitChildren(node.children, ctx, depth + 1)));
+
+	const attrStr = attrs.length ? ` ${attrs.join(" ")}` : "";
+	if (body.length === 0) return `${pad}${clipDefs}<g${attrStr} />`;
+	if (!ctx.options.pretty) {
+		return `${pad}${clipDefs}<g${attrStr}>${body.join("")}</g>`;
+	}
+	return `${pad}${clipDefs}<g${attrStr}>\n${body.join("\n")}\n${pad}</g>`;
 }
 
 async function emitChildren(

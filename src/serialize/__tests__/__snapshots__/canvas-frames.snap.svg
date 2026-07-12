@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="260" viewBox="0 0 320 260" role="img">
+	<title>Golden frames</title>
+	<rect x="0" y="0" width="320" height="260" fill="#ffffff" />
+	<g transform="translate(8 8)">
+		<rect transform="translate(4 4)" width="40" height="20" fill="#0ea5e9" />
+	</g>
+	<defs><clipPath id="frame-clip-clipped"><rect width="80" height="60" /></clipPath></defs><g transform="translate(100 8)" clip-path="url(#frame-clip-clipped)">
+		<rect width="80" height="60" fill="#f1f5f9" />
+		<rect transform="translate(60 40)" width="60" height="60" fill="#ef4444" />
+	</g>
+	<defs><clipPath id="frame-clip-rounded"><rect width="80" height="60" rx="12" ry="12" /></clipPath></defs><g transform="translate(192 8)" clip-path="url(#frame-clip-rounded)">
+		<defs><linearGradient id="grad-rounded-bg" gradientUnits="objectBoundingBox" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0ea5e9" /><stop offset="1" stop-color="#8b5cf6" /></linearGradient></defs><rect width="80" height="60" rx="12" ry="12" fill="url(#grad-rounded-bg)" />
+	</g>
+	<defs><clipPath id="frame-clip-outer"><rect width="120" height="80" /></clipPath></defs><g transform="translate(8 88)" clip-path="url(#frame-clip-outer)">
+		<rect width="120" height="80" fill="#e2e8f0" />
+		<defs><clipPath id="frame-clip-inner"><rect width="60" height="40" rx="6" ry="6" /></clipPath></defs><g transform="translate(16 16)" clip-path="url(#frame-clip-inner)">
+			<rect width="60" height="40" rx="6" ry="6" fill="#fde047" />
+			<text transform="translate(4 4)" x="0" y="9.6" font-family="Inter" font-size="12" fill="#0f172a">nested</text>
+		</g>
+	</g>
+	<defs><clipPath id="frame-clip-unresolved"><rect width="70" height="70" /></clipPath></defs><g transform="translate(140 88)" clip-path="url(#frame-clip-unresolved)">
+		<rect width="70" height="70" fill="#e2e8f0" />
+	</g>
+	<defs><clipPath id="frame-clip-filled"><rect width="70" height="70" rx="8" ry="8" /></clipPath></defs><g transform="translate(222 88)" clip-path="url(#frame-clip-filled)">
+		<image width="90" height="90" preserveAspectRatio="none" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" />
+	</g>
+</svg>

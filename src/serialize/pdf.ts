@@ -19,6 +19,15 @@ import { DEFAULT_DPI } from "./svg.js";
  *
  * Vector PDF is intentionally out of scope (see plan §4 / PRD §1.6) — every page
  * is a rasterized screenshot, so text is not selectable and shapes are not vector.
+ * FR-043 (vector PDF) is P1/M3; nothing here changes for it.
+ *
+ * FRAMES: this serializer needs no frame-specific code. Because it embeds a raster
+ * the CALLER produced, frame clipping/backgrounds are already baked into those
+ * pixels by the editor's rasterizer (Konva applies the frame's clip when drawing
+ * the stage — see canvas-m1-004). The SVG path is where frames are represented
+ * structurally (`<clipPath>`, see `emitFrame` in `./svg.ts`); the PDF path simply
+ * inherits whatever the rasterizer drew. A frame is therefore never separately
+ * flattened or dropped here.
  */
 
 // --- units -------------------------------------------------------------------
