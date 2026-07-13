@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createMigrationRegistry } from "./migrations.js";
 import type {
 	BrandTokenRef,
+	CanvasAnimation,
 	CanvasAssetRef,
 	CanvasBounds,
 	CanvasDocumentKind,
@@ -13,12 +14,14 @@ import type {
 	CanvasImageCrop,
 	CanvasIR,
 	CanvasIRMetadata,
+	CanvasMediaTrim,
 	CanvasNode,
 	CanvasNodeBase,
 	CanvasNodeMeta,
 	CanvasPage,
 	CanvasPageBackground,
 	CanvasPageSize,
+	CanvasPageVariantSource,
 	CanvasShadow,
 	CanvasTransform,
 	FramePlaceholder,
@@ -113,8 +116,79 @@ const CanvasAiSourceMetaSchema = z.looseObject({
 	ts: FiniteNumber,
 });
 
+const CanvasAnimationEasingSchema = z.enum([
+	"linear",
+	"ease-in",
+	"ease-out",
+	"ease-in-out",
+]);
+
+const CanvasAnimationDirectionSchema = z.enum(["up", "down", "left", "right"]);
+
+const CanvasAnimationBaseShape = {
+	delay: NonNegativeFiniteNumber.optional(),
+	duration: NonNegativeFiniteNumber,
+	easing: CanvasAnimationEasingSchema.optional(),
+} as const;
+
+const CanvasFadeAnimationSchema = z.looseObject({
+	...CanvasAnimationBaseShape,
+	kind: z.literal("fade"),
+	from: FiniteNumber.optional(),
+});
+
+const CanvasSlideAnimationSchema = z.looseObject({
+	...CanvasAnimationBaseShape,
+	kind: z.literal("slide"),
+	direction: CanvasAnimationDirectionSchema,
+	distance: FiniteNumber.optional(),
+});
+
+const CanvasScaleAnimationSchema = z.looseObject({
+	...CanvasAnimationBaseShape,
+	kind: z.literal("scale"),
+	from: FiniteNumber.optional(),
+});
+
+const CanvasRotateAnimationSchema = z.looseObject({
+	...CanvasAnimationBaseShape,
+	kind: z.literal("rotate"),
+	from: FiniteNumber.optional(),
+});
+
+const CanvasPopAnimationSchema = z.looseObject({
+	...CanvasAnimationBaseShape,
+	kind: z.literal("pop"),
+	overshoot: FiniteNumber.optional(),
+});
+
+const CanvasTypewriterAnimationSchema = z.looseObject({
+	...CanvasAnimationBaseShape,
+	kind: z.literal("typewriter"),
+	charsPerSecond: NonNegativeFiniteNumber.optional(),
+});
+
+const CanvasMotionPathAnimationSchema = z.looseObject({
+	...CanvasAnimationBaseShape,
+	kind: z.literal("motion-path"),
+	path: z.string().min(1),
+});
+
+/** A discriminated union over the seven animation kinds (FR-080), dispatched on `kind`. */
+export const CanvasAnimationSchema: z.ZodType<CanvasAnimation> =
+	z.discriminatedUnion("kind", [
+		CanvasFadeAnimationSchema,
+		CanvasSlideAnimationSchema,
+		CanvasScaleAnimationSchema,
+		CanvasRotateAnimationSchema,
+		CanvasPopAnimationSchema,
+		CanvasTypewriterAnimationSchema,
+		CanvasMotionPathAnimationSchema,
+	]);
+
 export const CanvasNodeMetaSchema: z.ZodType<CanvasNodeMeta> = z.looseObject({
 	aiSource: CanvasAiSourceMetaSchema.optional(),
+	animation: CanvasAnimationSchema.optional(),
 });
 
 export const CanvasGradientStopSchema: z.ZodType<CanvasGradientStop> =
@@ -301,12 +375,49 @@ export const CanvasImageNodeSchema = z.looseObject({
 	assetToken: BrandTokenRefSchema.optional(),
 });
 
+/**
+ * FR-016: deliberately holds ONLY `assetId` — there is no `markup`/`content`
+ * field for inline SVG text to occupy, so raw markup has nowhere to go even
+ * under this schema's loose-object (unknown-key-preserving) posture. No
+ * renderer in this package ever reads an unknown key, so an attacker-supplied
+ * extra field survives as inert data, never as executed markup.
+ */
+export const CanvasSvgNodeSchema = z.looseObject({
+	...CanvasNodeBaseShape,
+	type: z.literal("svg"),
+	assetId: z.string().min(1),
+});
+
 export const CanvasAiPlaceholderNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("ai-placeholder"),
 	jobId: z.string().min(1),
 	status: z.enum(["pending", "complete", "error"]),
 	sourcePrompt: z.string().optional(),
+});
+
+export const CanvasMediaTrimSchema: z.ZodType<CanvasMediaTrim> = z.looseObject({
+	start: NonNegativeFiniteNumber.optional(),
+	end: NonNegativeFiniteNumber.optional(),
+});
+
+const CanvasMediaNodeBaseShape = {
+	...CanvasNodeBaseShape,
+	assetId: z.string().min(1),
+	trim: CanvasMediaTrimSchema.optional(),
+	muted: z.boolean().optional(),
+	volume: z.number().min(0).max(1).optional(),
+} as const;
+
+export const CanvasVideoNodeSchema = z.looseObject({
+	...CanvasMediaNodeBaseShape,
+	type: z.literal("video"),
+	poster: z.string().min(1).optional(),
+});
+
+export const CanvasAudioNodeSchema = z.looseObject({
+	...CanvasMediaNodeBaseShape,
+	type: z.literal("audio"),
 });
 
 export const FramePlaceholderSchema: z.ZodType<FramePlaceholder> =
@@ -361,9 +472,19 @@ export const CanvasNodeSchema: z.ZodType<CanvasNode> = z.discriminatedUnion(
 		CanvasTextNodeSchema,
 		CanvasRichTextNodeSchema,
 		CanvasImageNodeSchema,
+		CanvasSvgNodeSchema,
 		CanvasAiPlaceholderNodeSchema,
+		CanvasVideoNodeSchema,
+		CanvasAudioNodeSchema,
 	],
 );
+
+export const CanvasPageVariantSourceSchema: z.ZodType<CanvasPageVariantSource> =
+	z.looseObject({
+		sourcePageId: z.string().min(1),
+		presetId: z.string().min(1),
+		presetVersion: z.string().min(1),
+	});
 
 export const CanvasPageSchema: z.ZodType<CanvasPage> = z.looseObject({
 	id: z.string().min(1),
@@ -371,6 +492,8 @@ export const CanvasPageSchema: z.ZodType<CanvasPage> = z.looseObject({
 	size: CanvasPageSizeSchema,
 	background: CanvasPageBackgroundSchema,
 	root: CanvasGroupNodeSchema,
+	variantSource: CanvasPageVariantSourceSchema.optional(),
+	animation: CanvasAnimationSchema.optional(),
 });
 
 export const CanvasIRMetadataSchema: z.ZodType<CanvasIRMetadata> =

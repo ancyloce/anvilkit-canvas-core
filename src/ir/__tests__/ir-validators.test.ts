@@ -435,6 +435,45 @@ describe("primitive validators", () => {
 		};
 		expect(CanvasPageSchema.safeParse(bad).success).toBe(false);
 	});
+
+	it("CanvasPageSchema accepts a page with no variantSource (the common case)", () => {
+		const page = {
+			id: "p1",
+			size: { width: 100, height: 100, unit: "px" },
+			background: { kind: "solid", value: "#000" },
+			root: makeGroup("g1", []),
+		};
+		expect(CanvasPageSchema.safeParse(page).success).toBe(true);
+	});
+
+	it("CanvasPageSchema accepts a variant page's variantSource (canvas-m3-007)", () => {
+		const page = {
+			id: "p1",
+			size: { width: 1080, height: 1080, unit: "px" },
+			background: { kind: "solid", value: "#000" },
+			root: makeGroup("g1", []),
+			variantSource: {
+				sourcePageId: "source-page",
+				presetId: "instagram-post",
+				presetVersion: "1",
+			},
+		};
+		expect(CanvasPageSchema.safeParse(page).success).toBe(true);
+	});
+
+	it("CanvasPageSchema rejects a variantSource missing a required field", () => {
+		const page = {
+			id: "p1",
+			size: { width: 100, height: 100, unit: "px" },
+			background: { kind: "solid", value: "#000" },
+			root: makeGroup("g1", []),
+			variantSource: {
+				sourcePageId: "source-page",
+				presetId: "instagram-post",
+			},
+		};
+		expect(CanvasPageSchema.safeParse(page).success).toBe(false);
+	});
 });
 
 describe("migrateCanvasIR (migration seam)", () => {

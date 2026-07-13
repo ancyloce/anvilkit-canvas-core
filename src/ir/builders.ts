@@ -1,6 +1,7 @@
 import { nowIso } from "../clock.js";
 import type {
 	BrandTokenRef,
+	CanvasAudioNode,
 	CanvasBounds,
 	CanvasEllipseNode,
 	CanvasFill,
@@ -11,6 +12,7 @@ import type {
 	CanvasImageNode,
 	CanvasIR,
 	CanvasLineNode,
+	CanvasMediaTrim,
 	CanvasNode,
 	CanvasPage,
 	CanvasPageBackground,
@@ -20,9 +22,11 @@ import type {
 	CanvasRectNode,
 	CanvasRichTextNode,
 	CanvasStarNode,
+	CanvasSvgNode,
 	CanvasTextAlign,
 	CanvasTextNode,
 	CanvasTransform,
+	CanvasVideoNode,
 	FramePlaceholder,
 	ImageFilter,
 	RichTextOverflow,
@@ -465,5 +469,78 @@ export function createImage(options: CreateImageOptions): CanvasImageNode {
 		...(options.assetToken !== undefined
 			? { assetToken: options.assetToken }
 			: {}),
+	};
+}
+
+export interface CreateSvgOptions {
+	id?: string;
+	name?: string;
+	transform?: Partial<CanvasTransform>;
+	bounds: CanvasBounds;
+	zIndex?: number;
+	assetId: string;
+}
+
+/** FR-016 — asset-reference only. There is no options field for inline markup. */
+export function createSvg(options: CreateSvgOptions): CanvasSvgNode {
+	return {
+		id: options.id ?? generateId(),
+		...(options.name !== undefined ? { name: options.name } : {}),
+		type: "svg",
+		transform: clonePartialTransform(options.transform),
+		bounds: options.bounds,
+		zIndex: options.zIndex ?? 0,
+		assetId: options.assetId,
+	};
+}
+
+interface CreateMediaOptions {
+	id?: string;
+	name?: string;
+	transform?: Partial<CanvasTransform>;
+	bounds: CanvasBounds;
+	zIndex?: number;
+	assetId: string;
+	trim?: CanvasMediaTrim;
+	muted?: boolean;
+	volume?: number;
+}
+
+export interface CreateVideoOptions extends CreateMediaOptions {
+	poster?: string;
+}
+
+export type CreateAudioOptions = CreateMediaOptions;
+
+/** FR-081 — asset-reference only. No playback/rendering is implemented in canvas-core. */
+export function createVideo(options: CreateVideoOptions): CanvasVideoNode {
+	return {
+		id: options.id ?? generateId(),
+		...(options.name !== undefined ? { name: options.name } : {}),
+		type: "video",
+		transform: clonePartialTransform(options.transform),
+		bounds: options.bounds,
+		zIndex: options.zIndex ?? 0,
+		assetId: options.assetId,
+		...(options.trim !== undefined ? { trim: options.trim } : {}),
+		...(options.muted !== undefined ? { muted: options.muted } : {}),
+		...(options.volume !== undefined ? { volume: options.volume } : {}),
+		...(options.poster !== undefined ? { poster: options.poster } : {}),
+	};
+}
+
+/** FR-081 — asset-reference only. No playback/rendering is implemented in canvas-core. */
+export function createAudio(options: CreateAudioOptions): CanvasAudioNode {
+	return {
+		id: options.id ?? generateId(),
+		...(options.name !== undefined ? { name: options.name } : {}),
+		type: "audio",
+		transform: clonePartialTransform(options.transform),
+		bounds: options.bounds,
+		zIndex: options.zIndex ?? 0,
+		assetId: options.assetId,
+		...(options.trim !== undefined ? { trim: options.trim } : {}),
+		...(options.muted !== undefined ? { muted: options.muted } : {}),
+		...(options.volume !== undefined ? { volume: options.volume } : {}),
 	};
 }
