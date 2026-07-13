@@ -30,8 +30,23 @@ const LAYERS = [
 	// `ir/` (rank 1) and nothing above.
 	{ domain: "text-contracts", rank: 2, match: (p) => p === "text-contracts.ts" },
 	{ domain: "geometry", rank: 2, match: (p) => p.startsWith("geometry/") },
+	// The headless export job contract (FR-040, canvas-m3-001). Reads `ir/`
+	// only — it defines types + a document-resolution helper, never calls the
+	// `serialize/` (rank 5) serializers itself. Same rank as ai-contracts/
+	// text-contracts/geometry for the same reason.
+	{ domain: "export", rank: 2, match: (p) => p.startsWith("export/") },
 	{ domain: "commands", rank: 3, match: (p) => p.startsWith("commands/") },
 	{ domain: "extensions", rank: 4, match: (p) => p.startsWith("extensions/") },
+	// Template definition/instantiation (FR-020..022). Same rank as extensions —
+	// it needs ir + commands (for the reversible-batch instantiation wrapper,
+	// canvas-m2-003) but never touches extensions, and vice versa.
+	{ domain: "templates", rank: 4, match: (p) => p.startsWith("templates/") },
+	// The canonical Brand Kit contract (FR-031) + apply-brand transforms
+	// (FR-032, canvas-m2-006). Bumped from rank 2 to rank 4 in canvas-m2-006:
+	// the contract itself only reads `ir/`, but `applyBrandColors`/etc. wrap
+	// their edits as a reversible `commands/` batch, the same pattern
+	// `templates/` uses — so brand needs the same rank templates has.
+	{ domain: "brand", rank: 4, match: (p) => p.startsWith("brand/") },
 	{ domain: "serialize", rank: 5, match: (p) => p.startsWith("serialize/") },
 	{ domain: "root", rank: 6, match: (p) => p === "index.ts" },
 ];
