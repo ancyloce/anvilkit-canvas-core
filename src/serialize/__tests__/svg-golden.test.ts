@@ -1,6 +1,10 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import type { CanvasIR, CanvasTransform } from "../../ir/types.js";
+import type {
+	BrandTokenRef,
+	CanvasIR,
+	CanvasTransform,
+} from "../../ir/types.js";
 import type {
 	CanvasTextMeasurer,
 	MeasuredLine,
@@ -965,5 +969,123 @@ describe("serializePageToSvg golden — rich text (no measurer)", () => {
 				),
 			),
 		);
+	});
+});
+
+// canvas-m3-003 (FR-042): a golden covering the token-resolution path
+// end-to-end at the `serializePageToSvg` level (canvas-m1-012/013 only
+// pinned it at the lower-level `emitRect`/`createEmitContext` API in
+// `svg.test.ts`). Combines a resolving color token, a resolving font token,
+// and a dangling (unresolvable) color token in one fixture.
+const brandTokensFixture: CanvasIR = {
+	version: "2",
+	id: "doc-brand-tokens",
+	title: "Brand tokens",
+	pages: [
+		{
+			id: "p1",
+			size: { width: 240, height: 160, unit: "px" },
+			background: { kind: "solid", value: "#ffffff" },
+			root: {
+				id: "root",
+				type: "group",
+				transform: t(),
+				bounds: { width: 240, height: 160 },
+				zIndex: 0,
+				children: [
+					{
+						id: "resolved-color",
+						type: "rect",
+						transform: t(8, 8),
+						bounds: { width: 80, height: 40 },
+						zIndex: 0,
+						fill: {
+							type: "brand-token",
+							tokenType: "color",
+							id: "brand.accent",
+						} satisfies BrandTokenRef,
+					},
+					{
+						id: "unresolved-color",
+						type: "rect",
+						transform: t(96, 8),
+						bounds: { width: 80, height: 40 },
+						zIndex: 1,
+						fill: {
+							type: "brand-token",
+							tokenType: "color",
+							id: "brand.does-not-exist",
+						} satisfies BrandTokenRef,
+					},
+					{
+						id: "resolved-font",
+						type: "text",
+						transform: t(8, 64),
+						bounds: { width: 200, height: 24 },
+						zIndex: 2,
+						text: "Heading",
+						fontFamily: {
+							type: "brand-token",
+							tokenType: "font",
+							id: "brand.heading-font",
+						} satisfies BrandTokenRef,
+						fontSize: 18,
+						fill: "#0f172a",
+					},
+				],
+			},
+		},
+	],
+};
+
+describe("serializePageToSvg golden — brand token resolution", () => {
+	it("resolves matching tokens and degrades a dangling one, with exactly one BRAND_TOKEN_UNRESOLVED warning", async () => {
+		const { svg, warnings } = await serializePageToSvg(brandTokensFixture, 0, {
+			pretty: true,
+			resolveBrandToken: (ref) => {
+				if (ref.tokenType === "color" && ref.id === "brand.accent") {
+					return "#2563eb";
+				}
+				if (ref.tokenType === "font" && ref.id === "brand.heading-font") {
+					return "Poppins";
+				}
+				return undefined;
+			},
+		});
+
+		assertWellFormed(svg);
+
+		expect(svg).toContain('fill="#2563eb"');
+		expect(svg).toContain('font-family="Poppins"');
+		// The dangling token degrades to no paint, never a thrown error.
+		expect(svg).toContain('fill="none"');
+
+		const unresolved = warnings.filter(
+			(w) => w.code === "BRAND_TOKEN_UNRESOLVED",
+		);
+		expect(unresolved).toHaveLength(1);
+		expect(unresolved[0]?.nodeId).toBe("unresolved-color");
+
+		await expect(svg).toMatchFileSnapshot(
+			fileURLToPath(
+				new URL(
+					"./__snapshots__/canvas-brand-tokens.snap.svg",
+					import.meta.url,
+				),
+			),
+		);
+	});
+
+	it("degrades every token without a resolver, warning for each", async () => {
+		const { warnings } = await serializePageToSvg(brandTokensFixture, 0, {});
+
+		const unresolved = warnings.filter(
+			(w) => w.code === "BRAND_TOKEN_UNRESOLVED",
+		);
+		expect(unresolved.map((w) => w.nodeId).sort()).toEqual([
+			"resolved-color",
+			"resolved-font",
+			"unresolved-color",
+		]);
 	});
 });

@@ -16,6 +16,7 @@ import type {
 	CanvasRectNode,
 	CanvasRichTextNode,
 	CanvasStarNode,
+	CanvasSvgNode,
 	CanvasTextNode,
 	CanvasTransform,
 } from "../../ir/types.js";
@@ -884,6 +885,76 @@ describe("serializePageToSvg images", () => {
 		const codes = warnings.map((w) => w.code);
 		expect(codes).toContain("IMAGE_MASK_UNSUPPORTED");
 		expect(codes).toContain("IMAGE_FILTERS_UNSUPPORTED");
+	});
+});
+
+function svgNode(
+	assetId: string,
+	over: Partial<CanvasSvgNode> = {},
+): CanvasSvgNode {
+	return {
+		id: "svg1",
+		type: "svg",
+		transform: identity,
+		bounds: { width: 50, height: 40 },
+		zIndex: 0,
+		assetId,
+		...over,
+	};
+}
+
+describe("serializePageToSvg svg nodes", () => {
+	it("references a remote svg asset via the same safe <image> path as image nodes", async () => {
+		const { svg } = await serializePageToSvg(
+			makeIR(group([svgNode("a1")]), { assets: remoteAsset }),
+			0,
+		);
+		expect(svg).toContain("<image ");
+		expect(svg).toContain('href="https://cdn.example.com/x.png"');
+		expect(svg).toContain('width="50" height="40"');
+	});
+
+	it("always warns SVG_INLINE_UNSUPPORTED, even when the asset resolves cleanly", async () => {
+		const { warnings } = await serializePageToSvg(
+			makeIR(group([svgNode("a1")]), { assets: remoteAsset }),
+			0,
+		);
+		expect(warnings.map((w) => w.code)).toContain("SVG_INLINE_UNSUPPORTED");
+	});
+
+	it("embeds a remote svg asset via fetchAsset in embed mode", async () => {
+		const fetchAsset = async () => ({
+			bytes: new Uint8Array([72, 105]),
+			contentType: "image/svg+xml",
+		});
+		const { svg } = await serializePageToSvg(
+			makeIR(group([svgNode("a1")]), { assets: remoteAsset }),
+			0,
+			{ images: "embed", fetchAsset },
+		);
+		expect(svg).toContain('href="data:image/svg+xml;base64,SGk="');
+	});
+
+	it("skips and warns on a missing asset", async () => {
+		const { svg, warnings } = await serializePageToSvg(
+			makeIR(group([svgNode("nope")])),
+			0,
+		);
+		const codes = warnings.map((w) => w.code);
+		expect(codes).toContain("MISSING_ASSET");
+		expect(codes).toContain("SVG_INLINE_UNSUPPORTED");
+		expect(svg).not.toContain("<image");
+	});
+
+	it("skips and warns on a blocked URI scheme", async () => {
+		const { svg, warnings } = await serializePageToSvg(
+			makeIR(group([svgNode("a1")]), {
+				assets: { a1: { id: "a1", uri: "javascript:alert(1)" } },
+			}),
+			0,
+		);
+		expect(warnings.map((w) => w.code)).toContain("UNSAFE_URI");
+		expect(svg).not.toContain("<image");
 	});
 });
 

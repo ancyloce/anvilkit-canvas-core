@@ -11,6 +11,7 @@ import {
 import type {
 	BrandTokenRef,
 	CanvasAssetRef,
+	CanvasAudioNode,
 	CanvasEllipseNode,
 	CanvasFill,
 	CanvasFontFamily,
@@ -29,10 +30,12 @@ import type {
 	CanvasRichTextNode,
 	CanvasShadow,
 	CanvasStarNode,
+	CanvasSvgNode,
 	CanvasTextAlign,
 	CanvasTextNode,
 	CanvasTransform,
 	CanvasUnit,
+	CanvasVideoNode,
 	FramePlaceholder,
 	RichTextParagraph,
 	RichTextSpan,
@@ -321,12 +324,38 @@ export type SvgWarningCode =
 	// resolver returns nothing usable — the node still emits, with the token's
 	// fill/font degraded to the same deterministic fallback an absent value gets
 	// (fill: omitted attribute; fontFamily: inherits from the parent element).
-	| "BRAND_TOKEN_UNRESOLVED";
+	// This IS FR-041's "unresolved brand token" code — no separate
+	// `TOKEN_UNRESOLVED` was added in canvas-m3-002, since this already covers
+	// both `tokenType: "color"` and `"font"` refs.
+	| "BRAND_TOKEN_UNRESOLVED"
+	// Added for the SVG asset node (FR-016, canvas-m3-005). Fires whenever an
+	// `svg`-kind node is serialized: inline vector embedding is deferred behind
+	// a future `inlineVectorSvg` capability flag, so the node always renders as
+	// an `<image>` asset reference (the same safe path `image` nodes use).
+	| "SVG_INLINE_UNSUPPORTED"
+	// Added for animation metadata (FR-080, canvas-m6-001). Fires whenever a
+	// node or the page itself carries `animation` metadata: static SVG has no
+	// timeline, so the node/page renders in its normal resting state exactly
+	// as it would without the metadata — this warning is purely informational,
+	// never a divergent render.
+	| "ANIMATION_IGNORED"
+	// Added for video/audio nodes (FR-081, canvas-m6-002). A video renders its
+	// `poster` asset as a static `<image>` fallback when one is set (nothing
+	// otherwise); audio has no visual representation at all, ever.
+	| "VIDEO_UNSUPPORTED"
+	| "AUDIO_UNSUPPORTED";
 
 export interface SvgSerializeWarning {
 	code: SvgWarningCode;
 	message: string;
 	nodeId?: string;
+	/**
+	 * Optional suggested remediation or explanation of the degrade applied
+	 * (FR-041, canvas-m3-002) — e.g. "falls back to the neutral gray fill"
+	 * or "sanitize and re-upload as a raster to embed inline". Additive;
+	 * every existing warning site keeps working without setting it.
+	 */
+	fallback?: string;
 }
 
 /**
@@ -1210,6 +1239,14 @@ async function emitNode(
 		throw new CanvasIRDepthError([node.id]);
 	}
 	if (shouldSkipNode(node, ctx.options.skipInvisible)) return "";
+	if (node.meta?.animation) {
+		warn(
+			ctx,
+			"ANIMATION_IGNORED",
+			`Node has animation metadata ("${node.meta.animation.kind}") that is not represented in this static export.`,
+			node.id,
+		);
+	}
 	const pad = ctx.options.pretty ? "\t".repeat(depth) : "";
 
 	switch (node.type) {
@@ -1244,6 +1281,10 @@ async function emitNode(
 			const image = await emitImage(node, ctx);
 			return image ? pad + image : "";
 		}
+		case "svg": {
+			const svg = await emitSvg(node, ctx);
+			return svg ? pad + svg : "";
+		}
 		case "ai-placeholder":
 			warn(
 				ctx,
@@ -1251,6 +1292,13 @@ async function emitNode(
 				"AI placeholder nodes have no static SVG representation.",
 				node.id,
 			);
+			return "";
+		case "video": {
+			const video = await emitVideo(node, ctx);
+			return video ? pad + video : "";
+		}
+		case "audio":
+			emitAudio(node, ctx);
 			return "";
 		default: {
 			// A custom (non-built-in) node kind: emit via its registered toSvg hook,
@@ -1539,6 +1587,97 @@ async function emitImage(
 	return `${defs}<image ${attrs.join(" ")} />`;
 }
 
+/**
+ * FR-016: an `svg` node always renders via the SAME safe `<image>`
+ * asset-reference path `emitImage` uses (no crop/mask/filters — this node
+ * has none) — never as inline `<svg>`/markup. Always emits
+ * `SVG_INLINE_UNSUPPORTED`, since inline vector embedding is deferred behind
+ * a future `inlineVectorSvg` capability flag.
+ */
+async function emitSvg(
+	node: CanvasSvgNode,
+	ctx: SvgEmitContext,
+): Promise<string> {
+	warn(
+		ctx,
+		"SVG_INLINE_UNSUPPORTED",
+		"SVG nodes render as an <image> asset reference; inline vector embedding is not yet supported.",
+		node.id,
+	);
+	const asset = ctx.assets[node.assetId];
+	if (!asset) {
+		warn(
+			ctx,
+			"MISSING_ASSET",
+			`SVG asset "${node.assetId}" was not found.`,
+			node.id,
+		);
+		return "";
+	}
+	const href = await resolveImageHref(asset.uri, ctx, node.id);
+	if (!href) return "";
+
+	const attrs = [
+		...commonAttrs(node, ctx),
+		`width="${fmt(node.bounds.width)}"`,
+		`height="${fmt(node.bounds.height)}"`,
+		'preserveAspectRatio="none"',
+		`href="${escapeAttr(href)}"`,
+	];
+	return `<image ${attrs.join(" ")} />`;
+}
+
+/**
+ * A video node (FR-081, canvas-m6-002) has no static SVG representation — its
+ * only possible visual is its `poster` asset, rendered via the same
+ * asset-reference `<image>` path `emitImage`/`emitSvg` use. Always emits
+ * `VIDEO_UNSUPPORTED`; renders nothing when no `poster` is set.
+ */
+async function emitVideo(
+	node: CanvasVideoNode,
+	ctx: SvgEmitContext,
+): Promise<string> {
+	warn(
+		ctx,
+		"VIDEO_UNSUPPORTED",
+		"Video nodes have no static SVG representation; the poster frame is rendered if one is set.",
+		node.id,
+	);
+	if (!node.poster) return "";
+	const asset = ctx.assets[node.poster];
+	if (!asset) {
+		warn(
+			ctx,
+			"MISSING_ASSET",
+			`Video poster asset "${node.poster}" was not found.`,
+			node.id,
+		);
+		return "";
+	}
+	const href = await resolveImageHref(asset.uri, ctx, node.id);
+	if (!href) return "";
+
+	const attrs = [
+		...commonAttrs(node, ctx),
+		`width="${fmt(node.bounds.width)}"`,
+		`height="${fmt(node.bounds.height)}"`,
+		'preserveAspectRatio="none"',
+		`href="${escapeAttr(href)}"`,
+	];
+	return `<image ${attrs.join(" ")} />`;
+}
+
+/** An audio node (FR-081, canvas-m6-002) has no visual representation at all. */
+function emitAudio(node: CanvasAudioNode, ctx: SvgEmitContext): string {
+	warn(
+		ctx,
+		"AUDIO_UNSUPPORTED",
+		"Audio nodes have no static SVG representation.",
+		node.id,
+	);
+	return "";
+}
+
 // --- fonts -------------------------------------------------------------------
 
 function fontFaceRule(def: SvgFontFaceDef): string {
@@ -1629,6 +1768,13 @@ export async function serializePageToSvg(
 	if (options.validate) CanvasIRSchema.parse(ir);
 	const page = resolvePage(ir, pageSelector);
 	const ctx = createEmitContext(options, ir.assets);
+	if (page.animation) {
+		warn(
+			ctx,
+			"ANIMATION_IGNORED",
+			`Page has animation metadata ("${page.animation.kind}") that is not represented in this static export.`,
+		);
+	}
 	const pretty = ctx.options.pretty;
 	const childPad = pretty ? "\t" : "";
 

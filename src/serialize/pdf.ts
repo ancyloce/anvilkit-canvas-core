@@ -1,7 +1,12 @@
 import { PDFDocument } from "pdf-lib";
+import type { CanvasPrintPdfMetadata } from "../export/types.js";
 import type { CanvasIR, CanvasPage, CanvasUnit } from "../ir/types.js";
 import { CanvasIRSchema } from "../ir/validators.js";
+import { walkPage } from "../ir/walkers.js";
 import { DEFAULT_DPI } from "./svg.js";
+
+/** Fallback minimum DPI for the print-safety check when `print.dpi` is unset. */
+const DEFAULT_PRINT_MIN_DPI = 150;
 
 /**
  * Raster-embed PDF serializer for `@anvilkit/canvas-core`.
@@ -19,7 +24,10 @@ import { DEFAULT_DPI } from "./svg.js";
  *
  * Vector PDF is intentionally out of scope (see plan §4 / PRD §1.6) — every page
  * is a rasterized screenshot, so text is not selectable and shapes are not vector.
- * FR-043 (vector PDF) is P1/M3; nothing here changes for it.
+ * FR-043 (canvas-m3-004) added the print-metadata contract + a print-SAFETY
+ * check (`options.print`, `PRINT_UNSAFE` warnings) on top of this raster path;
+ * true vector PDF stays a documented future capability
+ * (`CanvasPrintPdfMetadata.capabilities.vector`), not implemented here.
  *
  * FRAMES: this serializer needs no frame-specific code. Because it embeds a raster
  * the CALLER produced, frame clipping/backgrounds are already baked into those
@@ -227,22 +235,65 @@ export interface PdfSerializeOptions {
 	 * corrupt PDF (`pdf-lib` would otherwise receive `NaN` page bounds).
 	 */
 	validate?: boolean;
+	/**
+	 * Print-safety metadata (FR-043, canvas-m3-004). When present, every
+	 * successfully-embedded raster's EFFECTIVE dpi (its natural pixel size
+	 * divided by the page's print size in inches) is compared against
+	 * `print.dpi` (default 150 DPI); a raster below it
+	 * warns with `PRINT_UNSAFE` rather than failing the export. `colorMode` is
+	 * advisory only — see {@link CanvasPrintPdfMetadata.colorMode}.
+	 */
+	print?: CanvasPrintPdfMetadata;
 }
 
 export type PdfWarningCode =
 	| "RASTER_MISSING"
 	| "RASTER_UNSUPPORTED_MIME"
-	| "RASTER_DECODE_FAILED";
+	| "RASTER_DECODE_FAILED"
+	// Added for the print PDF contract (FR-043, canvas-m3-004). Fires when an
+	// asset used in a `"pdf-print"` job falls below print-safe quality (e.g. a
+	// low-DPI raster, or an RGB-only source for a CMYK-flagged job) — the
+	// grow-only rule (FR-041) applies here too.
+	| "PRINT_UNSAFE"
+	// Added for animation metadata (FR-080, canvas-m6-001). Fires whenever a
+	// page carries `animation` metadata — PDF embeds a pre-rasterized page
+	// image (no per-node visibility), so this is necessarily page-scoped,
+	// unlike SVG's per-node `ANIMATION_IGNORED`.
+	| "ANIMATION_IGNORED"
+	// Added for video/audio nodes (FR-081, canvas-m6-002). Fires once per page
+	// that contains at least one video/audio node — the supplied raster is
+	// whatever the caller already rendered (typically via the SVG path, which
+	// applies its own poster/no-op fallback), so PDF's role is only to flag
+	// that this page contains media a static document can't play.
+	| "VIDEO_UNSUPPORTED"
+	| "AUDIO_UNSUPPORTED";
 
 export interface PdfSerializeWarning {
 	code: PdfWarningCode;
 	message: string;
 	pageId?: string;
+	/** Optional suggested remediation (FR-041, canvas-m3-002). Additive, matches `SvgSerializeWarning.fallback`. */
+	fallback?: string;
 }
 
 export interface PdfSerializeResult {
 	pdf: Uint8Array;
 	warnings: PdfSerializeWarning[];
+}
+
+/**
+ * Every `video`/`audio` node kind present on `page`, deduped — used to emit at
+ * most one `VIDEO_UNSUPPORTED`/`AUDIO_UNSUPPORTED` warning per page regardless
+ * of how many media nodes it contains (FR-081, canvas-m6-002).
+ */
+function findMediaKindsOnPage(
+	page: CanvasPage,
+): ReadonlySet<"video" | "audio"> {
+	const kinds = new Set<"video" | "audio">();
+	walkPage(page, ({ node }) => {
+		if (node.type === "video" || node.type === "audio") kinds.add(node.type);
+	});
+	return kinds;
 }
 
 /**
@@ -291,6 +342,21 @@ export async function serializeDocumentToPdf(
 		}
 		const pdfPage = doc.addPage([widthPt, heightPt]);
 
+		if (page.animation) {
+			warnings.push({
+				code: "ANIMATION_IGNORED",
+				message: `Page "${page.id}" has animation metadata ("${page.animation.kind}") that is not represented in this static export.`,
+				pageId: page.id,
+			});
+		}
+		for (const kind of findMediaKindsOnPage(page)) {
+			warnings.push({
+				code: kind === "video" ? "VIDEO_UNSUPPORTED" : "AUDIO_UNSUPPORTED",
+				message: `Page "${page.id}" contains a ${kind} node, which cannot be played in a static PDF.`,
+				pageId: page.id,
+			});
+		}
+
 		const raster = rastersByPage.get(page.id);
 		if (!raster) {
 			warnings.push({
@@ -322,6 +388,19 @@ export async function serializeDocumentToPdf(
 				width: widthPt,
 				height: heightPt,
 			});
+			if (options.print) {
+				const minDpi = options.print.dpi ?? DEFAULT_PRINT_MIN_DPI;
+				const widthInches = widthPt / 72;
+				const effectiveDpi = widthInches > 0 ? embedded.width / widthInches : 0;
+				if (effectiveDpi < minDpi) {
+					warnings.push({
+						code: "PRINT_UNSAFE",
+						message: `Raster for page "${page.id}" is ~${Math.round(effectiveDpi)} DPI, below the print-safe minimum of ${minDpi} DPI.`,
+						pageId: page.id,
+						fallback: "Re-export at a higher resolution before printing.",
+					});
+				}
+			}
 		} catch (error) {
 			warnings.push({
 				code: "RASTER_DECODE_FAILED",

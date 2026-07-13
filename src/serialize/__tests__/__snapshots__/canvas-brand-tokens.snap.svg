@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160" role="img">
+	<title>Brand tokens</title>
+	<rect x="0" y="0" width="240" height="160" fill="#ffffff" />
+	<rect transform="translate(8 8)" width="80" height="40" fill="#2563eb" />
+	<rect transform="translate(96 8)" width="80" height="40" fill="none" />
+	<text transform="translate(8 64)" x="0" y="14.4" font-family="Poppins" font-size="18" fill="#0f172a">Heading</text>
+</svg>
