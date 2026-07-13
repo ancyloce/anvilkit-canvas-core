@@ -66,6 +66,38 @@ describe("applyCommands", () => {
 		]);
 	});
 
+	it("derives enriched change records with resolved pageId and incrementing sequence", () => {
+		const { ir: ir0 } = makeIR();
+		const { records } = applyCommands(
+			ir0,
+			[
+				{
+					type: "node.move",
+					nodeId: "r1",
+					from: { x: 0, y: 0 },
+					to: { x: 10, y: 4 },
+				},
+				{ type: "node.rotate", nodeId: "r1", from: 0, to: 90 },
+			],
+			{ actorId: "peer-1", source: "remote" },
+		);
+		expect(records).toHaveLength(2);
+		expect(records[0]).toMatchObject({
+			pageId: "p1",
+			nodeIds: ["r1"],
+			actorId: "peer-1",
+			source: "remote",
+			sequence: 0,
+		});
+		expect(records[1]).toMatchObject({
+			pageId: "p1",
+			nodeIds: ["r1"],
+			actorId: "peer-1",
+			source: "remote",
+			sequence: 1,
+		});
+	});
+
 	it("is all-or-nothing — a mid-batch failure leaves the input IR untouched", () => {
 		const { ir: ir0 } = makeIR();
 		expect(() =>
@@ -90,8 +122,9 @@ describe("applyCommands", () => {
 
 	it("handles an empty batch as a no-op", () => {
 		const { ir: ir0 } = makeIR();
-		const { ir, inverse, changes } = applyCommands(ir0, []);
+		const { ir, inverse, changes, records } = applyCommands(ir0, []);
 		expect(changes).toEqual([]);
+		expect(records).toEqual([]);
 		expect(inverse.commands).toEqual([]);
 		expect(nodeOf(ir, "r1").transform.x).toBe(0);
 	});

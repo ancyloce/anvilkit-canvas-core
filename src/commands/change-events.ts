@@ -1,4 +1,8 @@
-import type { CanvasCommand } from "./types.js";
+import { resolveNow } from "../clock.js";
+import type { CanvasIR } from "../ir/types.js";
+import { pageOf } from "../ir/walkers.js";
+import { applyCommand } from "./runtime.js";
+import type { CanvasCommand, CommandApplyOptions } from "./types.js";
 
 /**
  * Granular document-change records for `@anvilkit/canvas-core`.
@@ -78,6 +82,117 @@ export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
 			// Batches carry no single record; applyCommands maps each sub-command.
 			return null;
 	}
+}
+
+/** Who produced a {@link CanvasChangeRecord}: applied locally, or received from a remote peer/server. */
+export type CanvasChangeSource = "local" | "remote";
+
+/**
+ * An enriched, persistable, replayable record of one applied command (FR-070).
+ * Additive alongside {@link CanvasChange}: `change` carries the existing
+ * best-effort content diff, `command` carries the original command so a
+ * sequence of records can be replayed deterministically via {@link replayChanges}.
+ */
+export interface CanvasChangeRecord {
+	/** Unique id for this record, stable across persistence/transmission. */
+	commandId: string;
+	/** Who applied the command. Defaults to `"local"` when not supplied. */
+	actorId: string;
+	/** ISO-8601 timestamp, from the same clock seam as command apply options. */
+	timestamp: string;
+	/** The page the command targeted — always resolved, even for commands whose type omits it. */
+	pageId: string;
+	/** Node ids the command affected. Empty for page-kind changes. */
+	nodeIds: readonly string[];
+	/** `"remote"` records may bypass a host's local undo stack. */
+	source: CanvasChangeSource;
+	/** Ordering/version metadata for conflict resolution. Defaults to `0`. */
+	sequence: number;
+	/** The original command, enabling deterministic replay. */
+	command: CanvasCommand;
+	/** The derived content diff (identical to what `commandToChange` would return). */
+	change: CanvasChange;
+}
+
+export interface ChangeRecordOptions extends CommandApplyOptions {
+	actorId?: string;
+	source?: CanvasChangeSource;
+	sequence?: number;
+	commandId?: string;
+	/** Injectable id factory for `commandId` when not supplied. Defaults to `crypto.randomUUID`. */
+	commandIdFactory?: () => string;
+}
+
+function resolveChangeNodeIds(change: CanvasChange): readonly string[] {
+	return change.kind === "page" ? [] : [change.nodeId];
+}
+
+/**
+ * Resolve the page a change targets, backfilling via IR lookup for the
+ * command types that don't carry `pageId` directly (delete, ungroup, move,
+ * resize, rotate, reorder, update, image.replace). `ir` must be the
+ * pre-mutation IR — the node (or, for `removed`, its still-present record)
+ * must exist in it for the lookup to succeed.
+ */
+function resolveChangePageId(change: CanvasChange, ir: CanvasIR): string {
+	if (change.kind === "page") return change.pageId;
+	if (
+		(change.kind === "added" || change.kind === "removed") &&
+		change.pageId !== undefined
+	) {
+		return change.pageId;
+	}
+	const page = pageOf(ir, change.nodeId);
+	if (!page) {
+		throw new Error(
+			`commandToChangeRecord: could not resolve a containing page for node "${change.nodeId}".`,
+		);
+	}
+	return page.id;
+}
+
+/**
+ * Enrich a single command into a full {@link CanvasChangeRecord}, or `null`
+ * for a `batch` (mirrors `commandToChange`; `applyCommands` maps sub-commands
+ * individually). `ir` must be the pre-mutation IR so page/node lookups for
+ * commands that omit `pageId` can resolve correctly.
+ */
+export function commandToChangeRecord(
+	cmd: CanvasCommand,
+	ir: CanvasIR,
+	options: ChangeRecordOptions = {},
+): CanvasChangeRecord | null {
+	const change = commandToChange(cmd);
+	if (change === null) return null;
+	return {
+		commandId:
+			options.commandId ??
+			(options.commandIdFactory ?? (() => crypto.randomUUID()))(),
+		actorId: options.actorId ?? "local",
+		timestamp: resolveNow(options.now)(),
+		pageId: resolveChangePageId(change, ir),
+		nodeIds: resolveChangeNodeIds(change),
+		source: options.source ?? "local",
+		sequence: options.sequence ?? 0,
+		command: cmd,
+		change,
+	};
+}
+
+/**
+ * Deterministically replay a sequence of change records onto an initial IR by
+ * re-applying each record's original `command` in order via `applyCommand`.
+ * Ignores each command's own inverse; only the resulting `ir` is threaded.
+ */
+export function replayChanges(
+	initialIr: CanvasIR,
+	records: readonly CanvasChangeRecord[],
+	options: CommandApplyOptions = {},
+): CanvasIR {
+	return records.reduce(
+		(ir, record) => applyCommand(ir, record.command, options).ir,
+		initialIr,
+	);
 }
 
 /** A subscriber for change batches. Returns an unsubscribe function. */

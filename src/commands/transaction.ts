@@ -1,5 +1,11 @@
 import type { CanvasIR } from "../ir/types.js";
-import { type CanvasChange, commandToChange } from "./change-events.js";
+import {
+	type CanvasChange,
+	type CanvasChangeRecord,
+	type CanvasChangeSource,
+	commandToChange,
+	commandToChangeRecord,
+} from "./change-events.js";
 import { applyCommand } from "./runtime.js";
 import type {
 	CanvasBatchCommand,
@@ -13,10 +19,20 @@ export interface TransactionApplyResult {
 	inverse: CanvasBatchCommand;
 	/** Per-command change records, in apply order. */
 	changes: CanvasChange[];
+	/** Per-command enriched, persistable/replayable records (FR-070), in apply order. */
+	records: CanvasChangeRecord[];
 }
 
 export interface ApplyCommandsOptions extends CommandApplyOptions {
 	label?: string;
+	/** Who applied this transaction. Forwarded to every record. Defaults to `"local"`. */
+	actorId?: string;
+	/** `"remote"` records may bypass a host's local undo stack. Defaults to `"local"`. */
+	source?: CanvasChangeSource;
+	/** Base sequence for this transaction; each command's record gets `sequence + index`. Defaults to `0`. */
+	sequence?: number;
+	/** Injectable id factory for each record's `commandId`. Defaults to `crypto.randomUUID`. */
+	commandIdFactory?: () => string;
 }
 
 /**
@@ -31,7 +47,14 @@ export function applyCommands(
 	commands: readonly CanvasCommand[],
 	options: ApplyCommandsOptions = {},
 ): TransactionApplyResult {
-	const { label, ...applyOptions } = options;
+	const {
+		label,
+		actorId,
+		source,
+		sequence,
+		commandIdFactory,
+		...applyOptions
+	} = options;
 	const batch: CanvasBatchCommand = {
 		type: "batch",
 		...(label !== undefined ? { label } : {}),
@@ -41,9 +64,22 @@ export function applyCommands(
 	const changes = commands
 		.map(commandToChange)
 		.filter((c): c is CanvasChange => c !== null);
+	const baseSequence = sequence ?? 0;
+	const records = commands
+		.map((cmd, index) =>
+			commandToChangeRecord(cmd, ir, {
+				...applyOptions,
+				actorId,
+				source,
+				sequence: baseSequence + index,
+				commandIdFactory,
+			}),
+		)
+		.filter((r): r is CanvasChangeRecord => r !== null);
 	return {
 		ir: result.ir,
 		inverse: result.inverse as CanvasBatchCommand,
 		changes,
+		records,
 	};
 }
