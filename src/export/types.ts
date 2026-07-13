@@ -1,4 +1,4 @@
-import type { CanvasIR } from "../ir/types.js";
+import type { CanvasIR, CanvasPageSize } from "../ir/types.js";
 
 /**
  * The headless export job contract (PRD FR-040, §12.7).
@@ -63,6 +63,54 @@ export interface CanvasExportJobOptions extends Record<string, unknown> {
 		readonly title?: string;
 		readonly author?: string;
 	};
+	/** Print-oriented metadata for the `"pdf-print"` format (FR-043, canvas-m3-004). Ignored by every other format. */
+	readonly print?: CanvasPrintPdfMetadata;
+}
+
+export type CanvasPrintColorMode = "rgb" | "cmyk";
+
+export interface CanvasPrintSafeArea {
+	readonly top: number;
+	readonly right: number;
+	readonly bottom: number;
+	readonly left: number;
+}
+
+/**
+ * Print-oriented PDF metadata (FR-043, canvas-m3-004). Shared verbatim with
+ * `serialize/pdf.ts`'s `PdfSerializeOptions.print` (that domain is allowed to
+ * import this one — `export/` sits at a strictly lower layer rank) so the
+ * job-contract metadata and the actual print-safety check never drift apart.
+ *
+ * Raster PDF (`serializeDocumentToPdf`) remains the only EXECUTABLE path —
+ * `capabilities.vector` records that true vector PDF is a documented future
+ * capability, not something this task implements.
+ */
+export interface CanvasPrintPdfMetadata {
+	readonly pageSize?: CanvasPageSize;
+	/** Bleed distance, in `pageSize.unit`. */
+	readonly bleed?: number;
+	/** Margin distance, in `pageSize.unit`. */
+	readonly margin?: number;
+	/**
+	 * Target DPI for this print job. Doubles as the minimum acceptable DPI for
+	 * embedded rasters — `serializeDocumentToPdf` warns with `PRINT_UNSAFE`
+	 * when an embedded raster's effective DPI falls below it. Defaults to 150
+	 * (a common print-safety floor) when `print` is present but `dpi` is not.
+	 */
+	readonly dpi?: number;
+	/**
+	 * Advisory only — `canvas-core` does not introspect an embedded raster's
+	 * color profile, so a `"cmyk"`-flagged job never actually verifies the
+	 * source is CMYK. Surfaced so a host/print vendor can act on the intent.
+	 */
+	readonly colorMode?: CanvasPrintColorMode;
+	readonly safeArea?: CanvasPrintSafeArea;
+	readonly capabilities: {
+		readonly raster: true;
+		/** Always `false` today — no vector PDF renderer exists yet. */
+		readonly vector: boolean;
+	};
 }
 
 export interface CanvasExportJobRequest {
@@ -105,6 +153,8 @@ export interface CanvasExportWarning {
 	readonly message: string;
 	readonly nodeId?: string;
 	readonly pageId?: string;
+	/** Optional suggested remediation, mirrored from `SvgSerializeWarning.fallback`/`PdfSerializeWarning.fallback` (FR-041, canvas-m3-002). */
+	readonly fallback?: string;
 }
 
 export type CanvasExportFidelityGrade =
