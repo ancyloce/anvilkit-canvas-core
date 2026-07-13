@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
+	createAudio,
 	createCanvasIR,
 	createEllipse,
 	createFrame,
@@ -13,7 +14,9 @@ import {
 	createRect,
 	createRichText,
 	createStar,
+	createSvg,
 	createText,
+	createVideo,
 } from "../../ir/builders.js";
 import { insertNode } from "../../ir/mutations.js";
 import type { CanvasIR, CanvasNode } from "../../ir/types.js";
@@ -67,6 +70,7 @@ function oneNodePerBuiltinKind(): CanvasNode[] {
 			paragraphs: [{ spans: [{ text: "hi" }] }],
 		}),
 		createImage({ id: "n-image", bounds: box, assetId: "a1" }),
+		createSvg({ id: "n-svg", bounds: box, assetId: "a2" }),
 		{
 			id: "n-ai",
 			type: "ai-placeholder",
@@ -76,6 +80,8 @@ function oneNodePerBuiltinKind(): CanvasNode[] {
 			jobId: "job-1",
 			status: "pending",
 		},
+		createVideo({ id: "n-video", bounds: box, assetId: "a3" }),
+		createAudio({ id: "n-audio", bounds: box, assetId: "a4" }),
 	];
 }
 
@@ -147,6 +153,7 @@ describe("createCanvasRuntime — default (no extensions)", () => {
 			"text",
 			"rich-text",
 			"image",
+			"svg",
 			"ai-placeholder",
 		]) {
 			expect(rt.nodeKinds.has(k)).toBe(true);
@@ -322,13 +329,14 @@ describe("container predicate ↔ kind-registry parity", () => {
 		}
 	});
 
-	it("registers all 12 built-in kinds", () => {
+	it("registers all 15 built-in kinds", () => {
 		const kinds = createCanvasRuntime()
 			.nodeKinds.list()
 			.map((d) => d.kind)
 			.sort();
 		expect(kinds).toEqual([
 			"ai-placeholder",
+			"audio",
 			"ellipse",
 			"frame",
 			"group",
@@ -339,7 +347,9 @@ describe("container predicate ↔ kind-registry parity", () => {
 			"rect",
 			"rich-text",
 			"star",
+			"svg",
 			"text",
+			"video",
 		]);
 	});
 });

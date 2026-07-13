@@ -15,6 +15,7 @@ import {
 	CANVAS_IR_VERSION,
 	CanvasAiPlaceholderNodeSchema,
 	CanvasAssetRefSchema,
+	CanvasAudioNodeSchema,
 	CanvasDocumentKindSchema,
 	CanvasEllipseNodeSchema,
 	CanvasFrameNodeSchema,
@@ -33,7 +34,9 @@ import {
 	CanvasRectNodeSchema,
 	CanvasRichTextNodeSchema,
 	CanvasStarNodeSchema,
+	CanvasSvgNodeSchema,
 	CanvasTextNodeSchema,
+	CanvasVideoNodeSchema,
 } from "../ir/validators.js";
 import {
 	type CanvasCommandHandler,
@@ -140,10 +143,13 @@ const BUILTIN_KIND_DEFS: CanvasNodeKindDefinition[] = [
 	// container↔registry parity test exists to catch exactly that.
 	{ kind: "rich-text", schema: asKindSchema(CanvasRichTextNodeSchema) },
 	{ kind: "image", schema: asKindSchema(CanvasImageNodeSchema) },
+	{ kind: "svg", schema: asKindSchema(CanvasSvgNodeSchema) },
 	{
 		kind: "ai-placeholder",
 		schema: asKindSchema(CanvasAiPlaceholderNodeSchema),
 	},
+	{ kind: "video", schema: asKindSchema(CanvasVideoNodeSchema) },
+	{ kind: "audio", schema: asKindSchema(CanvasAudioNodeSchema) },
 ];
 
 // The member-tuple type z.discriminatedUnion expects can't be expressed for a
@@ -184,7 +190,10 @@ function buildExtendedSchemas(
 		CanvasTextNodeSchema,
 		CanvasRichTextNodeSchema,
 		CanvasImageNodeSchema,
+		CanvasSvgNodeSchema,
 		CanvasAiPlaceholderNodeSchema,
+		CanvasVideoNodeSchema,
+		CanvasAudioNodeSchema,
 		...extraSchemas,
 	];
 	union = z.discriminatedUnion(
