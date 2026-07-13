@@ -4,6 +4,9 @@ import type { CanvasTemplateDefinition } from "../types.js";
 import {
 	CanvasSizePresetSchema,
 	CanvasTemplateDefinitionSchema,
+	TemplateAssetAttributionSchema,
+	TemplateGovernancePolicySchema,
+	TemplateLicenseSchema,
 	TemplateSlotSchema,
 	TemplateVariableSchema,
 } from "../validators.js";
@@ -131,8 +134,21 @@ describe("CanvasTemplateDefinitionSchema", () => {
 			],
 			editableSlots: [{ id: "slot1", kind: "text", nodeId: "n1" }],
 			lockedNodeIds: ["n2"],
-			license: { type: "cc-by", attribution: "AnvilKit" },
+			license: {
+				type: "cc-by",
+				attribution: "AnvilKit",
+				attributionRequired: true,
+				redistributable: true,
+				redistributionTerms: "Attribution required for commercial use.",
+			},
 			source: { author: "AnvilKit", sourceUrl: "https://example.com" },
+			assetAttributions: {
+				asset1: {
+					author: "Jane Doe",
+					credit: "Photo by Jane Doe",
+					sourceUrl: "https://example.com/photo",
+				},
+			},
 		};
 		expect(CanvasTemplateDefinitionSchema.safeParse(full).success).toBe(true);
 	});
@@ -172,5 +188,83 @@ describe("CanvasTemplateDefinitionSchema", () => {
 		expect(
 			CanvasTemplateDefinitionSchema.safeParse(withoutLockedNodeIds).success,
 		).toBe(false);
+	});
+
+	it("validates a metadata-free template identically regardless of the new optional fields' existence", () => {
+		// FR-082's own acceptance criterion: marketplace/governance additions
+		// must not affect a template that carries none of them.
+		const minimal = makeMinimalTemplate();
+		expect("license" in minimal).toBe(false);
+		expect("source" in minimal).toBe(false);
+		expect("assetAttributions" in minimal).toBe(false);
+		const result = CanvasTemplateDefinitionSchema.safeParse(minimal);
+		expect(result.success).toBe(true);
+	});
+});
+
+describe("TemplateLicenseSchema (FR-082 extended shape)", () => {
+	it("accepts the original canvas-m2-001 placeholder shape unchanged", () => {
+		expect(
+			TemplateLicenseSchema.safeParse({
+				type: "cc-by",
+				attribution: "AnvilKit",
+			}).success,
+		).toBe(true);
+	});
+
+	it("accepts the extended fields", () => {
+		expect(
+			TemplateLicenseSchema.safeParse({
+				type: "enterprise-internal",
+				attributionRequired: false,
+				redistributable: false,
+				redistributionTerms: "Internal use only; no redistribution.",
+			}).success,
+		).toBe(true);
+	});
+
+	it("rejects a missing type", () => {
+		expect(TemplateLicenseSchema.safeParse({}).success).toBe(false);
+	});
+});
+
+describe("TemplateAssetAttributionSchema", () => {
+	it("accepts author/credit/sourceUrl", () => {
+		expect(
+			TemplateAssetAttributionSchema.safeParse({
+				author: "Jane Doe",
+				credit: "Photo by Jane Doe",
+				sourceUrl: "https://example.com/photo",
+			}).success,
+		).toBe(true);
+	});
+
+	it("accepts an empty object (every field optional)", () => {
+		expect(TemplateAssetAttributionSchema.safeParse({}).success).toBe(true);
+	});
+});
+
+describe("TemplateGovernancePolicySchema", () => {
+	it("validates a policy keyed by templateId, standalone from CanvasTemplateDefinitionSchema", () => {
+		const policy = {
+			templateId: "tpl-poster",
+			approvalRequired: true,
+			allowedOrgIds: ["org-1", "org-2"],
+			notes: "Requires legal review before enterprise rollout.",
+		};
+		expect(TemplateGovernancePolicySchema.safeParse(policy).success).toBe(true);
+	});
+
+	it("rejects a missing templateId", () => {
+		expect(
+			TemplateGovernancePolicySchema.safeParse({ approvalRequired: true })
+				.success,
+		).toBe(false);
+	});
+
+	it("is not a field on CanvasTemplateDefinition — governance metadata never appears in a template's own validated shape", () => {
+		const definitionKeys = Object.keys(makeMinimalTemplate());
+		expect(definitionKeys).not.toContain("governancePolicy");
+		expect(definitionKeys).not.toContain("approvalRequired");
 	});
 });

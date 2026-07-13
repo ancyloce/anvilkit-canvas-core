@@ -91,6 +91,34 @@ describe("instantiateTemplate — determinism and identity", () => {
 		expect(first.warnings).toEqual(second.warnings);
 	});
 
+	it("produces an identical result whether or not the template carries marketplace/governance metadata (FR-082, canvas-m6-003)", () => {
+		const bare = makeTemplate();
+		const withMetadata = makeTemplate({
+			license: {
+				type: "cc-by",
+				attribution: "AnvilKit",
+				attributionRequired: true,
+				redistributable: true,
+				redistributionTerms: "Attribution required.",
+			},
+			source: { author: "AnvilKit", sourceUrl: "https://example.com" },
+			assetAttributions: {
+				"placeholder-asset": {
+					author: "Jane Doe",
+					credit: "Photo by Jane Doe",
+				},
+			},
+		});
+		const resultBare = instantiateTemplate(bare, makeDeterministicFactories());
+		const resultWithMetadata = instantiateTemplate(
+			withMetadata,
+			makeDeterministicFactories(),
+		);
+		expect(resultWithMetadata.document).toEqual(resultBare.document);
+		expect(resultWithMetadata.command).toEqual(resultBare.command);
+		expect(resultWithMetadata.warnings).toEqual(resultBare.warnings);
+	});
+
 	it("sets documentKind to template-instance and validates as normal CanvasIR", () => {
 		const result = instantiateTemplate(
 			makeTemplate(),

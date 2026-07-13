@@ -4,6 +4,8 @@ import type {
 	CanvasSafeArea,
 	CanvasSizePreset,
 	CanvasTemplateDefinition,
+	TemplateAssetAttribution,
+	TemplateGovernancePolicy,
 	TemplateLicense,
 	TemplateSlot,
 	TemplateSourceMeta,
@@ -90,12 +92,35 @@ export const TemplateVariableSchema: z.ZodType<TemplateVariable> =
 export const TemplateLicenseSchema: z.ZodType<TemplateLicense> = z.looseObject({
 	type: z.string().min(1),
 	attribution: z.string().optional(),
+	attributionRequired: z.boolean().optional(),
+	redistributable: z.boolean().optional(),
+	redistributionTerms: z.string().optional(),
 });
 
 export const TemplateSourceMetaSchema: z.ZodType<TemplateSourceMeta> =
 	z.looseObject({
 		author: z.string().optional(),
 		sourceUrl: z.string().optional(),
+	});
+
+export const TemplateAssetAttributionSchema: z.ZodType<TemplateAssetAttribution> =
+	z.looseObject({
+		author: z.string().optional(),
+		credit: z.string().optional(),
+		sourceUrl: z.string().optional(),
+	});
+
+/**
+ * Standalone — deliberately NOT nested under {@link CanvasTemplateDefinitionSchema}.
+ * A marketplace/enterprise platform validates and stores this separately,
+ * keyed by `templateId`, so it can never affect normal template validation.
+ */
+export const TemplateGovernancePolicySchema: z.ZodType<TemplateGovernancePolicy> =
+	z.looseObject({
+		templateId: z.string().min(1),
+		approvalRequired: z.boolean().optional(),
+		allowedOrgIds: z.array(z.string()).optional(),
+		notes: z.string().optional(),
 	});
 
 /**
@@ -120,4 +145,7 @@ export const CanvasTemplateDefinitionSchema: z.ZodType<CanvasTemplateDefinition>
 		lockedNodeIds: z.array(z.string()),
 		license: TemplateLicenseSchema.optional(),
 		source: TemplateSourceMetaSchema.optional(),
+		assetAttributions: z
+			.record(z.string(), TemplateAssetAttributionSchema)
+			.optional(),
 	});
