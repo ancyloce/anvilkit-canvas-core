@@ -35,6 +35,14 @@ const LAYERS = [
 	// `serialize/` (rank 5) serializers itself. Same rank as ai-contracts/
 	// text-contracts/geometry for the same reason.
 	{ domain: "export", rank: 2, match: (p) => p.startsWith("export/") },
+	// The headless comment anchor contract (FR-072, canvas-m5-003). Reads `ir/`
+	// only — a discriminated union + resolver over page/node ids, never touches
+	// commands/extensions. Same rank as ai-contracts/text-contracts/export.
+	{
+		domain: "comment-contracts",
+		rank: 2,
+		match: (p) => p === "comment-contracts.ts",
+	},
 	{ domain: "commands", rank: 3, match: (p) => p.startsWith("commands/") },
 	{ domain: "extensions", rank: 4, match: (p) => p.startsWith("extensions/") },
 	// Template definition/instantiation (FR-020..022). Same rank as extensions —
@@ -48,6 +56,18 @@ const LAYERS = [
 	// `templates/` uses — so brand needs the same rank templates has.
 	{ domain: "brand", rank: 4, match: (p) => p.startsWith("brand/") },
 	{ domain: "serialize", rank: 5, match: (p) => p.startsWith("serialize/") },
+	// Design-level AI job contracts (FR-050/052, canvas-m4-001/003). Needs
+	// BOTH templates (CanvasSizePreset id) and brand (BrandKitDefinition)
+	// types — same-rank siblings that don't depend on each other — plus
+	// commands (CanvasCommand payload shape) and ir/validators (schema
+	// validation for canvas-m4-003's quarantine layer), so it must outrank
+	// all of them, hence rank 5 alongside serialize (no dependency either
+	// way between the two).
+	{
+		domain: "ai-design-contracts",
+		rank: 5,
+		match: (p) => p === "ai-design-contracts.ts",
+	},
 	{ domain: "root", rank: 6, match: (p) => p === "index.ts" },
 ];
 
