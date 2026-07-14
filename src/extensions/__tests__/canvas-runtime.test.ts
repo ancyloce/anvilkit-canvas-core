@@ -26,6 +26,7 @@ import {
 	type CanvasExtension,
 	createCanvasRuntime,
 } from "../canvas-runtime.js";
+import type { CanvasCommandHandler } from "../command-registry.js";
 import {
 	CanvasExtensionError,
 	type CanvasNodeKindDefinition,
@@ -214,7 +215,16 @@ describe("createCanvasRuntime — command dispatch", () => {
 		expect(inverse).toMatchObject({ type: "node.move", nodeId: "r1" });
 	});
 
-	it("dispatches a custom command to its registered handler", () => {
+	/**
+	 * P0-7 regression: `applyCommand`'s own "batch" case recurses through the
+	 * STATIC dispatch (commands/runtime.ts), which has no knowledge of this
+	 * runtime's registry. Routing `rt.apply(ir, batchCmd)` straight to
+	 * `applyCommand` would silently no-op on any custom sub-command (no matching
+	 * switch case, no default, `undefined` returned). `rt.apply` must recurse
+	 * through ITSELF per sub-command so a custom command nested in a batch
+	 * resolves exactly like a top-level one.
+	 */
+	it("resolves a custom command nested inside a batch (not just top-level)", () => {
 		const ir = fixtureIR();
 		const ext: CanvasExtension = {
 			id: "tag-ext",
@@ -223,7 +233,59 @@ describe("createCanvasRuntime — command dispatch", () => {
 					type: "custom.tag",
 					apply: (cur) => ({
 						ir: { ...cur, title: "tagged" },
-						inverse: { type: "custom.untag" } as never,
+						inverse: { type: "custom.untag" },
+					}),
+				},
+				{
+					type: "custom.untag",
+					apply: (cur) => ({
+						ir: { ...cur, title: "t" },
+						inverse: { type: "custom.tag" },
+					}),
+				},
+			],
+		};
+		const rt = createCanvasRuntime([ext]);
+		const { ir: next, inverse } = rt.apply(ir, {
+			type: "batch",
+			commands: [
+				{
+					type: "node.move",
+					nodeId: "r1",
+					from: { x: 0, y: 0 },
+					to: { x: 5, y: 0 },
+				},
+				{ type: "custom.tag" },
+			],
+		});
+		expect(next.title).toBe("tagged");
+		expect(next.pages[0]?.root.children[0]?.transform.x).toBe(5);
+		expect(inverse).toMatchObject({ type: "batch" });
+		if (inverse.type === "batch") {
+			// Reversed: custom.tag's inverse first, then node.move's.
+			expect(inverse.commands[0]).toMatchObject({ type: "custom.untag" });
+			expect(inverse.commands[1]).toMatchObject({ type: "node.move" });
+		}
+
+		// The inverse batch round-trips through the SAME runtime-aware path.
+		const undone = rt.apply(next, inverse);
+		expect(undone.ir.title).toBe("t");
+		expect(undone.ir.pages[0]?.root.children[0]?.transform.x).toBe(0);
+	});
+
+	it("dispatches a custom command to its registered handler", () => {
+		const ir = fixtureIR();
+		const ext: CanvasExtension = {
+			id: "tag-ext",
+			commands: [
+				{
+					type: "custom.tag",
+					// No cast needed (P0-4): the array's contextual element type is
+					// `CanvasCommandHandler<{ type: string }>`, whose default `Inverse`
+					// (`{ type: string } | CanvasCommand`) already admits this shape.
+					apply: (cur) => ({
+						ir: { ...cur, title: "tagged" },
+						inverse: { type: "custom.untag" },
 					}),
 				},
 			],
@@ -231,6 +293,63 @@ describe("createCanvasRuntime — command dispatch", () => {
 		const rt = createCanvasRuntime([ext]);
 		const { ir: next } = rt.apply(ir, { type: "custom.tag" });
 		expect(next.title).toBe("tagged");
+	});
+
+	/**
+	 * P0-4: a `CanvasCommandHandler<C, Inverse>` whose inverse is a genuinely
+	 * DIFFERENT custom command type — previously impossible to express without
+	 * casting `inverse` to the built-in `CanvasCommand` union (see the `as never`
+	 * this test replaced above). Registers a real tag/untag pair and round-trips
+	 * through both `apply` calls with no cast anywhere in either definition.
+	 */
+	it("lets a custom command's handler return a distinct custom inverse type with no unsafe cast", () => {
+		interface CustomTagCommand {
+			type: "custom.tag";
+		}
+		interface CustomUntagCommand {
+			type: "custom.untag";
+		}
+		const tagHandler: CanvasCommandHandler<
+			CustomTagCommand,
+			CustomUntagCommand
+		> = {
+			type: "custom.tag",
+			apply: (cur) => ({
+				ir: { ...cur, title: "tagged" },
+				inverse: { type: "custom.untag" },
+			}),
+		};
+		const untagHandler: CanvasCommandHandler<
+			CustomUntagCommand,
+			CustomTagCommand
+		> = {
+			type: "custom.untag",
+			apply: (cur) => ({
+				ir: { ...cur, title: "plain" },
+				inverse: { type: "custom.tag" },
+			}),
+		};
+
+		// The handler-level round trip is fully statically typed: `applied.inverse`
+		// is exactly `CustomUntagCommand`, `undone.inverse` exactly `CustomTagCommand`.
+		const ir = fixtureIR();
+		const applied = tagHandler.apply(ir, { type: "custom.tag" }, {});
+		expect(applied.ir.title).toBe("tagged");
+		expect(applied.inverse.type).toBe("custom.untag");
+		const undone = untagHandler.apply(applied.ir, applied.inverse, {});
+		expect(undone.ir.title).toBe("plain");
+		expect(undone.inverse.type).toBe("custom.tag");
+
+		// The pair also works through the runtime's dynamic dispatch + registry —
+		// undo/redo through `CanvasRuntime.apply` sees the same values at runtime.
+		const rt = createCanvasRuntime();
+		rt.commands.register(tagHandler);
+		rt.commands.register(untagHandler);
+		const dispatched = rt.apply(ir, { type: "custom.tag" });
+		expect(dispatched.ir.title).toBe("tagged");
+		expect(dispatched.inverse.type).toBe("custom.untag");
+		const dispatchedBack = rt.apply(dispatched.ir, dispatched.inverse);
+		expect(dispatchedBack.ir.title).toBe("plain");
 	});
 
 	it("does not let an extension shadow a built-in command type", () => {
@@ -381,6 +500,63 @@ describe("static schema ↔ extension-aware schema parity", () => {
 				`the extension-aware schema rejected built-in kind "${node.type}" — is it missing from buildExtendedSchemas' \`members\` array?`,
 			).toBe(true);
 		}
+	});
+
+	/**
+	 * P0-3 regression: `buildExtendedSchemas` used to hand-rewrite the page shape
+	 * instead of reusing `CanvasPageShape`, and dropped `variantSource`/
+	 * `animation` in the rewrite. Both fields are `looseObject`-preserved either
+	 * way (never stripped), but only the static schema actually VALIDATED their
+	 * shape — the extension-aware runtime silently skipped that validation. This
+	 * asserts both schemas reject the SAME malformed `variantSource`/`animation`.
+	 */
+	it("validates CanvasPage.variantSource and .animation identically on both schema paths", () => {
+		const rt = createCanvasRuntime([pinwheelExt]);
+		expect(rt.irSchema).not.toBe(CanvasIRSchema);
+
+		const page = createPage({ id: "p1" });
+		const validIr: CanvasIR = {
+			...createCanvasIR({ id: "doc", title: "t", pages: [page] }),
+			pages: [
+				{
+					...page,
+					variantSource: {
+						sourcePageId: "p0",
+						presetId: "preset-1",
+						presetVersion: "1",
+					},
+					animation: { kind: "fade", duration: 0.4 },
+				},
+			],
+		};
+		expect(CanvasIRSchema.safeParse(validIr).success).toBe(true);
+		expect(rt.irSchema.safeParse(validIr).success).toBe(true);
+
+		const invalidVariantSource: CanvasIR = {
+			...validIr,
+			pages: [
+				{
+					...validIr.pages[0],
+					// Missing required `presetId`/`presetVersion` — must fail on both.
+					variantSource: { sourcePageId: "p0" } as never,
+				},
+			],
+		};
+		expect(CanvasIRSchema.safeParse(invalidVariantSource).success).toBe(false);
+		expect(rt.irSchema.safeParse(invalidVariantSource).success).toBe(false);
+
+		const invalidAnimation: CanvasIR = {
+			...validIr,
+			pages: [
+				{
+					...validIr.pages[0],
+					// Unknown animation `kind` — must fail on both (discriminated union).
+					animation: { kind: "not-a-real-kind", duration: 1 } as never,
+				},
+			],
+		};
+		expect(CanvasIRSchema.safeParse(invalidAnimation).success).toBe(false);
+		expect(rt.irSchema.safeParse(invalidAnimation).success).toBe(false);
 	});
 });
 

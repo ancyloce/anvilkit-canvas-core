@@ -67,7 +67,9 @@ describe("createNodeKindRegistry", () => {
 		const reg = createNodeKindRegistry();
 		reg.register(starDef);
 		try {
-			reg.register({ ...starDef, isContainer: true });
+			// A distinct object (not `isContainer` — that's covered separately below
+			// and would short-circuit before the duplicate-kind check ever runs).
+			reg.register({ ...starDef, create: undefined });
 			expect.unreachable("register() must throw for a duplicate kind");
 		} catch (error) {
 			expect(error).toBeInstanceOf(CanvasExtensionError);
@@ -75,6 +77,31 @@ describe("createNodeKindRegistry", () => {
 		}
 		expect(reg.get("star")?.isContainer).toBeUndefined();
 		expect(reg.list()).toHaveLength(1);
+	});
+
+	/**
+	 * P0-5: extension container kinds are rejected outright — core's walkers/
+	 * mutations only recurse into the static built-in containers (`group`,
+	 * `frame`); a registered `isContainer: true` extension kind would otherwise
+	 * be silently un-walked (nested content invisible to every command).
+	 */
+	it("rejects registering a container extension kind", () => {
+		const reg = createNodeKindRegistry();
+		const containerDef: CanvasNodeKindDefinition<StarNode> = {
+			...starDef,
+			kind: "star-container" as StarNode["type"],
+			isContainer: true,
+		};
+		try {
+			reg.register(containerDef);
+			expect.unreachable("register() must throw for a container kind");
+		} catch (error) {
+			expect(error).toBeInstanceOf(CanvasExtensionError);
+			expect((error as CanvasExtensionError).code).toBe(
+				"container-kind-unsupported",
+			);
+		}
+		expect(reg.has("star-container")).toBe(false);
 	});
 
 	it("create() produces a node of the kind", () => {

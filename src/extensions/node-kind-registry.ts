@@ -11,7 +11,8 @@ export type CanvasUnknownNode = CanvasNodeBase & { type: string };
 
 export type CanvasExtensionErrorCode =
 	| "builtin-kind-shadowed"
-	| "duplicate-kind";
+	| "duplicate-kind"
+	| "container-kind-unsupported";
 
 /** Structured error thrown when an extension registration is rejected. */
 export class CanvasExtensionError extends Error {
@@ -56,18 +57,35 @@ export interface CanvasNodeKindDefinition<
 	readonly contentExtent?: (node: N) => { width: number; height: number };
 	/** SVG hook. Returns a fragment string, or `""` to skip. */
 	readonly toSvg?: (node: N, ctx: CanvasSvgHookContext) => string;
-	/** True if this kind contains `children` (walked recursively). Default false. */
+	/**
+	 * True if this kind contains `children` (walked recursively). Default false.
+	 *
+	 * NOT CURRENTLY SUPPORTED for extension kinds (P0-5): `ir/walkers.ts` and
+	 * `ir/mutations.ts` — `findNode`/`parentOf`/`insertNode`/`removeNode`/
+	 * `updateNode`/every other tree operation — recurse only into the static
+	 * built-in container kinds (`group`, `frame`), never into this registry.
+	 * Only `serialize/svg.ts`'s leaf `toSvg` fallback is registry-aware. Setting
+	 * `isContainer: true` on an EXTENSION kind is rejected at `register()` time
+	 * with `CanvasExtensionError("container-kind-unsupported", ...)` rather than
+	 * silently accepted and then silently un-walked — a custom container is a
+	 * future extension seam (runtime-aware traversal across every walker/
+	 * mutation entry point), not a partially-working feature today. Built-in
+	 * container kinds are seeded directly (bypassing `register()`) and are
+	 * unaffected.
+	 */
 	readonly isContainer?: boolean;
 }
 
 export interface CanvasNodeKindRegistry {
 	/**
-	 * Register an extension kind. Seeded built-in kinds are unshadowable and a
-	 * kind may only be registered once.
+	 * Register an extension kind. Seeded built-in kinds are unshadowable, a
+	 * kind may only be registered once, and (P0-5) a container kind is rejected
+	 * outright — see {@link CanvasNodeKindDefinition.isContainer}.
 	 *
 	 * @throws CanvasExtensionError with code `"builtin-kind-shadowed"` when the
-	 * kind is a seeded built-in, or `"duplicate-kind"` when another extension
-	 * already registered it.
+	 * kind is a seeded built-in, `"duplicate-kind"` when another extension
+	 * already registered it, or `"container-kind-unsupported"` when
+	 * `def.isContainer` is true.
 	 */
 	register<N extends CanvasUnknownNode>(def: CanvasNodeKindDefinition<N>): void;
 	get(kind: string): CanvasNodeKindDefinition | undefined;
@@ -92,6 +110,12 @@ export function createNodeKindRegistry(
 				throw new CanvasExtensionError(
 					"builtin-kind-shadowed",
 					`Cannot register node kind "${def.kind}": built-in kinds cannot be shadowed by extensions.`,
+				);
+			}
+			if (def.isContainer) {
+				throw new CanvasExtensionError(
+					"container-kind-unsupported",
+					`Cannot register node kind "${def.kind}" with isContainer: true — extension container kinds are not walked/mutated by core today (see CanvasNodeKindDefinition.isContainer). Register it as a leaf kind, or model containment via a built-in "group"/"frame" wrapping your leaf node.`,
 				);
 			}
 			if (map.has(def.kind)) {

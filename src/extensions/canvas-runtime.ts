@@ -14,21 +14,18 @@ import type { CanvasIR, CanvasNode } from "../ir/types.js";
 import {
 	CANVAS_IR_VERSION,
 	CanvasAiPlaceholderNodeSchema,
-	CanvasAssetRefSchema,
 	CanvasAudioNodeSchema,
-	CanvasDocumentKindSchema,
 	CanvasEllipseNodeSchema,
 	CanvasFrameNodeSchema,
 	CanvasFrameNodeShape,
 	CanvasGroupNodeSchema,
 	CanvasImageNodeSchema,
-	CanvasIRMetadataSchema,
 	CanvasIRSchema,
+	CanvasIRShape,
 	CanvasLineNodeSchema,
 	CanvasNodeBaseShape,
 	CanvasNodeSchema,
-	CanvasPageBackgroundSchema,
-	CanvasPageSizeSchema,
+	CanvasPageShape,
 	CanvasPathNodeSchema,
 	CanvasPolygonNodeSchema,
 	CanvasRectNodeSchema,
@@ -75,12 +72,19 @@ export interface CanvasRuntime {
 	 * Apply a command: built-in types go to the core `applyCommand` (and cannot be
 	 * shadowed by an extension); custom types dispatch to their registered handler.
 	 * Throws for an unknown type with no handler.
+	 *
+	 * Generic over the command type `C` (P0-4), defaulted to the built-in
+	 * `CanvasCommand` union so a built-in-only caller needs no type argument —
+	 * `runtime.apply(ir, cmd)` behaves exactly as `applyCommand(ir, cmd)` would.
+	 * A caller dispatching a custom command supplies `C` (or lets it infer from
+	 * a typed `cmd` value) to get back `inverse: C | CanvasCommand` instead of
+	 * only the built-in union, with no cast required at the call site.
 	 */
-	readonly apply: (
+	readonly apply: <C extends { type: string } = CanvasCommand>(
 		ir: CanvasIR,
-		cmd: CanvasCommand | { type: string },
+		cmd: C,
 		options?: CommandApplyOptions,
-	) => CommandApplyResult;
+	) => CommandApplyResult<C | CanvasCommand>;
 	/**
 	 * Forward-migrate a persisted/peer IR to the current version via the migration
 	 * registry, then validate with this runtime's `irSchema`. The default runtime
@@ -201,21 +205,17 @@ function buildExtendedSchemas(
 		members as unknown as DiscriminatedUnionMembers,
 	) as unknown as z.ZodType<CanvasNode>;
 
+	// Spreads the SAME shape objects the static `CanvasPageSchema`/`CanvasIRSchema`
+	// spread (`ir/validators.ts`) — only `root`/`pages` are rebound to the
+	// extended union, so every other field (incl. `variantSource`/`animation`)
+	// validates identically on both paths by construction (P0-3).
 	const page = z.looseObject({
-		id: z.string().min(1),
-		name: z.string().optional(),
-		size: CanvasPageSizeSchema,
-		background: CanvasPageBackgroundSchema,
+		...CanvasPageShape,
 		root: group,
 	});
 	const irSchema = z.looseObject({
-		version: z.literal(CANVAS_IR_VERSION),
-		documentKind: CanvasDocumentKindSchema.optional(),
-		id: z.string().min(1),
-		title: z.string(),
+		...CanvasIRShape,
 		pages: z.array(page).min(1),
-		assets: z.record(z.string(), CanvasAssetRefSchema),
-		metadata: CanvasIRMetadataSchema,
 	}) as unknown as z.ZodType<CanvasIR>;
 
 	return { nodeSchema: union, irSchema };
@@ -244,20 +244,62 @@ export function createCanvasRuntime(
 			migrations.register(migration);
 	}
 
-	const apply = (
+	// One internal cast per branch, at the dynamic-dispatch boundary: `commands`
+	// stores handlers behind a type-erased `Map` (necessarily — it holds
+	// arbitrarily many distinct C/Inverse pairs), so re-attaching the caller's
+	// static `C` to the runtime lookup's result is unavoidable here. This is the
+	// ONLY place the cast happens; nothing an extension author writes (defining
+	// or registering a handler, or calling `runtime.apply<C>(...)`) needs one.
+	function apply<C extends { type: string } = CanvasCommand>(
 		ir: CanvasIR,
-		cmd: CanvasCommand | { type: string },
+		cmd: C,
 		options: CommandApplyOptions = {},
-	): CommandApplyResult => {
+	): CommandApplyResult<C | CanvasCommand> {
+		if (cmd.type === "batch") {
+			// `applyCommand`'s OWN "batch" case recurses through the STATIC
+			// dispatch (commands/runtime.ts's `applyBatch` calls `applyCommand`,
+			// not this runtime) — so routing straight to it would silently no-op
+			// on any custom sub-command nested in the batch (the static switch has
+			// no matching case, no default, and returns `undefined`). Recurse
+			// through THIS runtime's `apply` for each sub-command instead, so a
+			// custom command inside a batch resolves via the registry exactly like
+			// a top-level one does. An all-built-in batch still ends up dispatching
+			// every sub-command to `applyCommand`, one at a time — identical result.
+			const batch = cmd as unknown as { label?: string; commands: unknown[] };
+			let working = ir;
+			const inverses: (CanvasCommand | { type: string })[] = [];
+			for (const sub of batch.commands as Array<{ type: string }>) {
+				const result = apply(working, sub, options);
+				working = result.ir;
+				inverses.push(result.inverse);
+			}
+			inverses.reverse();
+			return {
+				ir: working,
+				inverse: {
+					type: "batch",
+					...(batch.label !== undefined ? { label: batch.label } : {}),
+					commands: inverses,
+				},
+			} as CommandApplyResult<C | CanvasCommand>;
+		}
 		if (BUILTIN_COMMAND_TYPES.has(cmd.type)) {
-			return applyCommand(ir, cmd as CanvasCommand, options);
+			return applyCommand(
+				ir,
+				cmd as unknown as CanvasCommand,
+				options,
+			) as CommandApplyResult<C | CanvasCommand>;
 		}
 		const handler = commands.get(cmd.type);
-		if (handler) return handler.apply(ir, cmd, options);
+		if (handler) {
+			return handler.apply(ir, cmd, options) as CommandApplyResult<
+				C | CanvasCommand
+			>;
+		}
 		throw new Error(
 			`No command handler registered for command type "${cmd.type}".`,
 		);
-	};
+	}
 
 	let nodeSchema: z.ZodType<CanvasNode>;
 	let irSchema: z.ZodType<CanvasIR>;
