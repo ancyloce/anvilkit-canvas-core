@@ -1,7 +1,6 @@
 {
 	"extends": "@anvilkit/typescript-config/base.json",
 	"compilerOptions": {
-		"baseUrl": ".",
 		"ignoreDeprecations": "6.0",
 		"module": "ESNext",
 		"moduleResolution": "bundler",
