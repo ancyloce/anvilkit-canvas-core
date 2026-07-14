@@ -36,11 +36,16 @@ export interface ApplyCommandsOptions extends CommandApplyOptions {
 }
 
 /**
- * Apply many commands as one reversible transaction. Wraps them in a `batch`
- * command (so application is all-or-nothing and the inverse is a single
- * composite) and additionally derives the granular change records. The caller's
- * `ir` is never mutated; a throw from any sub-command propagates without partial
- * application.
+ * Apply many commands as one reversible transaction — all-or-nothing, in
+ * order, in a single fold over a local `working` IR. The caller's `ir` is
+ * never mutated; a throw from any sub-command propagates before `working`/the
+ * inverses/records are used, so nothing partial escapes.
+ *
+ * Each command's change record is derived from `working` as it stood
+ * immediately BEFORE that command applied (not the transaction's original
+ * `ir`) — required for commands whose record resolution depends on IR state a
+ * prior command in the same transaction just created (e.g. `node.move`
+ * following the `node.create` that made the node exist).
  */
 export function applyCommands(
 	ir: CanvasIR,
@@ -55,31 +60,31 @@ export function applyCommands(
 		commandIdFactory,
 		...applyOptions
 	} = options;
-	const batch: CanvasBatchCommand = {
+	const baseSequence = sequence ?? 0;
+	let working = ir;
+	const inverses: CanvasCommand[] = [];
+	const changes: CanvasChange[] = [];
+	const records: CanvasChangeRecord[] = [];
+	commands.forEach((cmd, index) => {
+		const change = commandToChange(cmd);
+		if (change !== null) changes.push(change);
+		const record = commandToChangeRecord(cmd, working, {
+			...applyOptions,
+			actorId,
+			source,
+			sequence: baseSequence + index,
+			commandIdFactory,
+		});
+		if (record !== null) records.push(record);
+		const result = applyCommand(working, cmd, applyOptions);
+		working = result.ir;
+		inverses.push(result.inverse);
+	});
+	inverses.reverse();
+	const inverse: CanvasBatchCommand = {
 		type: "batch",
 		...(label !== undefined ? { label } : {}),
-		commands: [...commands],
+		commands: inverses,
 	};
-	const result = applyCommand(ir, batch, applyOptions);
-	const changes = commands
-		.map(commandToChange)
-		.filter((c): c is CanvasChange => c !== null);
-	const baseSequence = sequence ?? 0;
-	const records = commands
-		.map((cmd, index) =>
-			commandToChangeRecord(cmd, ir, {
-				...applyOptions,
-				actorId,
-				source,
-				sequence: baseSequence + index,
-				commandIdFactory,
-			}),
-		)
-		.filter((r): r is CanvasChangeRecord => r !== null);
-	return {
-		ir: result.ir,
-		inverse: result.inverse as CanvasBatchCommand,
-		changes,
-		records,
-	};
+	return { ir: working, inverse, changes, records };
 }

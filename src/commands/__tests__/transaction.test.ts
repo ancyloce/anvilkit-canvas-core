@@ -129,6 +129,98 @@ describe("applyCommands", () => {
 		expect(nodeOf(ir, "r1").transform.x).toBe(0);
 	});
 
+	it("resolves a create-then-update record's pageId against the post-create IR (P0-1)", () => {
+		const { ir: ir0, rootId } = makeIR();
+		const node = createRect({
+			id: "r2",
+			bounds: { width: 5, height: 5 },
+			transform: { x: 0, y: 0 },
+		});
+		const { ir: ir1, records } = applyCommands(ir0, [
+			{ type: "node.create", node, pageId: "p1", parentId: rootId },
+			{
+				type: "node.update",
+				nodeId: "r2",
+				kind: "rect",
+				patch: { opacity: 0.5 },
+			},
+		]);
+		expect(nodeOf(ir1, "r2").opacity).toBe(0.5);
+		expect(records).toHaveLength(2);
+		expect(records[0]).toMatchObject({ pageId: "p1", nodeIds: ["r2"] });
+		expect(records[1]).toMatchObject({ pageId: "p1", nodeIds: ["r2"] });
+	});
+
+	it("resolves a create-then-move record's pageId against the post-create IR (P0-1)", () => {
+		const { ir: ir0, rootId } = makeIR();
+		const node = createRect({
+			id: "r2",
+			bounds: { width: 5, height: 5 },
+			transform: { x: 0, y: 0 },
+		});
+		// Before the fix, the second record's lookup ran against ir0 (where "r2"
+		// does not exist yet) and threw instead of resolving "p1".
+		const { ir: ir1, records } = applyCommands(ir0, [
+			{ type: "node.create", node, pageId: "p1", parentId: rootId },
+			{
+				type: "node.move",
+				nodeId: "r2",
+				from: { x: 0, y: 0 },
+				to: { x: 100, y: 100 },
+			},
+		]);
+		expect(nodeOf(ir1, "r2").transform.x).toBe(100);
+		expect(records).toHaveLength(2);
+		expect(records[1]).toMatchObject({
+			pageId: "p1",
+			nodeIds: ["r2"],
+			change: { kind: "transform", nodeId: "r2", dx: 100, dy: 100, drot: 0 },
+		});
+	});
+
+	it("resolves a delete-related record's pageId against the pre-delete IR", () => {
+		const { ir: ir0 } = makeIR();
+		const { records } = applyCommands(ir0, [
+			{ type: "node.delete", nodeId: "r1" },
+		]);
+		expect(records).toHaveLength(1);
+		expect(records[0]).toMatchObject({
+			pageId: "p1",
+			nodeIds: ["r1"],
+			change: { kind: "removed", nodeId: "r1" },
+		});
+	});
+
+	it("resolves per-command pageId across a multi-page transaction", () => {
+		const page2 = createPage({ id: "p2" });
+		const { ir: ir0 } = makeIR();
+		const ir1 = { ...ir0, pages: [...ir0.pages, page2] };
+		const node = createRect({
+			id: "r2",
+			bounds: { width: 5, height: 5 },
+			transform: { x: 0, y: 0 },
+		});
+		const { records } = applyCommands(ir1, [
+			{
+				type: "node.move",
+				nodeId: "r1",
+				from: { x: 0, y: 0 },
+				to: { x: 1, y: 1 },
+			},
+			{ type: "node.create", node, pageId: "p2", parentId: page2.root.id },
+			{
+				type: "node.move",
+				nodeId: "r2",
+				from: { x: 0, y: 0 },
+				to: { x: 2, y: 2 },
+			},
+		]);
+		expect(records).toHaveLength(3);
+		expect(records[0]).toMatchObject({ pageId: "p1", nodeIds: ["r1"] });
+		expect(records[1]).toMatchObject({ pageId: "p2", nodeIds: ["r2"] });
+		expect(records[2]).toMatchObject({ pageId: "p2", nodeIds: ["r2"] });
+	});
+
 	it("supports nested batches and round-trips them", () => {
 		const { ir: ir0 } = makeIR();
 		const nested: CanvasBatchCommand = {

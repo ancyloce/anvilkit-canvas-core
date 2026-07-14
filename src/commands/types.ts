@@ -171,9 +171,19 @@ export type CanvasCommand =
 
 export type CanvasCommandKind = CanvasCommand["type"];
 
-export interface CommandApplyResult {
+/**
+ * `Inverse` defaults to the built-in {@link CanvasCommand} union, so every
+ * existing built-in-only call site (`applyCommand`, `applyCommands`, the
+ * Editor's history store) needs no type argument and no change. A command
+ * extension whose natural inverse is itself a custom command type supplies
+ * `Inverse` explicitly (see `CanvasCommandHandler`) instead of casting
+ * `inverse` to the built-in union (P0-4).
+ */
+export interface CommandApplyResult<
+	Inverse extends { type: string } = CanvasCommand,
+> {
 	ir: CanvasIR;
-	inverse: CanvasCommand;
+	inverse: Inverse;
 }
 
 export interface CommandApplyOptions {

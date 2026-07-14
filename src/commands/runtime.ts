@@ -624,6 +624,16 @@ function applyPageDelete(
 			`Page id "${cmd.pageId}" not found`,
 		);
 	}
+	// CanvasIRSchema requires pages.length >= 1 (a document with no pages has
+	// nowhere for a root to live). Enforced here — not only in an Editor UI
+	// guard — so every path that reaches this command (direct apply, a batch,
+	// undo/redo replay, a host bypassing the Editor entirely) is protected.
+	if (ir.pages.length <= 1) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Cannot delete page "${cmd.pageId}": a CanvasIR must have at least one page`,
+		);
+	}
 	const removed = ir.pages[idx];
 	if (!removed) {
 		throw new CanvasCommandError(

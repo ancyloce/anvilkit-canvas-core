@@ -19,6 +19,7 @@ import type {
 import { findNode } from "../../ir/walkers.js";
 import { commandToChange } from "../change-events.js";
 import { applyCommand, CanvasCommandError } from "../runtime.js";
+import { applyCommands } from "../transaction.js";
 import type {
 	CanvasAnyNodeUpdateCommand,
 	CanvasImageReplaceCommand,
@@ -603,6 +604,70 @@ describe("applyCommand: page.delete", () => {
 		} catch (err) {
 			expect((err as CanvasCommandError).code).toBe("page-not-found");
 		}
+	});
+
+	it("rejects deleting the last remaining page (P0-2)", () => {
+		const ir = buildFixture();
+		const afterFirst = applyCommand(
+			ir,
+			{ type: "page.delete", pageId: "page-2" },
+			{ now },
+		).ir;
+		expect(afterFirst.pages).toHaveLength(1);
+		expect(() =>
+			applyCommand(
+				afterFirst,
+				{ type: "page.delete", pageId: "page-1" },
+				{ now },
+			),
+		).toThrow(CanvasCommandError);
+		try {
+			applyCommand(
+				afterFirst,
+				{ type: "page.delete", pageId: "page-1" },
+				{ now },
+			);
+		} catch (err) {
+			expect((err as CanvasCommandError).code).toBe("invariant-violated");
+		}
+		// Rejected deletion must leave the input IR completely unchanged.
+		expect(afterFirst.pages).toHaveLength(1);
+		expect(afterFirst.pages[0]?.id).toBe("page-1");
+	});
+
+	it("rejects a batch that would delete the last page, leaving the IR untouched (P0-2)", () => {
+		const ir = buildFixture();
+		const afterFirst = applyCommand(
+			ir,
+			{ type: "page.delete", pageId: "page-2" },
+			{ now },
+		).ir;
+		expect(() =>
+			applyCommands(afterFirst, [
+				{
+					type: "page.rename",
+					pageId: "page-1",
+					from: undefined,
+					to: "Renamed",
+				},
+				{ type: "page.delete", pageId: "page-1" },
+			]),
+		).toThrow(CanvasCommandError);
+		// The batch is all-or-nothing: the rename must not have leaked through
+		// even though it applied cleanly before the doomed delete.
+		expect(afterFirst.pages[0]?.name).toBeUndefined();
+	});
+
+	it("undo/redo of deleting down to one page and back never violates the invariant", () => {
+		const ir = buildFixture();
+		const deleted = applyCommand(
+			ir,
+			{ type: "page.delete", pageId: "page-2" },
+			{ now },
+		);
+		expect(deleted.ir.pages).toHaveLength(1);
+		const restored = applyCommand(deleted.ir, deleted.inverse, { now });
+		expect(restored.ir.pages.map((p) => p.id)).toEqual(["page-1", "page-2"]);
 	});
 });
 
