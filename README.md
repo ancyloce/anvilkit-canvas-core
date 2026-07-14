@@ -15,6 +15,21 @@ collaborative sync.
 pnpm add @anvilkit/canvas-core
 ```
 
+**Status.** Pre-1.0 (`0.x`, currently shipping release-candidate versions —
+see `package.json`'s `version`). The public API can still change between
+minor versions; breaking changes are called out in `CHANGELOG.md`.
+
+**Development model.** This package is developed inside the `anvilkit-studio`
+monorepo as a git submodule with its own independent version line and publish
+lifecycle (see `docs/architecture/repository-structure.md`'s Submodule
+Policy). `devDependencies` on `@anvilkit/biome-config`/`typescript-config`/
+`vitest-config` and any in-repo cross-package linkage resolve via
+`workspace:*` — a bare `git clone` of just this submodule plus `pnpm install`
+does **not** build or test standalone; check it out inside the parent
+workspace for local development. Consuming it as a published npm dependency
+(`pnpm add @anvilkit/canvas-core`, above) is unaffected — that resolves a real
+published version and needs no workspace context.
+
 ## Core features
 
 - **Typed, versioned IR** — a `CanvasIR` document tree validated by Zod schemas
@@ -33,7 +48,12 @@ pnpm add @anvilkit/canvas-core
   instead of throwing.
 - **Extension runtime** — register custom node kinds, command handlers, and
   schema migrations; `createCanvasRuntime` folds them into the validators,
-  dispatcher, and SVG output.
+  dispatcher, and SVG output. Custom container node kinds are rejected at
+  registration (leaf kinds only today — see below).
+- **Semantic invariant validation** — `validateCanvasIRInvariants`/
+  `assertCanvasIRInvariants` check whole-document facts a Zod schema can't
+  (duplicate ids, dangling asset references, invalid page roots, excessive
+  tree depth), separate from and complementary to schema validation.
 
 ## Core Architecture
 
@@ -107,44 +127,63 @@ through a single-pass mutation to a new immutable IR, and simultaneously yields 
 ## The Canvas IR
 
 A document is a `CanvasIR`: a version-tagged tree of pages, each with a root
-group whose `children` are shapes (`rect`, `ellipse`, `line`, `path`, `text`,
-`image`, `ai-placeholder`) or nested `group`s.
+group whose `children` are one of 15 built-in node kinds (or a nested `group`
+itself) — `group`, `frame`, `rect`, `ellipse`, `polygon`, `star`, `line`,
+`path`, `text`, `rich-text`, `image`, `svg`, `ai-placeholder`, `video`,
+`audio`. Only `group` and `frame` are **containers** (hold `children`); every
+other kind is a leaf.
 
 ```
 CanvasIR
-|-- version: "1"
+|-- version: "2"                          (v1 documents migrate on read — see below)
+|-- documentKind?: "design" | "template-instance" | "export-variant"
 |-- id, title
-|-- pages: CanvasPage[]
+|-- pages: CanvasPage[]                   (>= 1, enforced by schema AND by page.delete)
 |   |-- id, name?, size { width, height, unit, dpi? }, background
+|   |-- variantSource?    (campaign-resize provenance)
+|   |-- animation?        (page-level enter/exit motion metadata)
 |   `-- root: CanvasGroupNode
-|           `-- children: CanvasNode[]  (rect | ellipse | line | path | text | image | ai-placeholder | group)
+|           `-- children: CanvasNode[]
+|               (group | frame | rect | ellipse | polygon | star | line | path
+|                | text | rich-text | image | svg | ai-placeholder | video | audio)
 |-- assets: Record<id, CanvasAssetRef>
 `-- metadata { createdAt, updatedAt, ownerId?, brandId? }
 ```
 
 Every node carries `transform` (translate/rotate/scale/skew), `bounds`, `zIndex`,
-and optional `opacity`/`visible`/`locked`/`blendMode`. Props are serializable
-only — no functions or refs. The node union is a Zod `discriminatedUnion` on
-`type` for O(1) decoding.
+and optional `opacity`/`visible`/`locked`/`blendMode`/`meta` (AI-source
+provenance + per-node animation metadata). Props are serializable only — no
+functions or refs. The node union is a Zod `discriminatedUnion` on `type` for
+O(1) decoding. Fills (`CanvasFill`) and font families accept either a literal
+value or a `BrandTokenRef` — an unresolved pointer into an external brand kit
+that a consumer (the SVG serializer's `resolveBrandToken` option, or the
+editor's brand kit) resolves; core never resolves one itself. `video`/`audio`
+are asset-reference-only (no inline media bytes, no playback) — see
+[Media support](#media-support-video--audio) below.
 
 ## Entry points
 
 | Area | Exports |
 |------|---------|
-| **Builders** | `createCanvasIR`, `createPage`, `createGroup`, `createRect`, `createEllipse`, `createLine`, `createPath`, `createText`, `createImage` |
-| **Walkers** | `walk`, `walkPage`, `findNode`, `parentOf`, `pageOf`, `isGroupNode`, `isLeafNode`, `isNodeOfKind`, `MAX_TREE_DEPTH`, `CanvasIRDepthError` |
+| **Builders** | `createCanvasIR`, `createPage`, `createGroup`, `createFrame`, `createRect`, `createEllipse`, `createPolygon`, `createStar`, `createLine`, `createPath`, `createText`, `createRichText`, `createImage`, `createSvg`, `createVideo`, `createAudio` |
+| **Walkers** | `walk`, `walkPage`, `findNode`, `parentOf`, `pageOf`, `isContainerNode`, `isGroupNode`, `isFrameNode`, `isLeafNode`, `isNodeOfKind`, `MAX_TREE_DEPTH`, `CanvasIRDepthError` |
 | **Mutations** (immutable) | `insertNode`, `removeNode`, `updateNode`, `moveNode`, `reorderChildren`, `replaceChildrenInParent`, `CanvasIRMutationError` |
-| **Commands** (undoable) | `applyCommand(ir, cmd) → { ir, inverse }`, `CanvasCommand`, `CanvasCommandError` |
-| **Transactions** | `applyCommands(ir, cmds) → { ir, inverse, changes }` |
-| **Change events** | `commandToChange`, `createChangeEmitter`, `CanvasChange`, `CanvasChangeEmitter` |
+| **Commands** (undoable) | `applyCommand(ir, cmd) → { ir, inverse }`, `CanvasCommand`, `CanvasCommandError` — see the full command list below |
+| **Transactions** | `applyCommands(ir, cmds) → { ir, inverse, changes, records }` |
+| **Change events** | `commandToChange`, `commandToChangeRecord`, `replayChanges`, `createChangeEmitter`, `CanvasChange`, `CanvasChangeRecord`, `CanvasChangeEmitter` |
+| **Semantic invariants** | `validateCanvasIRInvariants(ir) → issues[]`, `assertCanvasIRInvariants`, `CanvasIRInvariantError` — whole-document checks (duplicate ids, dangling asset refs, invalid page roots, excessive depth) a Zod schema can't express; not run automatically on every command, call explicitly at a trust boundary |
 | **Geometry** | `toAffineMatrix`, `applyMatrix`, `multiplyMatrix`, `invertMatrix`, `decomposeMatrix`, `transformedBoundsExtent`, `AffineMatrix` |
 | **Viewport** | `viewportMatrix`, `worldToScreen`, `screenToWorld`, `ViewportDescriptor` |
 | **Hit-testing** | `hitTest`, `marqueeHits`, `pointInNode`, `nodeWorldAabb`, `Aabb` |
 | **Snap & align** | `computeSnap`, `alignRects`, `distributeRects`, `SnapInput`, `SnapResult`, `SmartGuide`, `DEFAULT_SNAP_THRESHOLD` |
-| **Validators** | `CanvasIRSchema`, per-node schemas, `migrateCanvasIR`, `CANVAS_IR_VERSION` |
+| **Validators** | `CanvasIRSchema`, per-node schemas, `migrateCanvasIR`, `CANVAS_IR_VERSION` (`"2"`) |
 | **Serializers** | `serializePageToSvg`, `serializeDocumentToPdf` |
-| **Extensions** | `createCanvasRuntime`, `createNodeKindRegistry`, `createCommandRegistry`, `createMigrationRegistry`, `CanvasExtension`, `CanvasRuntime`, `CanvasNodeKindDefinition` |
-| **AI contracts** | `AiImageJobRequest`, `AiImageProvider`, … (types) |
+| **Extensions** | `createCanvasRuntime`, `createNodeKindRegistry`, `createCommandRegistry`, `createMigrationRegistry`, `CanvasExtension`, `CanvasRuntime`, `CanvasNodeKindDefinition`, `CanvasCommandHandler`, `CanvasExtensionError` |
+| **Brand** | `applyBrandColors`/etc. (FR-032) — reversible brand-kit apply transforms; `BrandTokenRef`, `resolveBrandToken` seam types |
+| **Templates** | `@anvilkit/canvas-templates`-compatible instantiation/resize helpers (`instantiateTemplate`, `resizeToVariants`, `CANVAS_SIZE_PRESETS`) |
+| **AI contracts** | `AiImageJobRequest`, `AiImageProvider`, `AiDesignJobRequest`, … (types) |
+| **Comment anchors** | `CanvasCommentAnchor` resolver types (FR-072) |
+| **Text contracts** | `CanvasTextMeasurer` port — a host-implemented text measurement contract core itself never implements |
 
 All mutations and commands are **pure and immutable**: they return a new `CanvasIR`
 with structural sharing (unchanged subtrees are reused by reference). Timestamps
@@ -181,8 +220,16 @@ const { svg, warnings } = await serializePageToSvg(ir, 0);
 
 `applyCommand(ir, cmd)` returns the next IR plus a compact `inverse` command —
 push inverses onto a stack for undo, and re-applying an inverse yields a redo
-inverse. Supported: `node.create/delete/move/resize/rotate/update`,
-`image.replace`, `node.group/ungroup`, and `page.create/delete/reorder/rename`.
+inverse. Supported: `node.create/delete/move/resize/reorder/rotate/update`,
+`image.replace`, `node.group/ungroup`, `page.create/delete/reorder/rename`, and
+`batch` (a composite of any of the above, itself invertible).
+
+`page.delete` refuses to remove a document's last remaining page — a
+`CanvasIR` must always have >= 1 page (also enforced by `CanvasIRSchema`) — and
+throws a `CanvasCommandError` (code `"invariant-violated"`) instead of leaving
+an invalid document. This is enforced by the command itself, not only by an
+editor-level UI guard: a batch, undo/redo replay, or a host calling
+`applyCommand` directly are all protected.
 
 History is **caller-managed**: core hands you the inverse, but it keeps no stack
 of its own — the editor (or any host) owns the undo/redo stacks.
@@ -205,7 +252,11 @@ const { ir: next, inverse, changes } = applyCommands(ir, [
 `createCanvasRuntime(extensions)` folds custom node kinds, command handlers, and
 migrations into the schemas and the command dispatcher. With no extensions the
 returned `nodeSchema`/`irSchema` are identity-equal to the static module schemas,
-so the zero-extension runtime behaves exactly like the built-ins.
+so the zero-extension runtime behaves exactly like the built-ins. The
+extension-aware schema validates every built-in field (`variantSource`,
+`animation`, etc.) identically to the static one — both are built from the
+same shared shape constants, so registering a custom kind can never silently
+loosen validation of built-in fields.
 
 ```ts
 import { createCanvasRuntime } from "@anvilkit/canvas-core";
@@ -215,6 +266,23 @@ const { ir, inverse } = runtime.apply(ir, myCustomCommand); // built-ins unshado
 const decoded = runtime.migrate(rawUntrustedDoc);           // migrate -> validate
 const { svg } = await serializePageToSvg(ir, 0, { nodeKinds: runtime.nodeKinds });
 ```
+
+A custom command handler is `CanvasCommandHandler<C, Inverse = C | CanvasCommand>`
+— its `apply` can return a genuinely custom `Inverse` command type (not just
+the built-in `CanvasCommand` union) with no unsafe cast, and `runtime.apply<C>`
+mirrors that: called with no type argument it behaves exactly like
+`applyCommand`, called with an explicit `C` it types `inverse` as `C |
+CanvasCommand`. A `batch` command containing a custom sub-command dispatched
+through `runtime.apply` resolves that sub-command via the registry too — not
+just at the top level.
+
+**Container kinds are not extensible today.** `CanvasNodeKindDefinition.isContainer`
+exists on the type, but core's walkers/mutations only ever recurse into the
+static built-in containers (`group`, `frame`) — `createNodeKindRegistry`
+rejects `isContainer: true` on an extension kind outright (`CanvasExtensionError`,
+code `"container-kind-unsupported"`) rather than silently accepting a
+definition that would never actually be walked. Model containment today by
+nesting your custom leaf kind inside a built-in `group`/`frame`.
 
 ### Validation & decoding untrusted IR
 
