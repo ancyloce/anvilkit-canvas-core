@@ -486,14 +486,26 @@ export const CanvasPageVariantSourceSchema: z.ZodType<CanvasPageVariantSource> =
 		presetVersion: z.string().min(1),
 	});
 
-export const CanvasPageSchema: z.ZodType<CanvasPage> = z.looseObject({
+/**
+ * `CanvasPage`'s own (non-recursive) fields, split out for the same reason as
+ * `CanvasFrameNodeShape`: `root` must bind to whichever node union is being
+ * assembled — the static one below, or the extension-aware one
+ * `buildExtendedSchemas` builds — and every OTHER page field (notably
+ * `variantSource`/`animation`) must not drift between the two. Both paths
+ * spread this shape rather than re-declaring it (P0-3).
+ */
+export const CanvasPageShape = {
 	id: z.string().min(1),
 	name: z.string().optional(),
 	size: CanvasPageSizeSchema,
 	background: CanvasPageBackgroundSchema,
-	root: CanvasGroupNodeSchema,
 	variantSource: CanvasPageVariantSourceSchema.optional(),
 	animation: CanvasAnimationSchema.optional(),
+} as const;
+
+export const CanvasPageSchema: z.ZodType<CanvasPage> = z.looseObject({
+	...CanvasPageShape,
+	root: CanvasGroupNodeSchema,
 });
 
 export const CanvasIRMetadataSchema: z.ZodType<CanvasIRMetadata> =
@@ -521,14 +533,24 @@ export const CanvasDocumentKindSchema: z.ZodType<CanvasDocumentKind> = z.enum([
 	"export-variant",
 ]);
 
-export const CanvasIRSchema: z.ZodType<CanvasIR> = z.looseObject({
+/**
+ * `CanvasIR`'s own fields other than `pages`, split out for the same reason
+ * as {@link CanvasPageShape}: `pages` must bind to whichever page schema is
+ * being assembled (static vs. extension-aware), while every other top-level
+ * field must validate identically either way (P0-3).
+ */
+export const CanvasIRShape = {
 	version: z.literal(CANVAS_IR_VERSION),
 	documentKind: CanvasDocumentKindSchema.optional(),
 	id: z.string().min(1),
 	title: z.string(),
-	pages: z.array(CanvasPageSchema).min(1),
 	assets: z.record(z.string(), CanvasAssetRefSchema),
 	metadata: CanvasIRMetadataSchema,
+} as const;
+
+export const CanvasIRSchema: z.ZodType<CanvasIR> = z.looseObject({
+	...CanvasIRShape,
+	pages: z.array(CanvasPageSchema).min(1),
 });
 
 const DEFAULT_MIGRATIONS = createMigrationRegistry();
