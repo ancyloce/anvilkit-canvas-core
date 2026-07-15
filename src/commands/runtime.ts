@@ -3,6 +3,7 @@ import { transformedBoundsExtent } from "../geometry/affine.js";
 import {
 	CanvasIRMutationError,
 	insertNode,
+	moveNode,
 	removeNode,
 	reorderChildren,
 	replaceChildrenInParent,
@@ -19,9 +20,11 @@ import type {
 	CanvasNodeKind,
 	CanvasPage,
 } from "../ir/types.js";
-import { findNode, parentOf } from "../ir/walkers.js";
+import { findNode, isContainerNode, parentOf } from "../ir/walkers.js";
 import type {
 	CanvasAnyNodeUpdateCommand,
+	CanvasAssetPutCommand,
+	CanvasAssetRemoveCommand,
 	CanvasBatchCommand,
 	CanvasCommand,
 	CanvasImageReplaceCommand,
@@ -30,6 +33,7 @@ import type {
 	CanvasNodeGroupCommand,
 	CanvasNodeMoveCommand,
 	CanvasNodeReorderCommand,
+	CanvasNodeReparentCommand,
 	CanvasNodeResizeCommand,
 	CanvasNodeRotateCommand,
 	CanvasNodeUngroupCommand,
@@ -37,6 +41,8 @@ import type {
 	CanvasPageDeleteCommand,
 	CanvasPageRenameCommand,
 	CanvasPageReorderCommand,
+	CanvasPageResizeCommand,
+	CanvasPageSetBackgroundCommand,
 	CommandApplyOptions,
 	CommandApplyResult,
 } from "./types.js";
@@ -49,7 +55,8 @@ export type CanvasCommandErrorCode =
 	| "kind-mismatch"
 	| "asset-mismatch"
 	| "index-out-of-range"
-	| "invariant-violated";
+	| "invariant-violated"
+	| "node-locked";
 
 export class CanvasCommandError extends Error {
 	readonly code: CanvasCommandErrorCode;
@@ -113,6 +120,26 @@ function rethrowMutationError(err: unknown): never {
 	throw err;
 }
 
+/**
+ * A-02 lock guard: with `options.enforceLocked`, mutating a locked node is a
+ * typed `node-locked` error. Unknown ids are ignored here — the calling apply
+ * function raises its own precise not-found error.
+ */
+function assertUnlocked(
+	ir: CanvasIR,
+	nodeId: string,
+	options: CommandApplyOptions,
+): void {
+	if (options.enforceLocked !== true) return;
+	const found = findNode(ir, nodeId);
+	if (found && found.node.locked === true) {
+		throw new CanvasCommandError(
+			"node-locked",
+			`Node "${nodeId}" is locked (enforceLocked)`,
+		);
+	}
+}
+
 function resolveParentId(
 	ir: CanvasIR,
 	pageId: string,
@@ -165,6 +192,7 @@ function applyNodeDelete(
 	cmd: CanvasNodeDeleteCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options);
 	const { node, page } = expectNode(ir, cmd.nodeId);
 	const parentResult = parentOf(ir, cmd.nodeId);
 	if (!parentResult) {
@@ -196,6 +224,7 @@ function applyNodeMove(
 	cmd: CanvasNodeMoveCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options);
 	const { node } = expectNode(ir, cmd.nodeId);
 	const currentX = node.transform.x;
 	const currentY = node.transform.y;
@@ -225,6 +254,7 @@ function applyNodeResize(
 	cmd: CanvasNodeResizeCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options);
 	const { node } = expectNode(ir, cmd.nodeId);
 	const currentX = node.transform.x;
 	const currentY = node.transform.y;
@@ -267,6 +297,7 @@ function applyNodeRotate(
 	cmd: CanvasNodeRotateCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options);
 	const { node } = expectNode(ir, cmd.nodeId);
 	const currentRotation = node.transform.rotation;
 	let next: CanvasIR;
@@ -295,6 +326,10 @@ function applyNodeUpdate(
 	cmd: CanvasAnyNodeUpdateCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
+	// Lock-state changes are exempt — this is how a locked node gets unlocked.
+	if (!Object.hasOwn(cmd.patch as Record<string, unknown>, "locked")) {
+		assertUnlocked(ir, cmd.nodeId, options);
+	}
 	const { node } = expectNode(ir, cmd.nodeId);
 	if (node.type !== cmd.kind) {
 		throw new CanvasCommandError(
@@ -335,6 +370,7 @@ function applyImageReplace(
 	cmd: CanvasImageReplaceCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options);
 	const { node } = expectNode(ir, cmd.nodeId);
 	if (node.type !== "image") {
 		throw new CanvasCommandError(
@@ -402,6 +438,9 @@ function applyNodeGroup(
 	cmd: CanvasNodeGroupCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
+	for (const childId of cmd.childIds) {
+		assertUnlocked(ir, childId, options);
+	}
 	if (cmd.childIds.length === 0) {
 		throw new CanvasCommandError(
 			"invariant-violated",
@@ -515,6 +554,7 @@ function applyNodeUngroup(
 	cmd: CanvasNodeUngroupCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
+	assertUnlocked(ir, cmd.groupId, options);
 	const found = expectNode(ir, cmd.groupId);
 	if (found.node.type !== "group") {
 		throw new CanvasCommandError(
@@ -772,6 +812,7 @@ function applyNodeReorder(
 	cmd: CanvasNodeReorderCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options);
 	const parentResult = parentOf(ir, cmd.nodeId);
 	if (!parentResult) {
 		throw new CanvasCommandError(
@@ -808,6 +849,232 @@ function applyNodeReorder(
 	return { ir: next, inverse };
 }
 
+function applyNodeReparent(
+	ir: CanvasIR,
+	cmd: CanvasNodeReparentCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options);
+	const parentResult = parentOf(ir, cmd.nodeId);
+	if (!parentResult) {
+		throw new CanvasCommandError(
+			"parent-not-found",
+			`Node "${cmd.nodeId}" has no parent (missing, or a page root — page roots cannot be reparented)`,
+		);
+	}
+	const fromParent = parentResult.parent;
+	const fromIndex = fromParent.children.findIndex((c) => c.id === cmd.nodeId);
+	if (fromIndex < 0) {
+		throw new CanvasCommandError(
+			"node-not-found",
+			`Node "${cmd.nodeId}" not found under parent "${fromParent.id}"`,
+		);
+	}
+	const target = findNode(ir, cmd.toParentId);
+	if (!target) {
+		throw new CanvasCommandError(
+			"parent-not-found",
+			`New parent id "${cmd.toParentId}" not found`,
+		);
+	}
+	if (!isContainerNode(target.node)) {
+		throw new CanvasCommandError(
+			"parent-not-group",
+			`New parent "${cmd.toParentId}" is not a container (type=${target.node.type})`,
+		);
+	}
+	// Clamp like node.reorder: a stale UI index degrades to an end insert
+	// instead of throwing. When the node already lives in the target, the
+	// mutation removes it before inserting, so the valid range shrinks by one.
+	const targetLength =
+		target.node.children.length - (fromParent.id === cmd.toParentId ? 1 : 0);
+	const toIndex = Math.max(0, Math.min(targetLength, cmd.toIndex));
+	let next: CanvasIR;
+	try {
+		next = moveNode(ir, {
+			id: cmd.nodeId,
+			newParentId: cmd.toParentId,
+			index: toIndex,
+			now: options.now,
+		});
+	} catch (err) {
+		rethrowMutationError(err);
+	}
+	const inverse: CanvasNodeReparentCommand = {
+		type: "node.reparent",
+		nodeId: cmd.nodeId,
+		toParentId: fromParent.id,
+		toIndex: fromIndex,
+	};
+	return { ir: next, inverse };
+}
+
+function applyPageResize(
+	ir: CanvasIR,
+	cmd: CanvasPageResizeCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const idx = ir.pages.findIndex((p) => p.id === cmd.pageId);
+	const page = idx >= 0 ? ir.pages[idx] : undefined;
+	if (!page) {
+		throw new CanvasCommandError(
+			"page-not-found",
+			`Page id "${cmd.pageId}" not found`,
+		);
+	}
+	const mode = cmd.mode ?? "canvas-only";
+	// The inverse restores the ACTUAL prior size, even when cmd.from is stale.
+	const prior = { width: page.size.width, height: page.size.height };
+	const priorChildren = page.root.children;
+
+	let children = priorChildren;
+	if (mode === "scale-content") {
+		const s = Math.min(
+			cmd.to.width / prior.width,
+			cmd.to.height / prior.height,
+		);
+		children = priorChildren.map((child) => ({
+			...child,
+			transform: {
+				...child.transform,
+				x: child.transform.x * s,
+				y: child.transform.y * s,
+				scaleX: child.transform.scaleX * s,
+				scaleY: child.transform.scaleY * s,
+			},
+		}));
+	} else if (mode === "recenter") {
+		const dx = (cmd.to.width - prior.width) / 2;
+		const dy = (cmd.to.height - prior.height) / 2;
+		children = priorChildren.map((child) => ({
+			...child,
+			transform: {
+				...child.transform,
+				x: child.transform.x + dx,
+				y: child.transform.y + dy,
+			},
+		}));
+	}
+
+	const newPage: CanvasPage = {
+		...page,
+		// Width/height only — the page's existing `unit` is preserved (OD-1:
+		// unit already persists on CanvasPageSize; DPI remains export-only).
+		size: { ...page.size, width: cmd.to.width, height: cmd.to.height },
+		root: {
+			...page.root,
+			bounds: { width: cmd.to.width, height: cmd.to.height },
+			children: [...children],
+		},
+	};
+	const next = bumpMetadata(
+		{ ...ir, pages: ir.pages.map((p, i) => (i === idx ? newPage : p)) },
+		options,
+	);
+
+	// canvas-only and recenter invert exactly by symmetry; scale-content would
+	// drift through a reciprocal scale, so its inverse restores the exact
+	// prior transforms alongside the size.
+	const inverse: CanvasCommand =
+		mode === "scale-content"
+			? {
+					type: "batch",
+					label: "Resize page",
+					commands: [
+						{
+							type: "page.resize",
+							pageId: cmd.pageId,
+							from: { ...cmd.to },
+							to: prior,
+							mode: "canvas-only",
+						},
+						...priorChildren.map(
+							(child): CanvasCommand =>
+								({
+									type: "node.update",
+									nodeId: child.id,
+									kind: child.type,
+									patch: { transform: child.transform },
+								}) as CanvasCommand,
+						),
+					],
+				}
+			: {
+					type: "page.resize",
+					pageId: cmd.pageId,
+					from: { ...cmd.to },
+					to: prior,
+					mode,
+				};
+	return { ir: next, inverse };
+}
+
+function applyPageSetBackground(
+	ir: CanvasIR,
+	cmd: CanvasPageSetBackgroundCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const idx = ir.pages.findIndex((p) => p.id === cmd.pageId);
+	const page = idx >= 0 ? ir.pages[idx] : undefined;
+	if (!page) {
+		throw new CanvasCommandError(
+			"page-not-found",
+			`Page id "${cmd.pageId}" not found`,
+		);
+	}
+	const prior = page.background;
+	const newPage: CanvasPage = { ...page, background: cmd.to };
+	const next = bumpMetadata(
+		{ ...ir, pages: ir.pages.map((p, i) => (i === idx ? newPage : p)) },
+		options,
+	);
+	const inverse: CanvasPageSetBackgroundCommand = {
+		type: "page.set-background",
+		pageId: cmd.pageId,
+		from: cmd.to,
+		to: prior,
+	};
+	return { ir: next, inverse };
+}
+
+function applyAssetPut(
+	ir: CanvasIR,
+	cmd: CanvasAssetPutCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const previous = ir.assets[cmd.asset.id];
+	const next: CanvasIR = bumpMetadata(
+		{ ...ir, assets: { ...ir.assets, [cmd.asset.id]: cmd.asset } },
+		options,
+	);
+	const inverse: CanvasCommand = previous
+		? { type: "asset.put", asset: previous }
+		: { type: "asset.remove", assetId: cmd.asset.id };
+	return { ir: next, inverse };
+}
+
+function applyAssetRemove(
+	ir: CanvasIR,
+	cmd: CanvasAssetRemoveCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const previous = ir.assets[cmd.assetId];
+	if (!previous) {
+		throw new CanvasCommandError(
+			"node-not-found",
+			`Asset id "${cmd.assetId}" not found`,
+		);
+	}
+	const assets = { ...ir.assets };
+	delete assets[cmd.assetId];
+	const next: CanvasIR = bumpMetadata({ ...ir, assets }, options);
+	const inverse: CanvasAssetPutCommand = {
+		type: "asset.put",
+		asset: previous,
+	};
+	return { ir: next, inverse };
+}
+
 export function applyCommand(
 	ir: CanvasIR,
 	cmd: CanvasCommand,
@@ -820,6 +1087,8 @@ export function applyCommand(
 			return applyNodeDelete(ir, cmd, options);
 		case "node.reorder":
 			return applyNodeReorder(ir, cmd, options);
+		case "node.reparent":
+			return applyNodeReparent(ir, cmd, options);
 		case "node.move":
 			return applyNodeMove(ir, cmd, options);
 		case "node.resize":
@@ -842,6 +1111,14 @@ export function applyCommand(
 			return applyPageReorder(ir, cmd, options);
 		case "page.rename":
 			return applyPageRename(ir, cmd, options);
+		case "page.resize":
+			return applyPageResize(ir, cmd, options);
+		case "page.set-background":
+			return applyPageSetBackground(ir, cmd, options);
+		case "asset.put":
+			return applyAssetPut(ir, cmd, options);
+		case "asset.remove":
+			return applyAssetRemove(ir, cmd, options);
 		case "batch":
 			return applyBatch(ir, cmd, options);
 	}

@@ -1,4 +1,6 @@
 import type {
+	CanvasAssetRef,
+	CanvasPageBackground,
 	CanvasGroupNode,
 	CanvasIR,
 	CanvasNode,
@@ -60,6 +62,21 @@ export interface CanvasNodeDeleteCommand {
 export interface CanvasNodeReorderCommand {
 	type: "node.reorder";
 	nodeId: string;
+	toIndex: number;
+}
+
+/**
+ * Move a node into a different container (group/frame/page-root group) at
+ * `toIndex` (A-01, PRD 0012 FR-052). Same-page only; `toIndex` is clamped to
+ * the target's child range; moving a node into itself or a descendant is
+ * rejected (`invariant-violated`); page roots cannot be reparented. The
+ * inverse reparents back to the original parent at the original index, so
+ * layer-panel drag-and-drop is fully undoable.
+ */
+export interface CanvasNodeReparentCommand {
+	type: "node.reparent";
+	nodeId: string;
+	toParentId: string;
 	toIndex: number;
 }
 
@@ -141,6 +158,64 @@ export interface CanvasPageRenameCommand {
 }
 
 /**
+ * FR-063 page-resize content handling (B-01, PRD 0012). NOTE: page
+ * DUPLICATION deliberately has no dedicated command — `clonePage` (fresh ids
+ * via `regenerateNodeIds`) + `page.create` is deterministic and undoable, and
+ * §9.1 forbids commands without their own domain semantics.
+ */
+export type CanvasPageResizeMode = "canvas-only" | "scale-content" | "recenter";
+
+/**
+ * Set a page's background fill (B-11, FR-063/§9.1). The inverse restores the
+ * ACTUAL prior background, even when `from` is stale.
+ */
+export interface CanvasPageSetBackgroundCommand {
+	type: "page.set-background";
+	pageId: string;
+	from?: CanvasPageBackground;
+	to: CanvasPageBackground;
+}
+
+/**
+ * Resize a page (B-01). `mode` decides what happens to the page's top-level
+ * content: `canvas-only` leaves it untouched, `scale-content` scales each
+ * top-level child's transform uniformly by min(w-ratio, h-ratio), `recenter`
+ * keeps content size and shifts it by half the size delta. The root group's
+ * bounds stay synced to the page size. The inverse restores the prior size
+ * AND the exact prior child transforms (a composite batch for
+ * `scale-content`, where a reciprocal scale would drift in floating point).
+ */
+export interface CanvasPageResizeCommand {
+	type: "page.resize";
+	pageId: string;
+	from: { width: number; height: number };
+	to: { width: number; height: number };
+	/** Default `"canvas-only"`. */
+	mode?: CanvasPageResizeMode;
+}
+
+/**
+ * Upsert an entry in the document's asset table, keyed by `asset.id`
+ * (A-05/FR-021 paste, later FR-091 upload). Inverse restores the previous
+ * entry, or removes the key when it was new — so a paste batch of
+ * `asset.put` + `node.create` commands undoes cleanly in one step.
+ */
+export interface CanvasAssetPutCommand {
+	type: "asset.put";
+	asset: CanvasAssetRef;
+}
+
+/**
+ * Remove an asset-table entry. The command layer does NOT check for nodes
+ * still referencing the asset (invariants are a trust-boundary tool, not
+ * auto-wired — see `ir/invariants.ts`); callers own that check.
+ */
+export interface CanvasAssetRemoveCommand {
+	type: "asset.remove";
+	assetId: string;
+}
+
+/**
  * A composite, reversible command: applies its `commands` in order as a single
  * undoable unit. Its inverse (produced by `applyCommand`) is another `batch`
  * whose sub-commands are the reversed inverses, so history replays it like any
@@ -159,6 +234,7 @@ export type CanvasCommand =
 	| CanvasNodeRotateCommand
 	| CanvasNodeDeleteCommand
 	| CanvasNodeReorderCommand
+	| CanvasNodeReparentCommand
 	| CanvasAnyNodeUpdateCommand
 	| CanvasImageReplaceCommand
 	| CanvasNodeGroupCommand
@@ -166,7 +242,11 @@ export type CanvasCommand =
 	| CanvasPageCreateCommand
 	| CanvasPageReorderCommand
 	| CanvasPageRenameCommand
+	| CanvasPageResizeCommand
+	| CanvasPageSetBackgroundCommand
 	| CanvasPageDeleteCommand
+	| CanvasAssetPutCommand
+	| CanvasAssetRemoveCommand
 	| CanvasBatchCommand;
 
 export type CanvasCommandKind = CanvasCommand["type"];
@@ -188,4 +268,16 @@ export interface CommandApplyResult<
 
 export interface CommandApplyOptions {
 	now?: () => string;
+	/**
+	 * When true, commands that mutate a `locked` node throw a typed
+	 * `node-locked` {@link CanvasCommandError} instead of applying (A-02,
+	 * PRD 0012 FR-024). Default OFF for backward compatibility — existing
+	 * consumers (brand apply with its own `includeLocked` semantics,
+	 * extensions, collab replay) are unaffected unless they opt in. The
+	 * editor's action layer enables it for user-initiated operations.
+	 * Exemption: a `node.update` whose patch touches `locked` always applies —
+	 * that is how a locked node gets unlocked. Inside a `batch` the option
+	 * propagates to every sub-command; the batch stays all-or-nothing.
+	 */
+	enforceLocked?: boolean;
 }

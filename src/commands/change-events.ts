@@ -20,8 +20,9 @@ export type CanvasChange =
 	| {
 			kind: "page";
 			pageId: string;
-			op: "create" | "delete" | "rename" | "reorder";
-	  };
+			op: "create" | "delete" | "rename" | "reorder" | "resize" | "background";
+	  }
+	| { kind: "asset"; assetId: string; op: "put" | "remove" };
 
 /**
  * Derive the change record for a single command, or `null` when there is no
@@ -36,6 +37,12 @@ export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
 			return { kind: "removed", nodeId: cmd.nodeId };
 		case "node.reorder":
 			return { kind: "updated", nodeId: cmd.nodeId, keys: ["order"] };
+		case "node.reparent":
+			return { kind: "updated", nodeId: cmd.nodeId, keys: ["parent", "order"] };
+		case "asset.put":
+			return { kind: "asset", assetId: cmd.asset.id, op: "put" };
+		case "asset.remove":
+			return { kind: "asset", assetId: cmd.assetId, op: "remove" };
 		case "node.move":
 			return {
 				kind: "transform",
@@ -76,6 +83,10 @@ export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
 			return { kind: "page", pageId: cmd.pageId, op: "delete" };
 		case "page.rename":
 			return { kind: "page", pageId: cmd.pageId, op: "rename" };
+		case "page.resize":
+			return { kind: "page", pageId: cmd.pageId, op: "resize" };
+		case "page.set-background":
+			return { kind: "page", pageId: cmd.pageId, op: "background" };
 		case "page.reorder":
 			return { kind: "page", pageId: cmd.pageId, op: "reorder" };
 		case "batch":
@@ -100,9 +111,13 @@ export interface CanvasChangeRecord {
 	actorId: string;
 	/** ISO-8601 timestamp, from the same clock seam as command apply options. */
 	timestamp: string;
-	/** The page the command targeted — always resolved, even for commands whose type omits it. */
-	pageId: string;
-	/** Node ids the command affected. Empty for page-kind changes. */
+	/**
+	 * The page the command targeted — resolved even for commands whose type
+	 * omits it. Absent for DOCUMENT-level changes (`kind: "asset"`), which
+	 * target no page.
+	 */
+	pageId?: string;
+	/** Node ids the command affected. Empty for page- and asset-kind changes. */
 	nodeIds: readonly string[];
 	/** `"remote"` records may bypass a host's local undo stack. */
 	source: CanvasChangeSource;
@@ -124,7 +139,9 @@ export interface ChangeRecordOptions extends CommandApplyOptions {
 }
 
 function resolveChangeNodeIds(change: CanvasChange): readonly string[] {
-	return change.kind === "page" ? [] : [change.nodeId];
+	return change.kind === "page" || change.kind === "asset"
+		? []
+		: [change.nodeId];
 }
 
 /**
@@ -134,7 +151,11 @@ function resolveChangeNodeIds(change: CanvasChange): readonly string[] {
  * pre-mutation IR — the node (or, for `removed`, its still-present record)
  * must exist in it for the lookup to succeed.
  */
-function resolveChangePageId(change: CanvasChange, ir: CanvasIR): string {
+function resolveChangePageId(
+	change: CanvasChange,
+	ir: CanvasIR,
+): string | undefined {
+	if (change.kind === "asset") return undefined; // document-level
 	if (change.kind === "page") return change.pageId;
 	if (
 		(change.kind === "added" || change.kind === "removed") &&
@@ -164,13 +185,14 @@ export function commandToChangeRecord(
 ): CanvasChangeRecord | null {
 	const change = commandToChange(cmd);
 	if (change === null) return null;
+	const pageId = resolveChangePageId(change, ir);
 	return {
 		commandId:
 			options.commandId ??
 			(options.commandIdFactory ?? (() => crypto.randomUUID()))(),
 		actorId: options.actorId ?? "local",
 		timestamp: resolveNow(options.now)(),
-		pageId: resolveChangePageId(change, ir),
+		...(pageId !== undefined ? { pageId } : {}),
 		nodeIds: resolveChangeNodeIds(change),
 		source: options.source ?? "local",
 		sequence: options.sequence ?? 0,
