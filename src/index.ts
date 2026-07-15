@@ -3,6 +3,7 @@ export const CANVAS_CORE_VERSION = "0.1.2-rc.0";
 export type * from "./ai-contracts.js";
 export * from "./ai-design-contracts.js";
 export * from "./brand/index.js";
+export * from "./clipboard/index.js";
 export * from "./commands/index.js";
 export * from "./comment-contracts.js";
 export * from "./export/index.js";

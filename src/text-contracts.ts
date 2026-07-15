@@ -47,6 +47,8 @@ export interface ResolvedSpanStyle {
 	fontWeight: string;
 	italic: boolean;
 	underline: boolean;
+	/** FR-081 (B-03c). */
+	strikethrough: boolean;
 	letterSpacing: number;
 	textTransform: NonNullable<RichTextSpan["textTransform"]>;
 	fill: CanvasFill;
@@ -75,6 +77,7 @@ export function resolveSpanStyle(
 		fontWeight: span.fontWeight ?? defaults.fontWeight,
 		italic: span.italic ?? defaults.italic,
 		underline: span.underline ?? defaults.underline,
+		strikethrough: span.strikethrough ?? defaults.strikethrough,
 		letterSpacing: span.letterSpacing ?? defaults.letterSpacing,
 		textTransform: span.textTransform ?? defaults.textTransform,
 		fill: span.fill ?? defaults.fill,
