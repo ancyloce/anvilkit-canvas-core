@@ -268,6 +268,7 @@ export interface CanvasFrameNode extends CanvasNodeBase {
 	placeholder?: FramePlaceholder;
 	/** Corner radius, in local units. Matches `CanvasRectNode["radius"]`. */
 	radius?: number;
+	cornerRadii?: CanvasCornerRadii;
 }
 
 /**
@@ -278,16 +279,44 @@ export interface CanvasFrameNode extends CanvasNodeBase {
  */
 export type CanvasContainerNode = CanvasGroupNode | CanvasFrameNode;
 
-export interface CanvasRectNode extends CanvasNodeBase {
+/** FR-075 extended stroke styling (B-03a). All optional — absent = current rendering. */
+export type CanvasStrokeCap = "butt" | "round" | "square";
+export type CanvasStrokeJoin = "miter" | "round" | "bevel";
+/** Line/path end decorations (FR-075). Absent = "none". */
+export type CanvasArrowHead = "none" | "arrow";
+
+export interface CanvasStrokeStyle {
+	/** Stroke alpha 0..1, independent of node opacity. */
+	strokeOpacity?: number;
+	/** SVG-style dash array, in local units. Empty/absent = solid. */
+	strokeDash?: number[];
+	strokeCap?: CanvasStrokeCap;
+	strokeJoin?: CanvasStrokeJoin;
+}
+
+/**
+ * FR-076 per-corner radii (B-03b) for rect/frame. When present it takes
+ * precedence over the shared `radius`. Values clamp to half the box size at
+ * render time.
+ */
+export interface CanvasCornerRadii {
+	topLeft: number;
+	topRight: number;
+	bottomRight: number;
+	bottomLeft: number;
+}
+
+export interface CanvasRectNode extends CanvasNodeBase, CanvasStrokeStyle {
 	type: "rect";
 	fill?: CanvasFill;
 	stroke?: string;
 	strokeWidth?: number;
 	radius?: number;
+	cornerRadii?: CanvasCornerRadii;
 	shadow?: CanvasShadow;
 }
 
-export interface CanvasEllipseNode extends CanvasNodeBase {
+export interface CanvasEllipseNode extends CanvasNodeBase, CanvasStrokeStyle {
 	type: "ellipse";
 	fill?: CanvasFill;
 	stroke?: string;
@@ -295,7 +324,7 @@ export interface CanvasEllipseNode extends CanvasNodeBase {
 	shadow?: CanvasShadow;
 }
 
-export interface CanvasPolygonNode extends CanvasNodeBase {
+export interface CanvasPolygonNode extends CanvasNodeBase, CanvasStrokeStyle {
 	type: "polygon";
 	/** Vertex count. Must be an integer >= 3. */
 	sides: number;
@@ -305,7 +334,7 @@ export interface CanvasPolygonNode extends CanvasNodeBase {
 	shadow?: CanvasShadow;
 }
 
-export interface CanvasStarNode extends CanvasNodeBase {
+export interface CanvasStarNode extends CanvasNodeBase, CanvasStrokeStyle {
 	type: "star";
 	/** Number of outer tips. Must be an integer >= 3. */
 	points: number;
@@ -317,19 +346,23 @@ export interface CanvasStarNode extends CanvasNodeBase {
 	shadow?: CanvasShadow;
 }
 
-export interface CanvasLineNode extends CanvasNodeBase {
+export interface CanvasLineNode extends CanvasNodeBase, CanvasStrokeStyle {
 	type: "line";
 	points: [number, number, number, number];
 	stroke: string;
 	strokeWidth?: number;
+	arrowStart?: CanvasArrowHead;
+	arrowEnd?: CanvasArrowHead;
 }
 
-export interface CanvasPathNode extends CanvasNodeBase {
+export interface CanvasPathNode extends CanvasNodeBase, CanvasStrokeStyle {
 	type: "path";
 	d: string;
 	fill?: CanvasFill;
 	stroke?: string;
 	strokeWidth?: number;
+	arrowStart?: CanvasArrowHead;
+	arrowEnd?: CanvasArrowHead;
 	shadow?: CanvasShadow;
 }
 
@@ -370,6 +403,8 @@ export interface RichTextSpan {
 	fontWeight?: string;
 	italic?: boolean;
 	underline?: boolean;
+	/** FR-081 (B-03c). */
+	strikethrough?: boolean;
 	letterSpacing?: number;
 	textTransform?: RichTextTransform;
 	fill?: CanvasFill;
@@ -402,6 +437,12 @@ export interface RichTextParagraph {
  */
 export interface CanvasRichTextNode extends CanvasNodeBase {
 	type: "rich-text";
+	/**
+	 * FR-081 sizing mode (B-03c): `auto-width` lets the measured content decide
+	 * the box width (the editor keeps `width` synced to the measurement);
+	 * absent/`fixed` keeps the explicit `width` authoritative.
+	 */
+	sizing?: "fixed" | "auto-width";
 	/** The wrap width, in local units. */
 	width: number;
 	/** Fixed height. Omit to let the measured content decide (`auto-height`). */
@@ -411,9 +452,28 @@ export interface CanvasRichTextNode extends CanvasNodeBase {
 	wrap?: RichTextWrap;
 }
 
+/**
+ * FR-094 image fit modes (B-02, PRD 0012 §9.5). Absent means `"stretch"` —
+ * the pre-B-02 rendering — so existing documents need no migration.
+ */
+export type CanvasImageFitMode =
+	| "fill"
+	| "fit"
+	| "stretch"
+	| "original"
+	| "center";
+
 export interface CanvasImageNode extends CanvasNodeBase {
 	type: "image";
 	assetId: string;
+	/**
+	 * How the bitmap maps into `bounds` (FR-094): `stretch` distorts to fill
+	 * (default), `fill` covers with cropping, `fit` letterboxes, `original`
+	 * places the bitmap at its intrinsic size from the node origin, `center`
+	 * centers it — both clipped to the bounds. `crop` applies within the
+	 * fitted image space.
+	 */
+	fitMode?: CanvasImageFitMode;
 	crop?: CanvasImageCrop;
 	filters?: ImageFilter[];
 	maskAssetId?: string;

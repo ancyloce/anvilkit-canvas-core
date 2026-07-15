@@ -257,9 +257,27 @@ export const CanvasNodeBaseShape = {
 export const CanvasNodeBaseSchema: z.ZodType<CanvasNodeBase> =
 	z.looseObject(CanvasNodeBaseShape);
 
+const CanvasStrokeStyleShape = {
+	strokeOpacity: z.number().min(0).max(1).optional(),
+	strokeDash: z.array(NonNegativeFiniteNumber).optional(),
+	strokeCap: z.enum(["butt", "round", "square"]).optional(),
+	strokeJoin: z.enum(["miter", "round", "bevel"]).optional(),
+};
+
+const CanvasArrowHeadSchema = z.enum(["none", "arrow"]);
+
+const CanvasCornerRadiiSchema = z.looseObject({
+	topLeft: NonNegativeFiniteNumber,
+	topRight: NonNegativeFiniteNumber,
+	bottomRight: NonNegativeFiniteNumber,
+	bottomLeft: NonNegativeFiniteNumber,
+});
+
 export const CanvasRectNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("rect"),
+	...CanvasStrokeStyleShape,
+	cornerRadii: CanvasCornerRadiiSchema.optional(),
 	fill: CanvasFillSchema.optional(),
 	shadow: CanvasShadowSchema.optional(),
 	stroke: z.string().optional(),
@@ -270,6 +288,7 @@ export const CanvasRectNodeSchema = z.looseObject({
 export const CanvasEllipseNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("ellipse"),
+	...CanvasStrokeStyleShape,
 	fill: CanvasFillSchema.optional(),
 	shadow: CanvasShadowSchema.optional(),
 	stroke: z.string().optional(),
@@ -279,6 +298,7 @@ export const CanvasEllipseNodeSchema = z.looseObject({
 export const CanvasPolygonNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("polygon"),
+	...CanvasStrokeStyleShape,
 	sides: IntegerAtLeastThree,
 	fill: CanvasFillSchema.optional(),
 	shadow: CanvasShadowSchema.optional(),
@@ -289,6 +309,7 @@ export const CanvasPolygonNodeSchema = z.looseObject({
 export const CanvasStarNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("star"),
+	...CanvasStrokeStyleShape,
 	points: IntegerAtLeastThree,
 	innerRadiusRatio: UnitInterval,
 	fill: CanvasFillSchema.optional(),
@@ -300,6 +321,9 @@ export const CanvasStarNodeSchema = z.looseObject({
 export const CanvasLineNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("line"),
+	...CanvasStrokeStyleShape,
+	arrowStart: CanvasArrowHeadSchema.optional(),
+	arrowEnd: CanvasArrowHeadSchema.optional(),
 	points: z.tuple([FiniteNumber, FiniteNumber, FiniteNumber, FiniteNumber]),
 	stroke: z.string(),
 	strokeWidth: NonNegativeFiniteNumber.optional(),
@@ -308,6 +332,9 @@ export const CanvasLineNodeSchema = z.looseObject({
 export const CanvasPathNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("path"),
+	...CanvasStrokeStyleShape,
+	arrowStart: CanvasArrowHeadSchema.optional(),
+	arrowEnd: CanvasArrowHeadSchema.optional(),
 	d: z.string().min(1),
 	fill: CanvasFillSchema.optional(),
 	shadow: CanvasShadowSchema.optional(),
@@ -340,6 +367,7 @@ export const RichTextSpanSchema = z.looseObject({
 	fontWeight: z.string().optional(),
 	italic: z.boolean().optional(),
 	underline: z.boolean().optional(),
+	strikethrough: z.boolean().optional(),
 	// Letter spacing may be negative (tightening), so it is a plain finite number.
 	letterSpacing: FiniteNumber.optional(),
 	textTransform: z
@@ -358,6 +386,7 @@ export const RichTextParagraphSchema = z.looseObject({
 export const CanvasRichTextNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("rich-text"),
+	sizing: z.enum(["fixed", "auto-width"]).optional(),
 	width: NonNegativeFiniteNumber,
 	height: NonNegativeFiniteNumber.optional(),
 	paragraphs: z.array(RichTextParagraphSchema),
@@ -369,6 +398,7 @@ export const CanvasImageNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("image"),
 	assetId: z.string().min(1),
+	fitMode: z.enum(["fill", "fit", "stretch", "original", "center"]).optional(),
 	crop: CanvasImageCropSchema.optional(),
 	filters: z.array(ImageFilterSchema).optional(),
 	maskAssetId: z.string().min(1).optional(),
@@ -451,6 +481,7 @@ export const CanvasFrameNodeShape = {
 	background: CanvasFillSchema.optional(),
 	placeholder: FramePlaceholderSchema.optional(),
 	radius: NonNegativeFiniteNumber.optional(),
+	cornerRadii: CanvasCornerRadiiSchema.optional(),
 } as const;
 
 export const CanvasFrameNodeSchema = z.looseObject({
