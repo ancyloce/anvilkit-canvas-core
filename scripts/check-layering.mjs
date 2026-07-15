@@ -30,6 +30,8 @@ const LAYERS = [
 	// `ir/` (rank 1) and nothing above.
 	{ domain: "text-contracts", rank: 2, match: (p) => p === "text-contracts.ts" },
 	{ domain: "geometry", rank: 2, match: (p) => p.startsWith("geometry/") },
+	// Clipboard payload schema + validation (A-03): pure data contract over ir.
+	{ domain: "clipboard", rank: 2, match: (p) => p.startsWith("clipboard/") },
 	// The headless export job contract (FR-040, canvas-m3-001). Reads `ir/`
 	// only — it defines types + a document-resolution helper, never calls the
 	// `serialize/` (rank 5) serializers itself. Same rank as ai-contracts/
