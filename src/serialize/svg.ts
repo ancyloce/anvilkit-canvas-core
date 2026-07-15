@@ -289,6 +289,7 @@ export type SvgWarningCode =
 	| "MISSING_ASSET"
 	| "UNSAFE_URI"
 	| "EMBED_NO_FETCHER"
+	| "IMAGE_FIT_MODE_APPROXIMATED"
 	| "IMAGE_MASK_UNSUPPORTED"
 	| "IMAGE_FILTERS_UNSUPPORTED"
 	| "BACKGROUND_UNSUPPORTED"
@@ -369,6 +370,7 @@ const DEFAULT_RICH_TEXT_STYLE: RichTextStyleDefaults = {
 	fontWeight: "400",
 	italic: false,
 	underline: false,
+	strikethrough: false,
 	letterSpacing: 0,
 	textTransform: "none",
 	fill: "#000000",
@@ -667,10 +669,111 @@ export function shouldSkipNode(
 	return skipInvisible && node.visible === false;
 }
 
+/** FR-075 (B-03a): extended stroke presentation attributes. */
+function strokeStyleAttrs(node: {
+	strokeOpacity?: number;
+	strokeDash?: number[];
+	strokeCap?: "butt" | "round" | "square";
+	strokeJoin?: "miter" | "round" | "bevel";
+}): string[] {
+	const out: string[] = [];
+	if (node.strokeOpacity !== undefined) {
+		out.push(`stroke-opacity="${fmt(node.strokeOpacity)}"`);
+	}
+	if (node.strokeDash && node.strokeDash.length > 0) {
+		out.push(`stroke-dasharray="${node.strokeDash.map(fmt).join(" ")}"`);
+	}
+	if (node.strokeCap !== undefined) {
+		out.push(`stroke-linecap="${node.strokeCap}"`);
+	}
+	if (node.strokeJoin !== undefined) {
+		out.push(`stroke-linejoin="${node.strokeJoin}"`);
+	}
+	return out;
+}
+
+/**
+ * FR-075 arrowheads (B-03a): marker defs + marker-start/end attributes for
+ * line/path nodes. The marker inherits the stroke color via context-fill-free
+ * explicit fill (SVG 1.1-safe).
+ */
+function arrowMarkerParts(node: {
+	id: string;
+	stroke?: string;
+	arrowStart?: "none" | "arrow";
+	arrowEnd?: "none" | "arrow";
+}): { defs: string; attrs: string[] } {
+	const color = node.stroke ?? "#000";
+	const attrs: string[] = [];
+	let defs = "";
+	const marker = (suffix: "start" | "end"): string => {
+		const id = `arrow-${suffix}-${sanitizeId(node.id)}`;
+		attrs.push(`marker-${suffix}="url(#${id})"`);
+		return `<marker id="${id}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="${escapeAttr(color)}" /></marker>`;
+	};
+	const markers: string[] = [];
+	if (node.arrowStart === "arrow") markers.push(marker("start"));
+	if (node.arrowEnd === "arrow") markers.push(marker("end"));
+	if (markers.length > 0) defs = `<defs>${markers.join("")}</defs>`;
+	return { defs, attrs };
+}
+
+/**
+ * FR-076 (B-03b): a rounded-rect path honouring independent corner radii,
+ * clamped to the half-extents. Replaces `<rect rx>` (single-radius only).
+ */
+function roundedRectPath(
+	width: number,
+	height: number,
+	radii: {
+		topLeft: number;
+		topRight: number;
+		bottomRight: number;
+		bottomLeft: number;
+	},
+): string {
+	const clamp = (r: number): number =>
+		Math.max(0, Math.min(r, width / 2, height / 2));
+	const tl = clamp(radii.topLeft);
+	const tr = clamp(radii.topRight);
+	const br = clamp(radii.bottomRight);
+	const bl = clamp(radii.bottomLeft);
+	return [
+		`M ${fmt(tl)} 0`,
+		`H ${fmt(width - tr)}`,
+		tr > 0 ? `A ${fmt(tr)} ${fmt(tr)} 0 0 1 ${fmt(width)} ${fmt(tr)}` : "",
+		`V ${fmt(height - br)}`,
+		br > 0
+			? `A ${fmt(br)} ${fmt(br)} 0 0 1 ${fmt(width - br)} ${fmt(height)}`
+			: "",
+		`H ${fmt(bl)}`,
+		bl > 0 ? `A ${fmt(bl)} ${fmt(bl)} 0 0 1 0 ${fmt(height - bl)}` : "",
+		`V ${fmt(tl)}`,
+		tl > 0 ? `A ${fmt(tl)} ${fmt(tl)} 0 0 1 ${fmt(tl)} 0` : "",
+		"Z",
+	]
+		.filter(Boolean)
+		.join(" ");
+}
+
 // --- shape emitters (synchronous; image emission is async, added later) ------
 
 export function emitRect(node: CanvasRectNode, ctx: SvgEmitContext): string {
 	const decor = decorate(node.fill, node.shadow, node.id, ctx);
+	const paint = [
+		...paintAttrs(decor.fill, node.stroke, node.strokeWidth),
+		...strokeStyleAttrs(node),
+		...strokeStyleAttrs(node),
+	];
+	// FR-076: independent corner radii render as a path (rect rx is uniform).
+	if (node.cornerRadii) {
+		const attrs = [
+			...commonAttrs(node, ctx),
+			`d="${roundedRectPath(node.bounds.width, node.bounds.height, node.cornerRadii)}"`,
+			...paint,
+		];
+		return `${decor.defs}<path ${attrs.join(" ")}${decor.filterAttr} />`;
+	}
 	const attrs = [
 		...commonAttrs(node, ctx),
 		`width="${fmt(node.bounds.width)}"`,
@@ -679,7 +782,7 @@ export function emitRect(node: CanvasRectNode, ctx: SvgEmitContext): string {
 	if (node.radius !== undefined && node.radius > 0) {
 		attrs.push(`rx="${fmt(node.radius)}"`, `ry="${fmt(node.radius)}"`);
 	}
-	attrs.push(...paintAttrs(decor.fill, node.stroke, node.strokeWidth));
+	attrs.push(...paint);
 	return `${decor.defs}<rect ${attrs.join(" ")}${decor.filterAttr} />`;
 }
 
@@ -697,6 +800,7 @@ export function emitEllipse(
 		`rx="${fmt(rx)}"`,
 		`ry="${fmt(ry)}"`,
 		...paintAttrs(decor.fill, node.stroke, node.strokeWidth),
+		...strokeStyleAttrs(node),
 	];
 	return `${decor.defs}<ellipse ${attrs.join(" ")}${decor.filterAttr} />`;
 }
@@ -714,6 +818,7 @@ export function emitPolygon(
 		...commonAttrs(node, ctx),
 		`points="${pointsAttr(computePolygonVertices(node.bounds, node.sides))}"`,
 		...paintAttrs(decor.fill, node.stroke, node.strokeWidth),
+		...strokeStyleAttrs(node),
 	];
 	return `${decor.defs}<polygon ${attrs.join(" ")}${decor.filterAttr} />`;
 }
@@ -729,6 +834,7 @@ export function emitStar(node: CanvasStarNode, ctx: SvgEmitContext): string {
 		...commonAttrs(node, ctx),
 		`points="${pointsAttr(vertices)}"`,
 		...paintAttrs(decor.fill, node.stroke, node.strokeWidth),
+		...strokeStyleAttrs(node),
 	];
 	return `${decor.defs}<polygon ${attrs.join(" ")}${decor.filterAttr} />`;
 }
@@ -746,7 +852,10 @@ export function emitLine(node: CanvasLineNode, ctx: SvgEmitContext): string {
 	if (node.strokeWidth !== undefined) {
 		attrs.push(`stroke-width="${fmt(node.strokeWidth)}"`);
 	}
-	return `<line ${attrs.join(" ")} />`;
+	attrs.push(...strokeStyleAttrs(node));
+	const arrows = arrowMarkerParts(node);
+	attrs.push(...arrows.attrs);
+	return `${arrows.defs}<line ${attrs.join(" ")} />`;
 }
 
 export function emitPath(node: CanvasPathNode, ctx: SvgEmitContext): string {
@@ -764,8 +873,12 @@ export function emitPath(node: CanvasPathNode, ctx: SvgEmitContext): string {
 		...commonAttrs(node, ctx),
 		`d="${escapeAttr(node.d)}"`,
 		...paintAttrs(decor.fill, node.stroke, node.strokeWidth),
+		...strokeStyleAttrs(node),
+		...strokeStyleAttrs(node),
 	];
-	return `${decor.defs}<path ${attrs.join(" ")}${decor.filterAttr} />`;
+	const arrows = arrowMarkerParts(node);
+	attrs.push(...arrows.attrs);
+	return `${arrows.defs}${decor.defs}<path ${attrs.join(" ")}${decor.filterAttr} />`;
 }
 
 export function emitText(node: CanvasTextNode, ctx: SvgEmitContext): string {
@@ -871,8 +984,14 @@ function richSpanAttrs(
 	if (span.italic !== undefined) {
 		attrs.push(`font-style="${span.italic ? "italic" : "normal"}"`);
 	}
-	if (span.underline !== undefined) {
-		attrs.push(`text-decoration="${span.underline ? "underline" : "none"}"`);
+	if (span.underline !== undefined || span.strikethrough !== undefined) {
+		const parts = [
+			span.underline ? "underline" : "",
+			span.strikethrough ? "line-through" : "",
+		].filter(Boolean);
+		attrs.push(
+			`text-decoration="${parts.length > 0 ? parts.join(" ") : "none"}"`,
+		);
 	}
 	if (span.letterSpacing !== undefined) {
 		attrs.push(`letter-spacing="${fmt(span.letterSpacing)}"`);
@@ -1399,6 +1518,18 @@ function frameBoxAttrs(node: CanvasFrameNode): string[] {
 }
 
 /**
+ * FR-076 (B-03b): the frame box as a concrete element string — a `<path>`
+ * when per-corner radii are set, else the classic `<rect>`. Shared by the
+ * clip path and the background so the two can never disagree.
+ */
+function frameBoxElement(node: CanvasFrameNode, extraAttrs: string): string {
+	if (node.cornerRadii) {
+		return `<path d="${roundedRectPath(node.bounds.width, node.bounds.height, node.cornerRadii)}"${extraAttrs} />`;
+	}
+	return `<rect ${frameBoxAttrs(node).join(" ")}${extraAttrs} />`;
+}
+
+/**
  * A frame is a group that owns a box: it can paint a background and clip its
  * children to that box.
  *
@@ -1422,7 +1553,7 @@ async function emitFrame(
 	let clipDefs = "";
 	if (node.clip) {
 		const clipId = `frame-clip-${sanitizeId(node.id)}`;
-		clipDefs = `<defs><clipPath id="${clipId}"><rect ${frameBoxAttrs(node).join(" ")} /></clipPath></defs>`;
+		clipDefs = `<defs><clipPath id="${clipId}">${frameBoxElement(node, "")}</clipPath></defs>`;
 		attrs.push(`clip-path="url(#${clipId})"`);
 	}
 
@@ -1432,11 +1563,10 @@ async function emitFrame(
 		// Reuse the shared fill machinery so a gradient background lands in
 		// `<defs>` exactly like a rect's does.
 		const decor = decorate(background, undefined, `${node.id}-bg`, ctx);
-		const bgAttrs = [
-			...frameBoxAttrs(node),
-			...paintAttrs(decor.fill, undefined, undefined),
-		];
-		body.push(`${childPad}${decor.defs}<rect ${bgAttrs.join(" ")} />`);
+		const bgPaint = paintAttrs(decor.fill, undefined, undefined).join(" ");
+		body.push(
+			`${childPad}${decor.defs}${frameBoxElement(node, bgPaint ? ` ${bgPaint}` : "")}`,
+		);
 	}
 	body.push(...(await emitChildren(node.children, ctx, depth + 1)));
 
@@ -1569,22 +1699,72 @@ async function emitImage(
 	const href = await resolveImageHref(asset.uri, ctx, node.id);
 	if (!href) return "";
 
-	const attrs = [
-		...commonAttrs(node, ctx),
-		`width="${fmt(node.bounds.width)}"`,
-		`height="${fmt(node.bounds.height)}"`,
-		'preserveAspectRatio="none"',
-	];
+	// FR-094 fit-mode mapping (B-02). stretch = the pre-B-02 "none" behavior;
+	// fill/fit map to slice/meet; original/center place the bitmap at its
+	// intrinsic size (needs asset dims — approximated as "fit" + warning when
+	// they are unknown), clipped to the node bounds via a wrapping <g> so the
+	// clip tracks the node transform and composes with `crop`.
+	const fitMode = node.fitMode ?? "stretch";
+	const naturalPlacement =
+		(fitMode === "original" || fitMode === "center") &&
+		asset.width !== undefined &&
+		asset.height !== undefined;
+	if ((fitMode === "original" || fitMode === "center") && !naturalPlacement) {
+		warn(
+			ctx,
+			"IMAGE_FIT_MODE_APPROXIMATED",
+			`Image fit mode "${fitMode}" needs intrinsic asset dimensions; approximating with "fit".`,
+			node.id,
+		);
+	}
 
+	const imageAttrs: string[] = [];
 	let defs = "";
+	let openWrap = "";
+	let closeWrap = "";
+	if (
+		naturalPlacement &&
+		asset.width !== undefined &&
+		asset.height !== undefined
+	) {
+		const offX =
+			fitMode === "center" ? (node.bounds.width - asset.width) / 2 : 0;
+		const offY =
+			fitMode === "center" ? (node.bounds.height - asset.height) / 2 : 0;
+		const fitClipId = `fit-${sanitizeId(node.id)}`;
+		defs += `<defs><clipPath id="${fitClipId}"><rect width="${fmt(node.bounds.width)}" height="${fmt(node.bounds.height)}" /></clipPath></defs>`;
+		openWrap = `<g ${commonAttrs(node, ctx).join(" ")} clip-path="url(#${fitClipId})">`;
+		closeWrap = "</g>";
+		imageAttrs.push(
+			`x="${fmt(offX)}"`,
+			`y="${fmt(offY)}"`,
+			`width="${fmt(asset.width)}"`,
+			`height="${fmt(asset.height)}"`,
+			'preserveAspectRatio="none"',
+		);
+	} else {
+		const par =
+			fitMode === "fill"
+				? "xMidYMid slice"
+				: fitMode === "stretch"
+					? "none"
+					: "xMidYMid meet";
+		imageAttrs.push(
+			...commonAttrs(node, ctx),
+			`width="${fmt(node.bounds.width)}"`,
+			`height="${fmt(node.bounds.height)}"`,
+			`preserveAspectRatio="${par}"`,
+		);
+	}
+
 	if (node.crop) {
 		const clipId = `crop-${sanitizeId(node.id)}`;
-		defs = `<defs><clipPath id="${clipId}"><rect x="${fmt(node.crop.x)}" y="${fmt(node.crop.y)}" width="${fmt(node.crop.width)}" height="${fmt(node.crop.height)}" /></clipPath></defs>`;
-		attrs.push(`clip-path="url(#${clipId})"`);
+		defs += `<defs><clipPath id="${clipId}"><rect x="${fmt(node.crop.x)}" y="${fmt(node.crop.y)}" width="${fmt(node.crop.width)}" height="${fmt(node.crop.height)}" /></clipPath></defs>`;
+		imageAttrs.push(`clip-path="url(#${clipId})"`);
 	}
-	attrs.push(`href="${escapeAttr(href)}"`);
+	imageAttrs.push(`href="${escapeAttr(href)}"`);
 
-	return `${defs}<image ${attrs.join(" ")} />`;
+	return `${defs}${openWrap}<image ${imageAttrs.join(" ")} />${closeWrap}`;
 }
 
 /**
