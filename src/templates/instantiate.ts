@@ -3,6 +3,7 @@ import type {
 	CanvasBatchCommand,
 	CanvasPageCreateCommand,
 } from "../commands/types.js";
+import { regenerateNodeIds } from "../ir/regenerate-ids.js";
 import type { CanvasIR, CanvasNode } from "../ir/types.js";
 import { CanvasIRSchema } from "../ir/validators.js";
 import { walk } from "../ir/walkers.js";
@@ -169,7 +170,11 @@ export function instantiateTemplate(
 
 	// Remap every page id and node id to a fresh one, keeping an old->new map
 	// (for lockedNodeIds/slot lookups) and a new-id->node index (for O(1) slot
-	// application below) as we go.
+	// application below). Node subtrees go through the shared
+	// `regenerateNodeIds` primitive (M0-05) — the idFactory call ORDER (page
+	// ids first, then each page's subtree pre-order) is unchanged, so
+	// deterministic-factory output is byte-identical to the previous inline
+	// remap.
 	const idMap = new Map<string, string>();
 	const nodesByNewId = new Map<string, CanvasNode>();
 	for (const page of cloned.pages) {
@@ -177,11 +182,18 @@ export function instantiateTemplate(
 		idMap.set(page.id, newPageId);
 		page.id = newPageId;
 	}
+	for (const page of cloned.pages) {
+		const { node: newRoot, idMap: subtreeIdMap } = regenerateNodeIds(
+			page.root,
+			{ idFactory },
+		);
+		page.root = newRoot;
+		for (const [oldId, newId] of subtreeIdMap) {
+			idMap.set(oldId, newId);
+		}
+	}
 	walk(cloned, ({ node }) => {
-		const newId = idFactory();
-		idMap.set(node.id, newId);
-		node.id = newId;
-		nodesByNewId.set(newId, node);
+		nodesByNewId.set(node.id, node);
 	});
 
 	const ts = nowFactory();
