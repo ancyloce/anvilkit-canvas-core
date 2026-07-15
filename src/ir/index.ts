@@ -3,6 +3,7 @@ export * from "./builders.js";
 export * from "./invariants.js";
 export * from "./migrations.js";
 export * from "./mutations.js";
+export * from "./regenerate-ids.js";
 export type * from "./types.js";
 export * from "./validators.js";
 export * from "./walkers.js";
