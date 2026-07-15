@@ -101,6 +101,7 @@ const BUILTIN_COMMAND_TYPES: ReadonlySet<string> = new Set([
 	"node.create",
 	"node.delete",
 	"node.reorder",
+	"node.reparent",
 	"node.move",
 	"node.resize",
 	"node.rotate",
@@ -112,6 +113,10 @@ const BUILTIN_COMMAND_TYPES: ReadonlySet<string> = new Set([
 	"page.delete",
 	"page.reorder",
 	"page.rename",
+	"page.resize",
+	"page.set-background",
+	"asset.put",
+	"asset.remove",
 	"batch",
 ]);
 
