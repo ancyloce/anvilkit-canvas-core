@@ -20,7 +20,12 @@ export type CanvasExportFormat =
 	| "jpeg"
 	| "webp"
 	| "pdf"
-	| "pdf-print";
+	| "pdf-print"
+	/**
+	 * Raw Canvas IR as JSON (B-04, FR-151). Reconciles the vocabulary with the
+	 * editor's built-in JSON exporter, which predates this entry.
+	 */
+	| "json";
 
 /**
  * Where the document to export comes from. `document` carries the IR
