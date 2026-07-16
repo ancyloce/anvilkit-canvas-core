@@ -20,7 +20,14 @@ export type CanvasChange =
 	| {
 			kind: "page";
 			pageId: string;
-			op: "create" | "delete" | "rename" | "reorder" | "resize" | "background";
+			op:
+				| "create"
+				| "delete"
+				| "rename"
+				| "reorder"
+				| "resize"
+				| "background"
+				| "layout-aids";
 	  }
 	| { kind: "asset"; assetId: string; op: "put" | "remove" };
 
@@ -71,6 +78,12 @@ export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
 				nodeId: cmd.nodeId,
 				keys: Object.keys(cmd.patch),
 			};
+		case "node.applyStyle":
+			return {
+				kind: "updated",
+				nodeId: cmd.nodeId,
+				keys: Object.keys(cmd.style),
+			};
 		case "image.replace":
 			return { kind: "updated", nodeId: cmd.nodeId, keys: ["assetId"] };
 		case "node.group":
@@ -87,6 +100,8 @@ export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
 			return { kind: "page", pageId: cmd.pageId, op: "resize" };
 		case "page.set-background":
 			return { kind: "page", pageId: cmd.pageId, op: "background" };
+		case "page.set-layout-aids":
+			return { kind: "page", pageId: cmd.pageId, op: "layout-aids" };
 		case "page.reorder":
 			return { kind: "page", pageId: cmd.pageId, op: "reorder" };
 		case "batch":

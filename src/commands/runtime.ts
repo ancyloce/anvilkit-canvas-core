@@ -21,6 +21,7 @@ import type {
 	CanvasPage,
 } from "../ir/types.js";
 import { findNode, isContainerNode, parentOf } from "../ir/walkers.js";
+import { computeStylePatch } from "./apply-style.js";
 import type {
 	CanvasAnyNodeUpdateCommand,
 	CanvasAssetPutCommand,
@@ -28,6 +29,7 @@ import type {
 	CanvasBatchCommand,
 	CanvasCommand,
 	CanvasImageReplaceCommand,
+	CanvasNodeApplyStyleCommand,
 	CanvasNodeCreateCommand,
 	CanvasNodeDeleteCommand,
 	CanvasNodeGroupCommand,
@@ -43,6 +45,7 @@ import type {
 	CanvasPageReorderCommand,
 	CanvasPageResizeCommand,
 	CanvasPageSetBackgroundCommand,
+	CanvasPageSetLayoutAidsCommand,
 	CommandApplyOptions,
 	CommandApplyResult,
 } from "./types.js";
@@ -362,6 +365,42 @@ function applyNodeUpdate(
 			Omit<CanvasNodeByKind<CanvasNodeKind>, "id" | "type">
 		>,
 	} as CanvasAnyNodeUpdateCommand;
+	return { ir: next, inverse };
+}
+
+function applyNodeApplyStyle(
+	ir: CanvasIR,
+	cmd: CanvasNodeApplyStyleCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options);
+	const { node } = expectNode(ir, cmd.nodeId);
+	const { patch } = computeStylePatch(node, cmd.style);
+	const inversePatch: Record<string, unknown> = {};
+	const nodeRecord = node as unknown as Record<string, unknown>;
+	for (const key of Object.keys(patch)) {
+		inversePatch[key] = nodeRecord[key];
+	}
+	const inverse = {
+		type: "node.update",
+		nodeId: cmd.nodeId,
+		kind: node.type,
+		patch: inversePatch,
+	} as CanvasAnyNodeUpdateCommand;
+	if (Object.keys(patch).length === 0) {
+		// Every key was incompatible — a reported no-op, never an error (FR-121).
+		return { ir, inverse };
+	}
+	let next: CanvasIR;
+	try {
+		next = updateNode<CanvasNodeKind>(ir, {
+			id: cmd.nodeId,
+			patch: patch as Partial<Omit<CanvasNode, "id" | "type">>,
+			now: options.now,
+		});
+	} catch (err) {
+		rethrowMutationError(err);
+	}
 	return { ir: next, inverse };
 }
 
@@ -1037,6 +1076,38 @@ function applyPageSetBackground(
 	return { ir: next, inverse };
 }
 
+function applyPageSetLayoutAids(
+	ir: CanvasIR,
+	cmd: CanvasPageSetLayoutAidsCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const idx = ir.pages.findIndex((p) => p.id === cmd.pageId);
+	const page = idx >= 0 ? ir.pages[idx] : undefined;
+	if (!page) {
+		throw new CanvasCommandError(
+			"page-not-found",
+			`Page id "${cmd.pageId}" not found`,
+		);
+	}
+	const prior = page.layoutAids;
+	// Clearing drops the key entirely so a cleared page serializes identically
+	// to one that never had layout aids.
+	const { layoutAids: _prior, ...rest } = page;
+	const newPage: CanvasPage =
+		cmd.to === undefined ? { ...rest } : { ...rest, layoutAids: cmd.to };
+	const next = bumpMetadata(
+		{ ...ir, pages: ir.pages.map((p, i) => (i === idx ? newPage : p)) },
+		options,
+	);
+	const inverse: CanvasPageSetLayoutAidsCommand = {
+		type: "page.set-layout-aids",
+		pageId: cmd.pageId,
+		from: cmd.to,
+		to: prior,
+	};
+	return { ir: next, inverse };
+}
+
 function applyAssetPut(
 	ir: CanvasIR,
 	cmd: CanvasAssetPutCommand,
@@ -1097,6 +1168,8 @@ export function applyCommand(
 			return applyNodeRotate(ir, cmd, options);
 		case "node.update":
 			return applyNodeUpdate(ir, cmd, options);
+		case "node.applyStyle":
+			return applyNodeApplyStyle(ir, cmd, options);
 		case "image.replace":
 			return applyImageReplace(ir, cmd, options);
 		case "node.group":
@@ -1115,6 +1188,8 @@ export function applyCommand(
 			return applyPageResize(ir, cmd, options);
 		case "page.set-background":
 			return applyPageSetBackground(ir, cmd, options);
+		case "page.set-layout-aids":
+			return applyPageSetLayoutAids(ir, cmd, options);
 		case "asset.put":
 			return applyAssetPut(ir, cmd, options);
 		case "asset.remove":

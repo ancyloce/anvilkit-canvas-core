@@ -1,13 +1,15 @@
 import type {
 	CanvasAssetRef,
-	CanvasPageBackground,
 	CanvasGroupNode,
 	CanvasIR,
 	CanvasNode,
 	CanvasNodeByKind,
 	CanvasNodeKind,
 	CanvasPage,
+	CanvasPageBackground,
+	CanvasPageLayoutAids,
 } from "../ir/types.js";
+import type { CanvasNodeStyle } from "./apply-style.js";
 
 export interface CanvasPoint {
 	x: number;
@@ -132,6 +134,19 @@ export interface CanvasNodeUngroupCommand {
 	restore?: Array<{ id: string; index: number }>;
 }
 
+/**
+ * Paste style onto one node (C-05, FR-121): the payload is intersected with
+ * the target kind's compatible keys via `computeStylePatch` — incompatible
+ * keys are ignored (callers report them), never a failure. The inverse is a
+ * `node.update` restoring the applied keys' prior values exactly. Multi-node
+ * paste is a `batch` of these (one per target — one undo entry).
+ */
+export interface CanvasNodeApplyStyleCommand {
+	type: "node.applyStyle";
+	nodeId: string;
+	style: CanvasNodeStyle;
+}
+
 export interface CanvasPageCreateCommand {
 	type: "page.create";
 	page: CanvasPage;
@@ -174,6 +189,20 @@ export interface CanvasPageSetBackgroundCommand {
 	pageId: string;
 	from?: CanvasPageBackground;
 	to: CanvasPageBackground;
+}
+
+/**
+ * Set (or clear, with `to: undefined`) a page's layout aids — persistent
+ * guides, margin, bleed, safe area (C-01, PRD 0012 §9.3/FR-111/FR-113).
+ * Whole-object replace: guide add/move/delete are expressed by writing the
+ * full next `layoutAids` value, keeping the inverse trivial and exact. The
+ * inverse restores the ACTUAL prior value, even when `from` is stale.
+ */
+export interface CanvasPageSetLayoutAidsCommand {
+	type: "page.set-layout-aids";
+	pageId: string;
+	from?: CanvasPageLayoutAids;
+	to: CanvasPageLayoutAids | undefined;
 }
 
 /**
@@ -236,6 +265,7 @@ export type CanvasCommand =
 	| CanvasNodeReorderCommand
 	| CanvasNodeReparentCommand
 	| CanvasAnyNodeUpdateCommand
+	| CanvasNodeApplyStyleCommand
 	| CanvasImageReplaceCommand
 	| CanvasNodeGroupCommand
 	| CanvasNodeUngroupCommand
@@ -244,6 +274,7 @@ export type CanvasCommand =
 	| CanvasPageRenameCommand
 	| CanvasPageResizeCommand
 	| CanvasPageSetBackgroundCommand
+	| CanvasPageSetLayoutAidsCommand
 	| CanvasPageDeleteCommand
 	| CanvasAssetPutCommand
 	| CanvasAssetRemoveCommand
