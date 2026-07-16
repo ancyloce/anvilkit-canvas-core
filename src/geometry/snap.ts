@@ -239,3 +239,102 @@ export function distributeRects(
 	}
 	return deltas;
 }
+
+/** Per-rect displacement produced by {@link tidyUpRects}. */
+export interface TidyUpDelta {
+	dx: number;
+	dy: number;
+}
+
+function median(values: readonly number[]): number {
+	if (values.length === 0) return 0;
+	const sorted = [...values].sort((a, b) => a - b);
+	const mid = Math.floor(sorted.length / 2);
+	const lower = sorted[mid - 1] ?? sorted[mid] ?? 0;
+	const upper = sorted[mid] ?? 0;
+	return sorted.length % 2 === 0 ? (lower + upper) / 2 : upper;
+}
+
+/**
+ * FR-072 "Tidy Up" (C-12): arrange a rough scatter into a clean grid.
+ * Rects cluster into rows by vertical-center proximity (threshold: half the
+ * median height), each row lays out left-to-right from the selection's left
+ * edge, and rows stack from its top edge — with uniform gaps derived from
+ * the MEDIAN existing horizontal/vertical gaps (clamped ≥ 0), so a tidy of
+ * an already-tidy grid is a no-op rather than a re-spacing. Returned array
+ * is index-aligned with `rects`; fewer than 2 rects → all zeros. Pure.
+ */
+export function tidyUpRects(rects: readonly SnapRect[]): TidyUpDelta[] {
+	const n = rects.length;
+	const deltas: TidyUpDelta[] = Array.from({ length: n }, () => ({
+		dx: 0,
+		dy: 0,
+	}));
+	if (n < 2) return deltas;
+
+	const entries = rects.map((rect, index) => ({ rect, index }));
+	entries.sort(
+		(a, b) => a.rect.y + a.rect.height / 2 - (b.rect.y + b.rect.height / 2),
+	);
+	const rowThreshold = median(rects.map((r) => r.height)) / 2;
+
+	const rows: Array<Array<{ rect: SnapRect; index: number }>> = [];
+	let currentRow: Array<{ rect: SnapRect; index: number }> = [];
+	let rowCenterSum = 0;
+	for (const entry of entries) {
+		const cy = entry.rect.y + entry.rect.height / 2;
+		if (
+			currentRow.length > 0 &&
+			Math.abs(cy - rowCenterSum / currentRow.length) > rowThreshold
+		) {
+			rows.push(currentRow);
+			currentRow = [];
+			rowCenterSum = 0;
+		}
+		currentRow.push(entry);
+		rowCenterSum += cy;
+	}
+	if (currentRow.length > 0) rows.push(currentRow);
+	for (const row of rows) row.sort((a, b) => a.rect.x - b.rect.x);
+
+	// Uniform gaps from the MEDIAN existing spacing (overlaps clamp to 0).
+	const hGaps: number[] = [];
+	for (const row of rows) {
+		for (let i = 1; i < row.length; i += 1) {
+			const prev = row[i - 1];
+			const next = row[i];
+			if (prev && next)
+				hGaps.push(next.rect.x - (prev.rect.x + prev.rect.width));
+		}
+	}
+	const vGaps: number[] = [];
+	for (let i = 1; i < rows.length; i += 1) {
+		const prevBottom = Math.max(
+			...(rows[i - 1] ?? []).map((e) => e.rect.y + e.rect.height),
+		);
+		const nextTop = Math.min(...(rows[i] ?? []).map((e) => e.rect.y));
+		vGaps.push(nextTop - prevBottom);
+	}
+	const gapX = Math.max(0, median(hGaps));
+	const gapY = Math.max(0, median(vGaps));
+
+	let minLeft = Number.POSITIVE_INFINITY;
+	let minTop = Number.POSITIVE_INFINITY;
+	for (const r of rects) {
+		minLeft = Math.min(minLeft, r.x);
+		minTop = Math.min(minTop, r.y);
+	}
+
+	let y = minTop;
+	for (const row of rows) {
+		let x = minLeft;
+		let rowHeight = 0;
+		for (const { rect, index } of row) {
+			deltas[index] = { dx: x - rect.x, dy: y - rect.y };
+			x += rect.width + gapX;
+			rowHeight = Math.max(rowHeight, rect.height);
+		}
+		y += rowHeight + gapY;
+	}
+	return deltas;
+}
