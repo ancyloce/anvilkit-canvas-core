@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CanvasIRSchema } from "../ir/validators.js";
+import { CanvasInsetsSchema, CanvasIRSchema } from "../ir/validators.js";
 import type {
 	CanvasSafeArea,
 	CanvasSizePreset,
@@ -12,12 +12,9 @@ import type {
 	TemplateVariable,
 } from "./types.js";
 
-export const CanvasSafeAreaSchema: z.ZodType<CanvasSafeArea> = z.looseObject({
-	top: z.number(),
-	right: z.number(),
-	bottom: z.number(),
-	left: z.number(),
-});
+/** Alias of the shared insets schema (PRD 0012 §9.3) — kept as a named export for existing consumers. */
+export const CanvasSafeAreaSchema: z.ZodType<CanvasSafeArea> =
+	CanvasInsetsSchema;
 
 export const CanvasSizePresetSchema: z.ZodType<CanvasSizePreset> =
 	z.looseObject({

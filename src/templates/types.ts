@@ -1,6 +1,7 @@
 import type {
 	CanvasFrameNode,
 	CanvasImageNode,
+	CanvasInsets,
 	CanvasIR,
 	CanvasRichTextNode,
 	CanvasTextNode,
@@ -10,13 +11,10 @@ import type {
 
 /**
  * A safe-area inset, in the same unit as its owning {@link CanvasSizePreset}.
+ * Alias of the shared {@link CanvasInsets} shape (PRD 0012 §9.3) — kept as a
+ * named export for existing consumers.
  */
-export interface CanvasSafeArea {
-	top: number;
-	right: number;
-	bottom: number;
-	left: number;
-}
+export type CanvasSafeArea = CanvasInsets;
 
 /**
  * A lightweight, versioned width/height/unit preset (PRD §12.8) — e.g.
