@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+### PRD 0012 editing features (Phases 1a/1b/2)
+
+All additive; existing documents need no migration (new fields are optional
+with legacy-equivalent defaults).
+
+- **Commands**: `node.reparent` (with inverse, cycle/page-root guards),
+  `node.applyStyle` (FR-121 compatible-property matrix + ignored-field
+  reporting), `page.duplicate`, `page.resize` (all four FR-063 modes incl.
+  scale-content), `page.set-layout-aids`.
+- **`enforceLocked` option** on `applyCommand`/`applyBatch`: locked targets
+  raise a typed `CanvasCommandError` (default off; opt-in by the editor's
+  action layer).
+- **Public ID-remap utility** `regenerateNodeIds` (templates and page cloning
+  consume it; no duplicate implementations).
+- **Clipboard payload schema** (`CanvasClipboardPayload`): depth/count/
+  byte-size caps, version check, hostile-payload validation.
+- **IR fields**: stroke opacity/dash/cap/join + line/path arrowheads (SVG
+  `<marker>`), per-corner radii, image `fitMode` + non-destructive
+  `adjustments` (one shared color matrix), `effects[]`
+  (drop-shadow with `spread`, blur) with documented precedence over legacy
+  `shadow`, rich-text `strikethrough` + `auto-width` sizing, page layout aids
+  (guides/margin/bleed/safe-area).
+- **Export**: `json` added to `CanvasExportFormat`; serializer warnings for
+  every new capability; `tidyUpRects` geometry helper.
+
+### Fixed
+
+- SVG serializer emitted duplicate stroke-style attributes
+  (`stroke-opacity`/`stroke-dasharray`/`stroke-linecap`/`stroke-linejoin`)
+  on `rect` and `path` nodes — strict XML parsers reject such documents. Now
+  emitted once; the golden-snapshot well-formedness check rejects duplicate
+  attributes across all goldens.
+
+### Earlier unreleased work
+
 Hardening pass from the canvas-core code review (no public type changes; the IR
 shape and all function signatures are unchanged).
 

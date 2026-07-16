@@ -14,9 +14,11 @@ import { serializePageToSvg } from "../svg.js";
 
 /**
  * Dependency-free well-formedness check: scans tags and verifies every open
- * tag is balanced by a matching close. Safe because the serializer escapes all
- * `<`/`>` in text and attribute content, so no raw angle brackets appear inside
- * values to confuse the scanner.
+ * tag is balanced by a matching close, and that no element repeats an
+ * attribute name (duplicate attributes are fatal to strict XML parsers, so a
+ * "working in <img>" golden could still be an unloadable .svg file). Safe
+ * because the serializer escapes all `<`/`>` in text and attribute content,
+ * so no raw angle brackets appear inside values to confuse the scanner.
  */
 function assertWellFormed(svg: string): void {
 	const stack: string[] = [];
@@ -29,6 +31,13 @@ function assertWellFormed(svg: string): void {
 			expect(stack.pop()).toBe(name);
 		} else if (!selfClosing) {
 			stack.push(name);
+		}
+		if (!closing) {
+			const attrNames = Array.from(
+				match[3].matchAll(/([\w:-]+)=/g),
+				(m) => m[1],
+			);
+			expect(attrNames).toEqual(Array.from(new Set(attrNames)));
 		}
 	}
 	expect(stack).toEqual([]);
@@ -1087,5 +1096,198 @@ describe("serializePageToSvg golden — brand token resolution", () => {
 			"resolved-font",
 			"unresolved-color",
 		]);
+	});
+});
+
+/**
+ * Golden fixture for the B-03/C-03/C-04 style-and-effect surface (M4 export
+ * visual-regression pass). The feature-level tests (`style-fields`, `effects`,
+ * `image-fit-mode`, `ir/image-adjustments`) assert structure with
+ * `toContain`; this snapshot pins the exact combined bytes so serializer
+ * drift in any of them fails loudly. Covers:
+ *  - `corner-dash`   — per-corner radii + stroke opacity/dash/cap/join.
+ *  - `arrow-line`    — a line with an end arrowhead (`<marker>` defs).
+ *  - `spread-shadow` — drop-shadow effect with `spread` (`feMorphology`).
+ *  - `soft-blur`     — standalone blur effect (`feGaussianBlur`).
+ *  - `stacked`       — drop-shadow THEN blur on one node: the ordered
+ *                      filter/merge chain.
+ *  - `fitted-image`  — `fitMode: "fit"` + non-destructive adjustments: the
+ *                      single shared color matrix as `feColorMatrix`.
+ *  - `struck`        — measured auto-width rich text with a strikethrough
+ *                      span (`text-decoration="line-through"`).
+ */
+const styleEffectsFixture: CanvasIR = {
+	version: "2",
+	id: "doc-golden-style-effects",
+	title: "Golden style/effects",
+	pages: [
+		{
+			id: "p1",
+			size: { width: 340, height: 220, unit: "px" },
+			background: { kind: "solid", value: "#ffffff" },
+			root: {
+				id: "root",
+				type: "group",
+				transform: t(),
+				bounds: { width: 340, height: 220 },
+				zIndex: 0,
+				children: [
+					{
+						id: "corner-dash",
+						type: "rect",
+						transform: t(10, 10),
+						bounds: { width: 90, height: 60 },
+						zIndex: 0,
+						fill: "#e2e8f0",
+						stroke: "#0f172a",
+						strokeWidth: 3,
+						strokeOpacity: 0.6,
+						strokeDash: [6, 3],
+						strokeCap: "round",
+						strokeJoin: "bevel",
+						cornerRadii: {
+							topLeft: 12,
+							topRight: 0,
+							bottomRight: 20,
+							bottomLeft: 4,
+						},
+					},
+					{
+						id: "arrow-line",
+						type: "line",
+						transform: t(120, 20),
+						bounds: { width: 80, height: 40 },
+						zIndex: 1,
+						points: [0, 0, 80, 40],
+						stroke: "#dc2626",
+						strokeWidth: 2,
+						arrowEnd: "arrow",
+					},
+					{
+						id: "spread-shadow",
+						type: "rect",
+						transform: t(220, 10),
+						bounds: { width: 80, height: 40 },
+						zIndex: 2,
+						fill: "#ffffff",
+						effects: [
+							{
+								type: "drop-shadow",
+								color: "#0f172a",
+								blur: 6,
+								offsetX: 2,
+								offsetY: 3,
+								spread: 4,
+								opacity: 0.5,
+							},
+						],
+					},
+					{
+						id: "soft-blur",
+						type: "ellipse",
+						transform: t(120, 100),
+						bounds: { width: 60, height: 40 },
+						zIndex: 3,
+						fill: "#22c55e",
+						effects: [{ type: "blur", radius: 6 }],
+					},
+					{
+						id: "stacked",
+						type: "star",
+						transform: t(220, 100),
+						bounds: { width: 60, height: 60 },
+						zIndex: 4,
+						points: 5,
+						innerRadiusRatio: 0.5,
+						fill: "#8b5cf6",
+						effects: [
+							{
+								type: "drop-shadow",
+								color: "#000000",
+								blur: 4,
+								offsetX: 1,
+								offsetY: 2,
+							},
+							{ type: "blur", radius: 3 },
+						],
+					},
+					{
+						id: "fitted-image",
+						type: "image",
+						transform: t(10, 100),
+						bounds: { width: 60, height: 40 },
+						zIndex: 5,
+						assetId: "photo",
+						fitMode: "fit",
+						adjustments: {
+							brightness: 0.2,
+							saturation: -0.4,
+							grayscale: 0.25,
+						},
+					},
+					{
+						id: "struck",
+						type: "rich-text",
+						transform: t(10, 170),
+						bounds: { width: 200, height: 20 },
+						zIndex: 6,
+						sizing: "auto-width",
+						width: 200,
+						paragraphs: [
+							{
+								spans: [
+									{ text: "Struck ", strikethrough: true },
+									{ text: "and plain" },
+								],
+							},
+						],
+					},
+				],
+			},
+		},
+	],
+	assets: {
+		photo: {
+			id: "photo",
+			uri: "https://cdn.example.com/photo-fit.png",
+			mimeType: "image/png",
+			width: 120,
+			height: 80,
+		},
+	},
+	metadata: {
+		createdAt: "2026-07-15T00:00:00.000Z",
+		updatedAt: "2026-07-15T00:00:00.000Z",
+	},
+};
+
+describe("serializePageToSvg golden — style fields, effects, adjustments", () => {
+	it("pins per-corner radii, dash/cap/join, arrowheads, spread/blur effects, the adjustment color matrix, and strikethrough", async () => {
+		const { svg, warnings } = await serializePageToSvg(styleEffectsFixture, 0, {
+			pretty: true,
+			images: "reference",
+			textMeasurer: goldenMeasurer,
+			fonts: [{ family: "Inter", src: "https://example.com/inter.woff2" }],
+		});
+
+		expect(warnings).toEqual([]);
+		assertWellFormed(svg);
+
+		// One structural marker per feature; the snapshot pins the rest.
+		expect(svg).toContain("stroke-dasharray");
+		expect(svg).toContain("<marker");
+		expect(svg).toContain("<feMorphology");
+		expect(svg).toContain("<feGaussianBlur");
+		expect(svg).toContain("<feColorMatrix");
+		expect(svg).toContain("line-through");
+
+		await expect(svg).toMatchFileSnapshot(
+			fileURLToPath(
+				new URL(
+					"./__snapshots__/canvas-style-effects.snap.svg",
+					import.meta.url,
+				),
+			),
+		);
 	});
 });

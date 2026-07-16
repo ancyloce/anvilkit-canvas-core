@@ -854,7 +854,6 @@ export function emitRect(node: CanvasRectNode, ctx: SvgEmitContext): string {
 	const paint = [
 		...paintAttrs(decor.fill, node.stroke, node.strokeWidth),
 		...strokeStyleAttrs(node),
-		...strokeStyleAttrs(node),
 	];
 	// FR-076: independent corner radii render as a path (rect rx is uniform).
 	if (node.cornerRadii) {
@@ -964,7 +963,6 @@ export function emitPath(node: CanvasPathNode, ctx: SvgEmitContext): string {
 		...commonAttrs(node, ctx),
 		`d="${escapeAttr(node.d)}"`,
 		...paintAttrs(decor.fill, node.stroke, node.strokeWidth),
-		...strokeStyleAttrs(node),
 		...strokeStyleAttrs(node),
 	];
 	const arrows = arrowMarkerParts(node);

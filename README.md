@@ -39,7 +39,15 @@ published version and needs no workspace context.
   unchanged subtree by reference (structural sharing).
 - **Undoable command runtime** — `applyCommand` returns the next IR *plus* a
   compact `inverse` command; `applyCommands` runs many as one all-or-nothing
-  transaction and derives granular change records.
+  transaction and derives granular change records. Opt-in `enforceLocked`
+  rejects mutations of locked nodes with a typed error.
+- **Editing-feature vocabulary (PRD 0012)** — reparent/apply-style/page
+  duplicate + resize commands, clipboard payload validation with hostile-input
+  caps, public ID remapping (`regenerateNodeIds`), stroke styling +
+  arrowheads, per-corner radii, image fit modes + one-color-matrix
+  adjustments, ordered `effects[]` (drop-shadow `spread`, blur), rich-text
+  strikethrough/auto-width, and page layout aids — every capability with
+  schema, inverse, migration-free optional fields, and serializer warnings.
 - **Geometry without a renderer** — affine matrices, viewport pan/zoom,
   rotation-aware hit-testing/marquee, and Figma-style snap/align/distribute, all
   over plain world-space numbers.
