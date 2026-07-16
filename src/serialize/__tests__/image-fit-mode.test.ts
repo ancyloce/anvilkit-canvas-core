@@ -132,3 +132,40 @@ describe("image fitMode serialization (B-02, FR-094)", () => {
 		expect(svg).toContain('clip-path="url(#crop-img-1)"');
 	});
 });
+
+describe("image adjustments serialization (C-04, FR-100)", () => {
+	it("emits ONE feColorMatrix from the shared math plus feGaussianBlur", async () => {
+		const node = {
+			...imageNode(),
+			adjustments: { grayscale: 1, blur: 8 },
+		} as CanvasImageNode;
+		const { svg, warnings } = await svgFor(node);
+		expect(svg).toContain('filter="url(#adjust-img-1)"');
+		expect(svg).toContain('<feColorMatrix type="matrix"');
+		expect(svg).toContain('<feGaussianBlur stdDeviation="4" />');
+		// Defined vocabulary — no "unsupported" warning for adjustments.
+		expect(warnings.every((w) => w.code !== "IMAGE_FILTERS_UNSUPPORTED")).toBe(
+			true,
+		);
+	});
+
+	it("identity adjustments emit no filter at all", async () => {
+		const node = {
+			...imageNode(),
+			adjustments: {},
+		} as CanvasImageNode;
+		const { svg } = await svgFor(node);
+		expect(svg).not.toContain("filter=");
+	});
+
+	it("the legacy open-ended filters stub still warns (unchanged)", async () => {
+		const node = {
+			...imageNode(),
+			filters: [{ kind: "mystery" }],
+		} as CanvasImageNode;
+		const { warnings } = await svgFor(node);
+		expect(warnings.some((w) => w.code === "IMAGE_FILTERS_UNSUPPORTED")).toBe(
+			true,
+		);
+	});
+});

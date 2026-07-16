@@ -8,10 +8,19 @@ import {
 	computePolygonVertices,
 	computeStarVertices,
 } from "../geometry/polygon.js";
+import { resolveNodeEffects } from "../ir/effects.js";
+import {
+	adjustmentBlurRadius,
+	computeAdjustmentColorMatrix,
+	isIdentityAdjustments,
+	toSvgColorMatrix,
+} from "../ir/image-adjustments.js";
 import type {
 	BrandTokenRef,
 	CanvasAssetRef,
 	CanvasAudioNode,
+	CanvasDropShadowEffect,
+	CanvasEffect,
 	CanvasEllipseNode,
 	CanvasFill,
 	CanvasFontFamily,
@@ -551,6 +560,73 @@ function shadowMarkup(id: string, s: CanvasShadow): string {
 }
 
 /**
+ * `<filter>` markup for a general effect list (C-03, §9.4). Each drop shadow
+ * becomes a dilate(spread) → blur → offset → flood/composite primitive chain
+ * (`feDropShadow` cannot express spread); shadows merge under the source in
+ * list order, and a node-level blur applies to the composited result. Callers
+ * route the simple single-shadow-no-spread case through {@link shadowMarkup}
+ * instead, keeping legacy output byte-identical.
+ */
+function effectsMarkup(id: string, effects: readonly CanvasEffect[]): string {
+	const primitives: string[] = [];
+	const shadowResults: string[] = [];
+	let blurRadius = 0;
+	let i = 0;
+	for (const effect of effects) {
+		if (effect.type === "blur") {
+			blurRadius += effect.radius;
+			continue;
+		}
+		const spread = effect.spread ?? 0;
+		let input = "SourceAlpha";
+		if (spread > 0) {
+			primitives.push(
+				`<feMorphology in="SourceAlpha" operator="dilate" radius="${fmt(spread)}" result="sp${i}" />`,
+			);
+			input = `sp${i}`;
+		}
+		primitives.push(
+			`<feGaussianBlur in="${input}" stdDeviation="${fmt(effect.blur / 2)}" result="bl${i}" />`,
+			`<feOffset in="bl${i}" dx="${fmt(effect.offsetX)}" dy="${fmt(effect.offsetY)}" result="of${i}" />`,
+			`<feFlood flood-color="${escapeAttr(effect.color)}" flood-opacity="${fmt(effect.opacity ?? 1)}" result="fl${i}" />`,
+			`<feComposite in="fl${i}" in2="of${i}" operator="in" result="sh${i}" />`,
+		);
+		shadowResults.push(`sh${i}`);
+		i += 1;
+	}
+	if (shadowResults.length > 0) {
+		const nodes = [...shadowResults, "SourceGraphic"]
+			.map((r) => `<feMergeNode in="${r}" />`)
+			.join("");
+		primitives.push(`<feMerge>${nodes}</feMerge>`);
+	}
+	if (blurRadius > 0) {
+		// With no preceding merge this blurs SourceGraphic; otherwise the merged result.
+		primitives.push(`<feGaussianBlur stdDeviation="${fmt(blurRadius / 2)}" />`);
+	}
+	return `<filter id="${id}">${primitives.join("")}</filter>`;
+}
+
+/** Effect-less call sites (rich-text spans, frame backgrounds) share one frozen empty list. */
+const EMPTY_EFFECTS: readonly CanvasEffect[] = [];
+
+/**
+ * True when the effect list is exactly the legacy shape — one spreadless drop
+ * shadow — so `decorate` can emit the historical `feDropShadow` markup.
+ */
+function isLegacyShadowShape(
+	effects: readonly CanvasEffect[],
+): effects is readonly [CanvasDropShadowEffect] {
+	const first = effects[0];
+	return (
+		effects.length === 1 &&
+		first !== undefined &&
+		first.type === "drop-shadow" &&
+		(first.spread ?? 0) === 0
+	);
+}
+
+/**
  * Resolve a fill field through `resolveBrandToken` when it is a token
  * reference; pass a plain color/gradient through unchanged. Unresolved (no
  * resolver, or the resolver returns nothing) degrades to `undefined` — which
@@ -617,7 +693,7 @@ function tryResolveFontFamily(
  */
 function decorate(
 	fill: CanvasFill | undefined,
-	shadow: CanvasShadow | undefined,
+	effects: readonly CanvasEffect[],
 	nodeId: string,
 	ctx: SvgEmitContext,
 ): { defs: string; fill: string | undefined; filterAttr: string } {
@@ -632,9 +708,24 @@ function decorate(
 		fillValue = `url(#${id})`;
 	}
 	let filterAttr = "";
-	if (shadow) {
+	if (isLegacyShadowShape(effects)) {
+		// One spreadless drop shadow → historical feDropShadow markup, so
+		// documents using the legacy `shadow` field serialize byte-identically.
 		const id = `shadow-${sanitizeId(nodeId)}`;
-		inner.push(shadowMarkup(id, shadow));
+		const s = effects[0];
+		inner.push(
+			shadowMarkup(id, {
+				color: s.color,
+				blur: s.blur,
+				offsetX: s.offsetX,
+				offsetY: s.offsetY,
+				...(s.opacity !== undefined ? { opacity: s.opacity } : {}),
+			}),
+		);
+		filterAttr = ` filter="url(#${id})"`;
+	} else if (effects.length > 0) {
+		const id = `effects-${sanitizeId(nodeId)}`;
+		inner.push(effectsMarkup(id, effects));
 		filterAttr = ` filter="url(#${id})"`;
 	}
 	return {
@@ -759,7 +850,7 @@ function roundedRectPath(
 // --- shape emitters (synchronous; image emission is async, added later) ------
 
 export function emitRect(node: CanvasRectNode, ctx: SvgEmitContext): string {
-	const decor = decorate(node.fill, node.shadow, node.id, ctx);
+	const decor = decorate(node.fill, resolveNodeEffects(node), node.id, ctx);
 	const paint = [
 		...paintAttrs(decor.fill, node.stroke, node.strokeWidth),
 		...strokeStyleAttrs(node),
@@ -792,7 +883,7 @@ export function emitEllipse(
 ): string {
 	const rx = node.bounds.width / 2;
 	const ry = node.bounds.height / 2;
-	const decor = decorate(node.fill, node.shadow, node.id, ctx);
+	const decor = decorate(node.fill, resolveNodeEffects(node), node.id, ctx);
 	const attrs = [
 		...commonAttrs(node, ctx),
 		`cx="${fmt(rx)}"`,
@@ -813,7 +904,7 @@ export function emitPolygon(
 	node: CanvasPolygonNode,
 	ctx: SvgEmitContext,
 ): string {
-	const decor = decorate(node.fill, node.shadow, node.id, ctx);
+	const decor = decorate(node.fill, resolveNodeEffects(node), node.id, ctx);
 	const attrs = [
 		...commonAttrs(node, ctx),
 		`points="${pointsAttr(computePolygonVertices(node.bounds, node.sides))}"`,
@@ -824,7 +915,7 @@ export function emitPolygon(
 }
 
 export function emitStar(node: CanvasStarNode, ctx: SvgEmitContext): string {
-	const decor = decorate(node.fill, node.shadow, node.id, ctx);
+	const decor = decorate(node.fill, resolveNodeEffects(node), node.id, ctx);
 	const vertices = computeStarVertices(
 		node.bounds,
 		node.points,
@@ -868,7 +959,7 @@ export function emitPath(node: CanvasPathNode, ctx: SvgEmitContext): string {
 		);
 		return "";
 	}
-	const decor = decorate(node.fill, node.shadow, node.id, ctx);
+	const decor = decorate(node.fill, resolveNodeEffects(node), node.id, ctx);
 	const attrs = [
 		...commonAttrs(node, ctx),
 		`d="${escapeAttr(node.d)}"`,
@@ -887,7 +978,7 @@ export function emitText(node: CanvasTextNode, ctx: SvgEmitContext): string {
 	const anchor = textAnchor(node.align);
 	const x = textAnchorX(node.align, node.bounds.width);
 	const baselineY = node.fontSize * TEXT_ASCENT_RATIO;
-	const decor = decorate(node.fill, node.shadow, node.id, ctx);
+	const decor = decorate(node.fill, resolveNodeEffects(node), node.id, ctx);
 
 	const attrs = [
 		...commonAttrs(node, ctx),
@@ -1020,7 +1111,7 @@ function richSpanFill(
 	if (span.fill === undefined) return { defs: "", fill: undefined };
 	const decor = decorate(
 		span.fill,
-		undefined,
+		EMPTY_EFFECTS,
 		`${node.id}-p${paragraphIndex}s${spanIndex}`,
 		ctx,
 	);
@@ -1076,7 +1167,7 @@ export function emitRichText(
 		}
 	}
 
-	const decor = decorate(defaults.fill, undefined, `${node.id}-rt`, ctx);
+	const decor = decorate(defaults.fill, EMPTY_EFFECTS, `${node.id}-rt`, ctx);
 	const attrs = [
 		...commonAttrs(node, ctx),
 		`font-family="${escapeAttr(defaults.fontFamily)}"`,
@@ -1562,7 +1653,7 @@ async function emitFrame(
 	if (background !== undefined) {
 		// Reuse the shared fill machinery so a gradient background lands in
 		// `<defs>` exactly like a rect's does.
-		const decor = decorate(background, undefined, `${node.id}-bg`, ctx);
+		const decor = decorate(background, EMPTY_EFFECTS, `${node.id}-bg`, ctx);
 		const bgPaint = paintAttrs(decor.fill, undefined, undefined).join(" ");
 		body.push(
 			`${childPad}${decor.defs}${frameBoxElement(node, bgPaint ? ` ${bgPaint}` : "")}`,
@@ -1761,6 +1852,30 @@ async function emitImage(
 		const clipId = `crop-${sanitizeId(node.id)}`;
 		defs += `<defs><clipPath id="${clipId}"><rect x="${fmt(node.crop.x)}" y="${fmt(node.crop.y)}" width="${fmt(node.crop.width)}" height="${fmt(node.crop.height)}" /></clipPath></defs>`;
 		imageAttrs.push(`clip-path="url(#${clipId})"`);
+	}
+
+	// C-04 non-destructive adjustments: ONE feColorMatrix built from the
+	// shared math in `ir/image-adjustments.ts` (the editor applies the same
+	// matrix per pixel), plus feGaussianBlur for the blur adjustment.
+	if (node.adjustments && !isIdentityAdjustments(node.adjustments)) {
+		const matrix = computeAdjustmentColorMatrix(node.adjustments);
+		const blurRadius = adjustmentBlurRadius(node.adjustments);
+		const primitives: string[] = [];
+		if (matrix) {
+			primitives.push(
+				`<feColorMatrix type="matrix" values="${toSvgColorMatrix(matrix)
+					.map((v) => fmt(v))
+					.join(" ")}" />`,
+			);
+		}
+		if (blurRadius > 0) {
+			primitives.push(
+				`<feGaussianBlur stdDeviation="${fmt(blurRadius / 2)}" />`,
+			);
+		}
+		const adjId = `adjust-${sanitizeId(node.id)}`;
+		defs += `<defs><filter id="${adjId}">${primitives.join("")}</filter></defs>`;
+		imageAttrs.push(`filter="url(#${adjId})"`);
 	}
 	imageAttrs.push(`href="${escapeAttr(href)}"`);
 
