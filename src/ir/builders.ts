@@ -8,6 +8,7 @@ import type {
 	CanvasFontFamily,
 	CanvasFrameNode,
 	CanvasGroupNode,
+	CanvasImageAdjustments,
 	CanvasImageCrop,
 	CanvasImageNode,
 	CanvasIR,
@@ -16,6 +17,7 @@ import type {
 	CanvasNode,
 	CanvasPage,
 	CanvasPageBackground,
+	CanvasPageLayoutAids,
 	CanvasPageSize,
 	CanvasPathNode,
 	CanvasPolygonNode,
@@ -107,6 +109,7 @@ export interface CreatePageOptions {
 	size?: CanvasPageSize;
 	background?: CanvasPageBackground;
 	root?: CanvasGroupNode;
+	layoutAids?: CanvasPageLayoutAids;
 }
 
 export function createPage(options: CreatePageOptions = {}): CanvasPage {
@@ -121,6 +124,9 @@ export function createPage(options: CreatePageOptions = {}): CanvasPage {
 			createGroup({
 				bounds: { width: size.width, height: size.height },
 			}),
+		...(options.layoutAids !== undefined
+			? { layoutAids: options.layoutAids }
+			: {}),
 	};
 }
 
@@ -448,6 +454,7 @@ export interface CreateImageOptions {
 	assetId: string;
 	crop?: CanvasImageCrop;
 	filters?: ImageFilter[];
+	adjustments?: CanvasImageAdjustments;
 	maskAssetId?: string;
 	assetToken?: BrandTokenRef;
 }
@@ -463,6 +470,9 @@ export function createImage(options: CreateImageOptions): CanvasImageNode {
 		assetId: options.assetId,
 		...(options.crop !== undefined ? { crop: options.crop } : {}),
 		...(options.filters !== undefined ? { filters: options.filters } : {}),
+		...(options.adjustments !== undefined
+			? { adjustments: options.adjustments }
+			: {}),
 		...(options.maskAssetId !== undefined
 			? { maskAssetId: options.maskAssetId }
 			: {}),

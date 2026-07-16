@@ -23,6 +23,7 @@ import {
 	CanvasIRSchema,
 	CanvasLineNodeSchema,
 	CanvasNodeSchema,
+	CanvasPageLayoutAidsSchema,
 	CanvasPageSchema,
 	CanvasPolygonNodeSchema,
 	CanvasRectNodeSchema,
@@ -473,6 +474,49 @@ describe("primitive validators", () => {
 			},
 		};
 		expect(CanvasPageSchema.safeParse(page).success).toBe(false);
+	});
+
+	it("CanvasPageSchema accepts full layoutAids and round-trips them (C-01, §9.3)", () => {
+		const page = {
+			id: "p1",
+			size: { width: 100, height: 100, unit: "px" },
+			background: { kind: "solid", value: "#000" },
+			root: makeGroup("g1", []),
+			layoutAids: {
+				guides: { horizontal: [10, 50.5], vertical: [-4, 90] },
+				margin: { top: 8, right: 8, bottom: 8, left: 8 },
+				bleed: { top: 3, right: 3, bottom: 3, left: 3 },
+				safeArea: { top: 250, right: 0, bottom: 250, left: 0 },
+			},
+		};
+		const parsed = CanvasPageSchema.safeParse(page);
+		expect(parsed.success).toBe(true);
+		if (parsed.success) {
+			expect(parsed.data.layoutAids).toEqual(page.layoutAids);
+		}
+	});
+
+	it("CanvasPageLayoutAidsSchema accepts partial aids and rejects non-finite guide positions", () => {
+		expect(
+			CanvasPageLayoutAidsSchema.safeParse({
+				guides: { horizontal: [], vertical: [12] },
+			}).success,
+		).toBe(true);
+		expect(
+			CanvasPageLayoutAidsSchema.safeParse({
+				margin: { top: 1, right: 2, bottom: 3, left: 4 },
+			}).success,
+		).toBe(true);
+		expect(
+			CanvasPageLayoutAidsSchema.safeParse({
+				guides: { horizontal: [Number.NaN], vertical: [] },
+			}).success,
+		).toBe(false);
+		expect(
+			CanvasPageLayoutAidsSchema.safeParse({
+				bleed: { top: Number.POSITIVE_INFINITY, right: 0, bottom: 0, left: 0 },
+			}).success,
+		).toBe(false);
 	});
 });
 

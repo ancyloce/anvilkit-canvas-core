@@ -45,6 +45,42 @@ export interface CanvasPageSize {
 	dpi?: number;
 }
 
+/**
+ * Per-edge inset distances, in the owning page's `size.unit`. The single
+ * shared insets shape (PRD 0012 §9.3) — `CanvasSafeArea` (templates) aliases
+ * it, and page layout aids (margin/bleed/safeArea) reuse it.
+ */
+export interface CanvasInsets {
+	top: number;
+	right: number;
+	bottom: number;
+	left: number;
+}
+
+/**
+ * Persistent ruler guides for one page (FR-111): axis-aligned positions in
+ * page coordinates (`size.unit`). `horizontal` guides are y-positions,
+ * `vertical` guides are x-positions.
+ */
+export interface CanvasPageGuides {
+	horizontal: readonly number[];
+	vertical: readonly number[];
+}
+
+/**
+ * Page-level layout aids (PRD 0012 §9.3 / FR-113): persistent guides plus
+ * margin/bleed/safe-area insets. Purely advisory editor chrome — serializers
+ * never render these unless a caller explicitly opts in. Absent field =
+ * that aid is unset; absent object = no aids at all (so pre-existing
+ * documents need no migration).
+ */
+export interface CanvasPageLayoutAids {
+	guides?: CanvasPageGuides;
+	margin?: CanvasInsets;
+	bleed?: CanvasInsets;
+	safeArea?: CanvasInsets;
+}
+
 export interface CanvasPageBackground {
 	kind: CanvasBackgroundKind;
 	value: string;
@@ -69,6 +105,25 @@ export interface CanvasImageCrop {
 export interface ImageFilter {
 	kind: string;
 	params?: Record<string, number | string | boolean>;
+}
+
+/**
+ * Non-destructive image adjustments (C-04, FR-100). All fields optional;
+ * absent = neutral. Ranges: `brightness`/`contrast`/`saturation`/`exposure`/
+ * `temperature`/`tint` -1..1, `grayscale`/`sepia` 0..1, `blur` 0..100 (page
+ * units). Rendering math lives in `ir/image-adjustments.ts` — one color
+ * matrix shared by the editor canvas and the SVG serializer.
+ */
+export interface CanvasImageAdjustments {
+	brightness?: number;
+	contrast?: number;
+	saturation?: number;
+	exposure?: number;
+	temperature?: number;
+	tint?: number;
+	blur?: number;
+	grayscale?: number;
+	sepia?: number;
 }
 
 export interface CanvasGradientStop {
@@ -120,6 +175,37 @@ export interface CanvasShadow {
 	offsetY: number;
 	opacity?: number;
 }
+
+/**
+ * Drop shadow as an entry in the extensible effect list (C-03, PRD 0012
+ * §9.4/FR-077). Supersedes the legacy per-node `shadow` field — see
+ * {@link resolveNodeEffects} for the documented precedence — and adds
+ * `spread` over {@link CanvasShadow}.
+ */
+export interface CanvasDropShadowEffect {
+	type: "drop-shadow";
+	color: string;
+	blur: number;
+	offsetX: number;
+	offsetY: number;
+	/** Outward dilation of the shadow silhouette before blurring, in page units. Default 0. */
+	spread?: number;
+	opacity?: number;
+}
+
+/** Gaussian blur of the node itself (C-03, §9.4). */
+export interface CanvasBlurEffect {
+	type: "blur";
+	/** Blur radius in page units (SVG stdDeviation ≈ radius / 2, matching the shadow-blur convention). */
+	radius: number;
+}
+
+/**
+ * One visual effect on a node (§9.4). Serializable and renderer-independent;
+ * the list is ordered (shadows render bottom-up, a trailing blur applies to
+ * the composited result).
+ */
+export type CanvasEffect = CanvasDropShadowEffect | CanvasBlurEffect;
 
 export interface CanvasIRMetadata {
 	createdAt: string;
@@ -314,6 +400,8 @@ export interface CanvasRectNode extends CanvasNodeBase, CanvasStrokeStyle {
 	radius?: number;
 	cornerRadii?: CanvasCornerRadii;
 	shadow?: CanvasShadow;
+	/** Extensible effect list (C-03, §9.4); takes precedence over `shadow` — see {@link resolveNodeEffects}. */
+	effects?: CanvasEffect[];
 }
 
 export interface CanvasEllipseNode extends CanvasNodeBase, CanvasStrokeStyle {
@@ -322,6 +410,8 @@ export interface CanvasEllipseNode extends CanvasNodeBase, CanvasStrokeStyle {
 	stroke?: string;
 	strokeWidth?: number;
 	shadow?: CanvasShadow;
+	/** Extensible effect list (C-03, §9.4); takes precedence over `shadow` — see {@link resolveNodeEffects}. */
+	effects?: CanvasEffect[];
 }
 
 export interface CanvasPolygonNode extends CanvasNodeBase, CanvasStrokeStyle {
@@ -332,6 +422,8 @@ export interface CanvasPolygonNode extends CanvasNodeBase, CanvasStrokeStyle {
 	stroke?: string;
 	strokeWidth?: number;
 	shadow?: CanvasShadow;
+	/** Extensible effect list (C-03, §9.4); takes precedence over `shadow` — see {@link resolveNodeEffects}. */
+	effects?: CanvasEffect[];
 }
 
 export interface CanvasStarNode extends CanvasNodeBase, CanvasStrokeStyle {
@@ -344,6 +436,8 @@ export interface CanvasStarNode extends CanvasNodeBase, CanvasStrokeStyle {
 	stroke?: string;
 	strokeWidth?: number;
 	shadow?: CanvasShadow;
+	/** Extensible effect list (C-03, §9.4); takes precedence over `shadow` — see {@link resolveNodeEffects}. */
+	effects?: CanvasEffect[];
 }
 
 export interface CanvasLineNode extends CanvasNodeBase, CanvasStrokeStyle {
@@ -364,6 +458,8 @@ export interface CanvasPathNode extends CanvasNodeBase, CanvasStrokeStyle {
 	arrowStart?: CanvasArrowHead;
 	arrowEnd?: CanvasArrowHead;
 	shadow?: CanvasShadow;
+	/** Extensible effect list (C-03, §9.4); takes precedence over `shadow` — see {@link resolveNodeEffects}. */
+	effects?: CanvasEffect[];
 }
 
 export interface CanvasTextNode extends CanvasNodeBase {
@@ -375,6 +471,8 @@ export interface CanvasTextNode extends CanvasNodeBase {
 	fill: CanvasFill;
 	align?: CanvasTextAlign;
 	shadow?: CanvasShadow;
+	/** Extensible effect list (C-03, §9.4); takes precedence over `shadow` — see {@link resolveNodeEffects}. */
+	effects?: CanvasEffect[];
 }
 
 /** How a rich-text block behaves when its content exceeds its box. */
@@ -476,6 +574,14 @@ export interface CanvasImageNode extends CanvasNodeBase {
 	fitMode?: CanvasImageFitMode;
 	crop?: CanvasImageCrop;
 	filters?: ImageFilter[];
+	/**
+	 * Non-destructive image adjustments (C-04, FR-100). Unlike the open-ended
+	 * `filters` stub, these have a defined vocabulary, defined ranges, and a
+	 * defined rendering in both the editor and the SVG serializer (one shared
+	 * color matrix — see `ir/image-adjustments.ts`). The source asset is
+	 * never modified.
+	 */
+	adjustments?: CanvasImageAdjustments;
 	maskAssetId?: string;
 	/**
 	 * Live binding to a brand-kit asset/logo token, when this image should track
@@ -586,6 +692,8 @@ export interface CanvasPage {
 	variantSource?: CanvasPageVariantSource;
 	/** Page-level enter/exit animation (FR-080, canvas-m6-001) — e.g. a whole-page fade for a slideshow/motion export. See {@link CanvasAnimation}. */
 	animation?: CanvasAnimation;
+	/** Persistent guides + margin/bleed/safe-area (PRD 0012 §9.3, C-01). See {@link CanvasPageLayoutAids}. */
+	layoutAids?: CanvasPageLayoutAids;
 }
 
 /**

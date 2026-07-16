@@ -6,12 +6,15 @@ import type {
 	CanvasAssetRef,
 	CanvasBounds,
 	CanvasDocumentKind,
+	CanvasEffect,
 	CanvasFill,
 	CanvasFontFamily,
 	CanvasGradientFill,
 	CanvasGradientStop,
 	CanvasGroupNode,
+	CanvasImageAdjustments,
 	CanvasImageCrop,
+	CanvasInsets,
 	CanvasIR,
 	CanvasIRMetadata,
 	CanvasMediaTrim,
@@ -20,6 +23,8 @@ import type {
 	CanvasNodeMeta,
 	CanvasPage,
 	CanvasPageBackground,
+	CanvasPageGuides,
+	CanvasPageLayoutAids,
 	CanvasPageSize,
 	CanvasPageVariantSource,
 	CanvasShadow,
@@ -87,6 +92,27 @@ export const CanvasPageBackgroundSchema: z.ZodType<CanvasPageBackground> =
 		value: z.string(),
 	});
 
+export const CanvasInsetsSchema: z.ZodType<CanvasInsets> = z.looseObject({
+	top: FiniteNumber,
+	right: FiniteNumber,
+	bottom: FiniteNumber,
+	left: FiniteNumber,
+});
+
+export const CanvasPageGuidesSchema: z.ZodType<CanvasPageGuides> =
+	z.looseObject({
+		horizontal: z.array(FiniteNumber),
+		vertical: z.array(FiniteNumber),
+	});
+
+export const CanvasPageLayoutAidsSchema: z.ZodType<CanvasPageLayoutAids> =
+	z.looseObject({
+		guides: CanvasPageGuidesSchema.optional(),
+		margin: CanvasInsetsSchema.optional(),
+		bleed: CanvasInsetsSchema.optional(),
+		safeArea: CanvasInsetsSchema.optional(),
+	});
+
 export const CanvasAssetRefSchema: z.ZodType<CanvasAssetRef> = z.looseObject({
 	id: z.string().min(1),
 	uri: z.string().min(1),
@@ -109,6 +135,26 @@ export const ImageFilterSchema: z.ZodType<ImageFilter> = z.looseObject({
 		.record(z.string(), z.union([z.number(), z.string(), z.boolean()]))
 		.optional(),
 });
+
+/** -1..1 (C-04 adjustment range). */
+const SignedUnit = FiniteNumber.refine((v) => v >= -1 && v <= 1, {
+	message: "must be between -1 and 1",
+});
+
+export const CanvasImageAdjustmentsSchema: z.ZodType<CanvasImageAdjustments> =
+	z.looseObject({
+		brightness: SignedUnit.optional(),
+		contrast: SignedUnit.optional(),
+		saturation: SignedUnit.optional(),
+		exposure: SignedUnit.optional(),
+		temperature: SignedUnit.optional(),
+		tint: SignedUnit.optional(),
+		blur: NonNegativeFiniteNumber.refine((v) => v <= 100, {
+			message: "must be <= 100",
+		}).optional(),
+		grayscale: UnitInterval.optional(),
+		sepia: UnitInterval.optional(),
+	});
 
 const CanvasAiSourceMetaSchema = z.looseObject({
 	prompt: z.string().optional(),
@@ -241,6 +287,32 @@ export const CanvasShadowSchema: z.ZodType<CanvasShadow> = z.looseObject({
 	opacity: FiniteNumber.optional(),
 });
 
+export const CanvasDropShadowEffectSchema = z.looseObject({
+	type: z.literal("drop-shadow"),
+	color: z.string(),
+	blur: NonNegativeFiniteNumber,
+	offsetX: FiniteNumber,
+	offsetY: FiniteNumber,
+	spread: NonNegativeFiniteNumber.optional(),
+	opacity: FiniteNumber.optional(),
+});
+
+export const CanvasBlurEffectSchema = z.looseObject({
+	type: z.literal("blur"),
+	radius: NonNegativeFiniteNumber,
+});
+
+export const CanvasEffectSchema: z.ZodType<CanvasEffect> = z.discriminatedUnion(
+	"type",
+	[CanvasDropShadowEffectSchema, CanvasBlurEffectSchema],
+);
+
+/** Shared by every shadow-bearing node shape (C-03): legacy field + effect list. */
+const CanvasEffectStyleShape = {
+	shadow: CanvasShadowSchema.optional(),
+	effects: z.array(CanvasEffectSchema).optional(),
+} as const;
+
 export const CanvasNodeBaseShape = {
 	id: z.string().min(1),
 	name: z.string().optional(),
@@ -279,7 +351,7 @@ export const CanvasRectNodeSchema = z.looseObject({
 	...CanvasStrokeStyleShape,
 	cornerRadii: CanvasCornerRadiiSchema.optional(),
 	fill: CanvasFillSchema.optional(),
-	shadow: CanvasShadowSchema.optional(),
+	...CanvasEffectStyleShape,
 	stroke: z.string().optional(),
 	strokeWidth: NonNegativeFiniteNumber.optional(),
 	radius: NonNegativeFiniteNumber.optional(),
@@ -290,7 +362,7 @@ export const CanvasEllipseNodeSchema = z.looseObject({
 	type: z.literal("ellipse"),
 	...CanvasStrokeStyleShape,
 	fill: CanvasFillSchema.optional(),
-	shadow: CanvasShadowSchema.optional(),
+	...CanvasEffectStyleShape,
 	stroke: z.string().optional(),
 	strokeWidth: NonNegativeFiniteNumber.optional(),
 });
@@ -301,7 +373,7 @@ export const CanvasPolygonNodeSchema = z.looseObject({
 	...CanvasStrokeStyleShape,
 	sides: IntegerAtLeastThree,
 	fill: CanvasFillSchema.optional(),
-	shadow: CanvasShadowSchema.optional(),
+	...CanvasEffectStyleShape,
 	stroke: z.string().optional(),
 	strokeWidth: NonNegativeFiniteNumber.optional(),
 });
@@ -313,7 +385,7 @@ export const CanvasStarNodeSchema = z.looseObject({
 	points: IntegerAtLeastThree,
 	innerRadiusRatio: UnitInterval,
 	fill: CanvasFillSchema.optional(),
-	shadow: CanvasShadowSchema.optional(),
+	...CanvasEffectStyleShape,
 	stroke: z.string().optional(),
 	strokeWidth: NonNegativeFiniteNumber.optional(),
 });
@@ -337,7 +409,7 @@ export const CanvasPathNodeSchema = z.looseObject({
 	arrowEnd: CanvasArrowHeadSchema.optional(),
 	d: z.string().min(1),
 	fill: CanvasFillSchema.optional(),
-	shadow: CanvasShadowSchema.optional(),
+	...CanvasEffectStyleShape,
 	stroke: z.string().optional(),
 	strokeWidth: NonNegativeFiniteNumber.optional(),
 });
@@ -350,7 +422,7 @@ export const CanvasTextNodeSchema = z.looseObject({
 	fontSize: NonNegativeFiniteNumber,
 	fontWeight: z.string().optional(),
 	fill: CanvasFillSchema,
-	shadow: CanvasShadowSchema.optional(),
+	...CanvasEffectStyleShape,
 	align: z.enum(["left", "center", "right"]).optional(),
 });
 
@@ -401,6 +473,7 @@ export const CanvasImageNodeSchema = z.looseObject({
 	fitMode: z.enum(["fill", "fit", "stretch", "original", "center"]).optional(),
 	crop: CanvasImageCropSchema.optional(),
 	filters: z.array(ImageFilterSchema).optional(),
+	adjustments: CanvasImageAdjustmentsSchema.optional(),
 	maskAssetId: z.string().min(1).optional(),
 	assetToken: BrandTokenRefSchema.optional(),
 });
@@ -532,6 +605,7 @@ export const CanvasPageShape = {
 	background: CanvasPageBackgroundSchema,
 	variantSource: CanvasPageVariantSourceSchema.optional(),
 	animation: CanvasAnimationSchema.optional(),
+	layoutAids: CanvasPageLayoutAidsSchema.optional(),
 } as const;
 
 export const CanvasPageSchema: z.ZodType<CanvasPage> = z.looseObject({
