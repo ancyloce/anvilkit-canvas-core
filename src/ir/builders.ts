@@ -28,6 +28,7 @@ import type {
 	CanvasTextAlign,
 	CanvasTextNode,
 	CanvasTransform,
+	CanvasVerticalAlign,
 	CanvasVideoNode,
 	FramePlaceholder,
 	ImageFilter,
@@ -416,6 +417,8 @@ export interface CreateRichTextOptions {
 	paragraphs?: RichTextParagraph[];
 	overflow?: RichTextOverflow;
 	wrap?: RichTextWrap;
+	sizing?: "fixed" | "auto-width";
+	verticalAlign?: CanvasVerticalAlign;
 }
 
 /**
@@ -442,6 +445,10 @@ export function createRichText(
 		paragraphs: options.paragraphs ?? [{ spans: [] }],
 		...(options.overflow !== undefined ? { overflow: options.overflow } : {}),
 		...(options.wrap !== undefined ? { wrap: options.wrap } : {}),
+		...(options.sizing !== undefined ? { sizing: options.sizing } : {}),
+		...(options.verticalAlign !== undefined
+			? { verticalAlign: options.verticalAlign }
+			: {}),
 	};
 }
 
@@ -457,6 +464,7 @@ export interface CreateImageOptions {
 	adjustments?: CanvasImageAdjustments;
 	maskAssetId?: string;
 	assetToken?: BrandTokenRef;
+	alt?: string;
 }
 
 export function createImage(options: CreateImageOptions): CanvasImageNode {
@@ -479,6 +487,7 @@ export function createImage(options: CreateImageOptions): CanvasImageNode {
 		...(options.assetToken !== undefined
 			? { assetToken: options.assetToken }
 			: {}),
+		...(options.alt !== undefined ? { alt: options.alt } : {}),
 	};
 }
 
@@ -489,6 +498,7 @@ export interface CreateSvgOptions {
 	bounds: CanvasBounds;
 	zIndex?: number;
 	assetId: string;
+	alt?: string;
 }
 
 /** FR-016 — asset-reference only. There is no options field for inline markup. */
@@ -501,6 +511,7 @@ export function createSvg(options: CreateSvgOptions): CanvasSvgNode {
 		bounds: options.bounds,
 		zIndex: options.zIndex ?? 0,
 		assetId: options.assetId,
+		...(options.alt !== undefined ? { alt: options.alt } : {}),
 	};
 }
 

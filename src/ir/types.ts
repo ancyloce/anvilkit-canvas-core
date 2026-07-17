@@ -548,7 +548,18 @@ export interface CanvasRichTextNode extends CanvasNodeBase {
 	paragraphs: RichTextParagraph[];
 	overflow?: RichTextOverflow;
 	wrap?: RichTextWrap;
+	/**
+	 * FR-081 vertical alignment of the laid-out text block within `bounds`
+	 * (PRD 0012 §7.9). `top` (default when absent) aligns to the top edge;
+	 * `middle` centers; `bottom` aligns to the bottom edge. Applies only when
+	 * the box is taller than its content — i.e. with an explicit `height` or
+	 * `bounds.height` larger than the measured text height.
+	 */
+	verticalAlign?: CanvasVerticalAlign;
 }
+
+/** FR-081 vertical text alignment within a fixed-height box. */
+export type CanvasVerticalAlign = "top" | "middle" | "bottom";
 
 /**
  * FR-094 image fit modes (B-02, PRD 0012 §9.5). Absent means `"stretch"` —
@@ -589,6 +600,12 @@ export interface CanvasImageNode extends CanvasNodeBase {
 	 * external to core.
 	 */
 	assetToken?: BrandTokenRef;
+	/**
+	 * Accessible alternative text (§12 item 11). Emitted by the SVG serializer
+	 * as the `<image>`'s `<title>` + `aria-label`; surfaced by the editor's
+	 * accessibility scene tree. Optional and additive.
+	 */
+	alt?: string;
 }
 
 /**
@@ -603,6 +620,8 @@ export interface CanvasImageNode extends CanvasNodeBase {
 export interface CanvasSvgNode extends CanvasNodeBase {
 	type: "svg";
 	assetId: string;
+	/** Accessible alternative text (§12 item 11). See {@link CanvasImageNode.alt}. */
+	alt?: string;
 }
 
 export interface CanvasAiPlaceholderNode extends CanvasNodeBase {

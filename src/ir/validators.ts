@@ -464,6 +464,7 @@ export const CanvasRichTextNodeSchema = z.looseObject({
 	paragraphs: z.array(RichTextParagraphSchema),
 	overflow: z.enum(["visible", "clip", "auto-height", "ellipsis"]).optional(),
 	wrap: z.enum(["none", "word", "character"]).optional(),
+	verticalAlign: z.enum(["top", "middle", "bottom"]).optional(),
 });
 
 export const CanvasImageNodeSchema = z.looseObject({
@@ -476,6 +477,7 @@ export const CanvasImageNodeSchema = z.looseObject({
 	adjustments: CanvasImageAdjustmentsSchema.optional(),
 	maskAssetId: z.string().min(1).optional(),
 	assetToken: BrandTokenRefSchema.optional(),
+	alt: z.string().optional(),
 });
 
 /**
@@ -489,6 +491,7 @@ export const CanvasSvgNodeSchema = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("svg"),
 	assetId: z.string().min(1),
+	alt: z.string().optional(),
 });
 
 export const CanvasAiPlaceholderNodeSchema = z.looseObject({
