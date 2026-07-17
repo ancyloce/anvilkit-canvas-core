@@ -173,11 +173,29 @@ export interface CanvasPageRenameCommand {
 }
 
 /**
- * FR-063 page-resize content handling (B-01, PRD 0012). NOTE: page
- * DUPLICATION deliberately has no dedicated command — `clonePage` (fresh ids
- * via `regenerateNodeIds`) + `page.create` is deterministic and undoable, and
- * §9.1 forbids commands without their own domain semantics.
+ * Duplicate a page (§9.1/§23, PRD 0012): deep-clones `sourcePageId`'s node
+ * tree with fresh ids via `regenerateNodeIds` (M0-05), preserves the source
+ * page's `size`/`background`/`layoutAids`/other page-level fields, and
+ * inserts the duplicate immediately after the source. This is real command
+ * domain logic (ID regeneration + positioning), not something a consumer
+ * should assemble client-side from `clonePage` + `page.create`.
+ *
+ * `newPageId` follows the same caller-supplies-the-id convention
+ * `page.create`'s `page.id` uses — deterministic/testable/replayable, and it
+ * lets `commandToChange` (`change-events.ts`) derive a `"page"` change record
+ * from the command shape alone, exactly like every other id-producing
+ * built-in. `name` overrides the default `"<source name> copy"` label. The
+ * inverse is a `page.delete` for `newPageId`, removing exactly the duplicate
+ * and leaving the source and all other pages untouched.
  */
+export interface CanvasPageDuplicateCommand {
+	type: "page.duplicate";
+	sourcePageId: string;
+	newPageId: string;
+	name?: string;
+}
+
+/** FR-063 page-resize content handling (B-01, PRD 0012). */
 export type CanvasPageResizeMode = "canvas-only" | "scale-content" | "recenter";
 
 /**
@@ -272,6 +290,7 @@ export type CanvasCommand =
 	| CanvasPageCreateCommand
 	| CanvasPageReorderCommand
 	| CanvasPageRenameCommand
+	| CanvasPageDuplicateCommand
 	| CanvasPageResizeCommand
 	| CanvasPageSetBackgroundCommand
 	| CanvasPageSetLayoutAidsCommand

@@ -9,6 +9,7 @@ import {
 	replaceChildrenInParent,
 	updateNode,
 } from "../ir/mutations.js";
+import { regenerateNodeIds } from "../ir/regenerate-ids.js";
 import type {
 	CanvasBounds,
 	CanvasContainerNode,
@@ -41,6 +42,7 @@ import type {
 	CanvasNodeUngroupCommand,
 	CanvasPageCreateCommand,
 	CanvasPageDeleteCommand,
+	CanvasPageDuplicateCommand,
 	CanvasPageRenameCommand,
 	CanvasPageReorderCommand,
 	CanvasPageResizeCommand,
@@ -774,6 +776,53 @@ function applyPageRename(
 	return { ir: next, inverse };
 }
 
+/**
+ * Deep-clone a page's node tree with fresh ids and insert it immediately
+ * after the source (§9.1/§23, PRD 0012). Page-level fields (`size`,
+ * `background`, `layoutAids`, `variantSource`, `animation`) are carried over
+ * by reference from the source page — safe because every other command
+ * always replaces those fields wholesale rather than mutating them in place,
+ * the same sharing `page.resize`'s `newPage` spread relies on. The inverse is
+ * a `page.delete` for the assigned id: undo removes exactly the duplicate,
+ * leaving the source and all other pages byte-for-byte untouched.
+ */
+function applyPageDuplicate(
+	ir: CanvasIR,
+	cmd: CanvasPageDuplicateCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const sourceIndex = ir.pages.findIndex((p) => p.id === cmd.sourcePageId);
+	const source = sourceIndex >= 0 ? ir.pages[sourceIndex] : undefined;
+	if (!source) {
+		throw new CanvasCommandError(
+			"page-not-found",
+			`Page id "${cmd.sourcePageId}" not found`,
+		);
+	}
+	if (ir.pages.some((p) => p.id === cmd.newPageId)) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Page id "${cmd.newPageId}" already exists`,
+		);
+	}
+	const { node: newRoot } = regenerateNodeIds(source.root);
+	const baseName = source.name ?? "Page";
+	const newPage: CanvasPage = {
+		...source,
+		id: cmd.newPageId,
+		name: cmd.name ?? `${baseName} copy`,
+		root: newRoot,
+	};
+	const newPages = [...ir.pages];
+	newPages.splice(sourceIndex + 1, 0, newPage);
+	const next = bumpMetadata({ ...ir, pages: newPages }, options);
+	const inverse: CanvasPageDeleteCommand = {
+		type: "page.delete",
+		pageId: cmd.newPageId,
+	};
+	return { ir: next, inverse };
+}
+
 function applyPageReorder(
 	ir: CanvasIR,
 	cmd: CanvasPageReorderCommand,
@@ -1184,6 +1233,8 @@ export function applyCommand(
 			return applyPageReorder(ir, cmd, options);
 		case "page.rename":
 			return applyPageRename(ir, cmd, options);
+		case "page.duplicate":
+			return applyPageDuplicate(ir, cmd, options);
 		case "page.resize":
 			return applyPageResize(ir, cmd, options);
 		case "page.set-background":

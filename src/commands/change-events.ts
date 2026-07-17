@@ -27,7 +27,8 @@ export type CanvasChange =
 				| "reorder"
 				| "resize"
 				| "background"
-				| "layout-aids";
+				| "layout-aids"
+				| "duplicate";
 	  }
 	| { kind: "asset"; assetId: string; op: "put" | "remove" };
 
@@ -96,6 +97,8 @@ export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
 			return { kind: "page", pageId: cmd.pageId, op: "delete" };
 		case "page.rename":
 			return { kind: "page", pageId: cmd.pageId, op: "rename" };
+		case "page.duplicate":
+			return { kind: "page", pageId: cmd.newPageId, op: "duplicate" };
 		case "page.resize":
 			return { kind: "page", pageId: cmd.pageId, op: "resize" };
 		case "page.set-background":
