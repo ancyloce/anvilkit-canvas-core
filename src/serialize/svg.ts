@@ -329,6 +329,10 @@ export type SvgWarningCode =
 	// for it could never fire — dead API, which the frame work already ruled out.
 	| "RICH_TEXT_WRAP_APPROXIMATE"
 	| "RICH_TEXT_ELLIPSIS_UNSUPPORTED"
+	// Added for FR-081 vertical alignment. Fires when `verticalAlign` is
+	// `middle`/`bottom` but the content height is unknown (no measurer and no
+	// explicit `height`), so the block cannot be offset and renders top-aligned.
+	| "RICH_TEXT_VERTICAL_ALIGN_APPROXIMATED"
 	// Added for brand-token refs (canvas-m1-012). Same grow-only rule. Fires when
 	// a `BrandTokenRef` fill/fontFamily has no `resolveBrandToken` option, or the
 	// resolver returns nothing usable — the node still emits, with the token's
@@ -1186,9 +1190,32 @@ export function emitRichText(
 				defaults,
 			})
 		: undefined;
+
+	// FR-081 vertical alignment: shift the whole laid-out block down within its
+	// box. Needs both a box height (explicit `height` or the node's `bounds`) and
+	// a content height (only the measurer can give one). Absent either, `middle`/
+	// `bottom` cannot be honored — render top-aligned and warn.
+	const verticalAlign = node.verticalAlign ?? "top";
+	let verticalOffset = 0;
+	if (verticalAlign !== "top") {
+		const boxHeight = node.height ?? node.bounds.height;
+		const contentHeight = measured?.height;
+		if (contentHeight !== undefined && boxHeight > contentHeight) {
+			const slack = boxHeight - contentHeight;
+			verticalOffset = verticalAlign === "middle" ? slack / 2 : slack;
+		} else if (contentHeight === undefined) {
+			warn(
+				ctx,
+				"RICH_TEXT_VERTICAL_ALIGN_APPROXIMATED",
+				`Vertical alignment "${verticalAlign}" needs a measured content height; the block renders top-aligned.`,
+				node.id,
+			);
+		}
+	}
+
 	const body = measured
-		? emitMeasuredLines(node, measured, defaults, defs, ctx)
-		: emitUnwrappedParagraphs(node, ctx, defaults, defs);
+		? emitMeasuredLines(node, measured, defaults, defs, ctx, verticalOffset)
+		: emitUnwrappedParagraphs(node, ctx, defaults, defs, verticalOffset);
 
 	// The clip box needs a height. An explicit `height` wins; otherwise the
 	// measured height is the only honest answer, and without a measurer there is
@@ -1254,12 +1281,13 @@ function emitMeasuredLines(
 	defaults: RichTextStyleDefaults,
 	defs: string[],
 	ctx: SvgEmitContext,
+	offsetY = 0,
 ): string {
 	const out: string[] = [];
 	for (const line of measured.lines) {
 		const paragraph = node.paragraphs[line.paragraphIndex];
 		if (!paragraph) continue;
-		const y = line.y + line.baseline;
+		const y = line.y + line.baseline + offsetY;
 		for (const run of line.runs) {
 			const span = paragraph.spans[run.spanIndex];
 			if (!span) continue;
@@ -1298,6 +1326,7 @@ function emitUnwrappedParagraphs(
 	ctx: SvgEmitContext,
 	defaults: RichTextStyleDefaults,
 	defs: string[],
+	offsetY = 0,
 ): string {
 	warn(
 		ctx,
@@ -1307,7 +1336,7 @@ function emitUnwrappedParagraphs(
 	);
 
 	const lines: string[] = [];
-	let y = 0;
+	let y = offsetY;
 	for (const [pi, paragraph] of node.paragraphs.entries()) {
 		const size = paragraphFontSize(paragraph, defaults);
 		const align = paragraph.align ?? defaults.align;
@@ -1877,7 +1906,23 @@ async function emitImage(
 	}
 	imageAttrs.push(`href="${escapeAttr(href)}"`);
 
-	return `${defs}${openWrap}<image ${imageAttrs.join(" ")} />${closeWrap}`;
+	return `${defs}${openWrap}${emitImageWithAlt(imageAttrs, node.alt)}${closeWrap}`;
+}
+
+/**
+ * §12 alt-text: emit an `<image>` with an accessible name when `alt` is set —
+ * a `<title>` child (the SVG-native accessible name, announced by screen
+ * readers) plus `role="img"`. An empty/absent `alt` keeps the self-closed form.
+ */
+function emitImageWithAlt(
+	imageAttrs: readonly string[],
+	alt: string | undefined,
+): string {
+	const trimmed = alt?.trim();
+	if (!trimmed) return `<image ${imageAttrs.join(" ")} />`;
+	return `<image ${imageAttrs.join(" ")} role="img"><title>${escapeXml(
+		trimmed,
+	)}</title></image>`;
 }
 
 /**
@@ -1917,7 +1962,7 @@ async function emitSvg(
 		'preserveAspectRatio="none"',
 		`href="${escapeAttr(href)}"`,
 	];
-	return `<image ${attrs.join(" ")} />`;
+	return emitImageWithAlt(attrs, node.alt);
 }
 
 /**

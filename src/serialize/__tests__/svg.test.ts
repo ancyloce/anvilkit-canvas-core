@@ -524,6 +524,78 @@ describe("brand-token resolution", () => {
 			ctx.warnings.filter((w) => w.code === "BRAND_TOKEN_UNRESOLVED"),
 		).toHaveLength(1);
 	});
+
+	// A stub measurer returning a single line 20px tall at y=0 — enough to
+	// exercise the FR-081 vertical-offset math without a real font engine.
+	const stubMeasurer = () => ({
+		lines: [
+			{
+				paragraphIndex: 0,
+				runs: [
+					{
+						paragraphIndex: 0,
+						spanIndex: 0,
+						start: 0,
+						text: "hi",
+						x: 0,
+						width: 10,
+					},
+				],
+				x: 0,
+				y: 0,
+				width: 10,
+				height: 20,
+				baseline: 16,
+			},
+		],
+		width: 10,
+		height: 20,
+	});
+
+	function vAlignNode(
+		verticalAlign: "top" | "middle" | "bottom",
+	): CanvasRichTextNode {
+		return {
+			id: "rt-va",
+			type: "rich-text",
+			transform: identity,
+			bounds: { width: 200, height: 100 },
+			zIndex: 0,
+			width: 200,
+			height: 100,
+			verticalAlign,
+			paragraphs: [{ spans: [{ text: "hi" }] }],
+		};
+	}
+
+	it("vertical-align middle offsets the block by half the slack (FR-081)", () => {
+		const ctx = createEmitContext({ textMeasurer: stubMeasurer });
+		const out = emitRichText(vAlignNode("middle"), ctx);
+		// box 100, content 20 → slack 80 → +40; baseline y was 16 → 56.
+		expect(out).toContain('y="56"');
+	});
+
+	it("vertical-align bottom offsets the block by the full slack (FR-081)", () => {
+		const ctx = createEmitContext({ textMeasurer: stubMeasurer });
+		const out = emitRichText(vAlignNode("bottom"), ctx);
+		// slack 80 → +80; baseline 16 → 96.
+		expect(out).toContain('y="96"');
+	});
+
+	it("vertical-align top is the unshifted default", () => {
+		const ctx = createEmitContext({ textMeasurer: stubMeasurer });
+		const out = emitRichText(vAlignNode("top"), ctx);
+		expect(out).toContain('y="16"');
+	});
+
+	it("warns when middle/bottom has no measurable content height", () => {
+		const node = vAlignNode("middle");
+		const ctx = createEmitContext(); // no measurer → no content height
+		emitRichText(node, ctx);
+		expect(ctx.warnings.map((w) => w.code)).toContain(
+			"RICH_TEXT_VERTICAL_ALIGN_APPROXIMATED",
+		);
+	});
 });
 
 describe("emitLine", () => {

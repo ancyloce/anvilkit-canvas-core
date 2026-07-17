@@ -169,3 +169,29 @@ describe("image adjustments serialization (C-04, FR-100)", () => {
 		);
 	});
 });
+
+describe("image alt-text serialization (§12 item 11)", () => {
+	it("emits a <title> + role='img' when alt is set", async () => {
+		const node = { ...imageNode(), alt: "A red barn" } as CanvasImageNode;
+		const { svg } = await svgFor(node);
+		expect(svg).toContain("<title>A red barn</title>");
+		expect(svg).toContain('role="img"');
+	});
+
+	it("keeps the self-closed <image> form when alt is absent or blank", async () => {
+		// The SVG ROOT carries its own role/title (doc title), so assert on the
+		// IMAGE element specifically: self-closed, no per-image <title>.
+		const { svg } = await svgFor(imageNode());
+		expect(svg).toContain('href="data:image/png;base64,SGk=" />');
+		expect(svg).not.toContain("</image>");
+		const blank = { ...imageNode(), alt: "   " } as CanvasImageNode;
+		expect((await svgFor(blank)).svg).not.toContain("</image>");
+	});
+
+	it("escapes alt text (no XML injection)", async () => {
+		const node = { ...imageNode(), alt: "<script>&" } as CanvasImageNode;
+		const { svg } = await svgFor(node);
+		expect(svg).toContain("&lt;script&gt;&amp;");
+		expect(svg).not.toContain("<script>");
+	});
+});
