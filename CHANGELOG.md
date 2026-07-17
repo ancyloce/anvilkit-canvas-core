@@ -27,6 +27,19 @@ with legacy-equivalent defaults).
 - **Export**: `json` added to `CanvasExportFormat`; serializer warnings for
   every new capability; `tidyUpRects` geometry helper.
 
+### Gap-closure follow-up
+
+All additive/optional — no migration needed.
+
+- **Rich-text `verticalAlign`** (`top`/`middle`/`bottom`, FR-081): the SVG
+  serializer offsets the block within its box when a content height is known
+  (measurer or explicit `height`), else warns
+  `RICH_TEXT_VERTICAL_ALIGN_APPROXIMATED`.
+- **Image/SVG `alt`** (§12 item 11): the SVG serializer emits it as a
+  `<title>` child + `role="img"` on the `<image>` element.
+- Builders (`createRichText`/`createImage`/`createSvg`) accept the new fields
+  plus rich-text `sizing`.
+
 ### Fixed
 
 - SVG serializer emitted duplicate stroke-style attributes

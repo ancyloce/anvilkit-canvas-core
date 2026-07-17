@@ -46,8 +46,9 @@ published version and needs no workspace context.
   caps, public ID remapping (`regenerateNodeIds`), stroke styling +
   arrowheads, per-corner radii, image fit modes + one-color-matrix
   adjustments, ordered `effects[]` (drop-shadow `spread`, blur), rich-text
-  strikethrough/auto-width, and page layout aids — every capability with
-  schema, inverse, migration-free optional fields, and serializer warnings.
+  strikethrough/auto-width/`verticalAlign`, image·svg `alt` text, and page
+  layout aids — every capability with schema, inverse, migration-free optional
+  fields, and serializer warnings.
 - **Geometry without a renderer** — affine matrices, viewport pan/zoom,
   rotation-aware hit-testing/marquee, and Figma-style snap/align/distribute, all
   over plain world-space numbers.
