@@ -216,6 +216,30 @@ describe("createCanvasRuntime — command dispatch", () => {
 	});
 
 	/**
+	 * Regression: a built-in command that's fully implemented in
+	 * `applyCommand` but missing from this file's `BUILTIN_COMMAND_TYPES` set
+	 * falls through to the custom-handler lookup and throws "no command
+	 * handler registered" even though it's a real, documented built-in
+	 * (caught for `page.set-layout-aids`). Dispatch every built-in through the
+	 * runtime, not just `applyCommand` directly, so a future omission fails
+	 * here instead of only at first real use.
+	 */
+	it("dispatches page.set-layout-aids through the runtime (not just applyCommand)", () => {
+		const ir = fixtureIR();
+		const rt = createCanvasRuntime();
+		const { ir: next, inverse } = rt.apply(ir, {
+			type: "page.set-layout-aids",
+			pageId: "p1",
+			to: { margin: { top: 10, right: 10, bottom: 10, left: 10 } },
+		});
+		expect(next.pages[0]?.layoutAids?.margin).toMatchObject({ top: 10 });
+		expect(inverse).toMatchObject({
+			type: "page.set-layout-aids",
+			pageId: "p1",
+		});
+	});
+
+	/**
 	 * P0-7 regression: `applyCommand`'s own "batch" case recurses through the
 	 * STATIC dispatch (commands/runtime.ts), which has no knowledge of this
 	 * runtime's registry. Routing `rt.apply(ir, batchCmd)` straight to
