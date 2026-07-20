@@ -704,7 +704,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Applies a brand kit via an AI-inferred choice of transforms. The AI only\ndecides *which* of canvas-m2-006's "
+						"text": "Applies a brand kit via an AI-inferred choice of transforms. The AI only\r\ndecides *which* of canvas-m2-006's "
 					},
 					{
 						"kind": "code",
@@ -720,7 +720,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/etc.\npure transforms to run and in what combination — the actual document\nmutation always goes through those already-reversible, already-tested\nfunctions, never a bespoke AI-authored edit."
+						"text": "/etc.\r\npure transforms to run and in what combination — the actual document\r\nmutation always goes through those already-reversible, already-tested\r\nfunctions, never a bespoke AI-authored edit."
 					}
 				]
 			},
@@ -1426,7 +1426,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Creative, prompt-driven fill of a masked region (Firefly-\"Generative Fill\"\nstyle) — distinct from "
+						"text": "Creative, prompt-driven fill of a masked region (Firefly-\"Generative Fill\"\r\nstyle) — distinct from "
 					},
 					{
 						"kind": "inline-tag",
@@ -1436,7 +1436,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ", which fills a masked\nregion to match its surroundings rather than introduce new prompted\ncontent. Same field shape; the "
+						"text": ", which fills a masked\r\nregion to match its surroundings rather than introduce new prompted\r\ncontent. Same field shape; the "
 					},
 					{
 						"kind": "code",
@@ -1444,7 +1444,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " lets a provider route the two\ndifferently even where its backing model treats them alike."
+						"text": " lets a provider route the two\r\ndifferently even where its backing model treats them alike."
 					}
 				]
 			},
@@ -2092,7 +2092,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "The selected node's kind (FR-053, canvas-m4-004) — lets a host UI\ndecide whether an action that only makes sense for certain node kinds\n(e.g. rewriting text) applies to the current selection, without a\nsecond round-trip into the editor. Omitted means \"unknown\" (e.g. no\nselection, or a host that hasn't started populating it yet) — callers\nshould not treat omission as \"not a text node\"."
+								"text": "The selected node's kind (FR-053, canvas-m4-004) — lets a host UI\r\ndecide whether an action that only makes sense for certain node kinds\r\n(e.g. rewriting text) applies to the current selection, without a\r\nsecond round-trip into the editor. Omitted means \"unknown\" (e.g. no\r\nselection, or a host that hasn't started populating it yet) — callers\r\nshould not treat omission as \"not a text node\"."
 							}
 						]
 					},
@@ -2126,7 +2126,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Design-level AI job contracts (FR-050, canvas-m4-001) — a separate union\nfrom "
+						"text": "Design-level AI job contracts (FR-050, canvas-m4-001) — a separate union\r\nfrom "
 					},
 					{
 						"kind": "code",
@@ -2142,7 +2142,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ") because these ops are not\nimage-in/image-out: they read/produce whole pages, node content, or a\n"
+						"text": ") because these ops are not\r\nimage-in/image-out: they read/produce whole pages, node content, or a\r\n"
 					},
 					{
 						"kind": "code",
@@ -2158,7 +2158,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " reference, none of which fit that\nunion's shape. Ranked at 5 (alongside "
+						"text": " reference, none of which fit that\r\nunion's shape. Ranked at 5 (alongside "
 					},
 					{
 						"kind": "code",
@@ -2166,7 +2166,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "), not 2 like\n"
+						"text": "), not 2 like\r\n"
 					},
 					{
 						"kind": "code",
@@ -2198,7 +2198,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " (rank 3-4)\ntypes, so it must outrank all three.\n\nUnlike "
+						"text": " (rank 3-4)\r\ntypes, so it must outrank all three.\r\n\r\nUnlike "
 					},
 					{
 						"kind": "code",
@@ -2206,7 +2206,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ", this module is NOT types-only: canvas-m4-003's\n"
+						"text": ", this module is NOT types-only: canvas-m4-003's\r\n"
 					},
 					{
 						"kind": "code",
@@ -2214,7 +2214,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " is real runtime validation logic (mirrors\n"
+						"text": " is real runtime validation logic (mirrors\r\n"
 					},
 					{
 						"kind": "code",
@@ -2230,7 +2230,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ", another rank-appropriate contract\nfile that mixes types with a small amount of pure logic) — hence the root\nbarrel re-exports it with "
+						"text": ", another rank-appropriate contract\r\nfile that mixes types with a small amount of pure logic) — hence the root\r\nbarrel re-exports it with "
 					},
 					{
 						"kind": "code",
@@ -2402,7 +2402,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Which ops a given provider supports (FR-051) — sibling metadata a host\nsupplies alongside its "
+						"text": "Which ops a given provider supports (FR-051) — sibling metadata a host\r\nsupplies alongside its "
 					},
 					{
 						"kind": "code",
@@ -2418,7 +2418,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " functions,\nsince a bare function has no introspectable capabilities of its own. The\neditor (canvas-m4-004) reads this to conditionally show/hide AI actions\nrather than surfacing an action that will always fail for a given\nprovider. Omitting a list (vs. an empty array) means \"unknown — assume\neverything is supported\", so pre-M4 hosts that don't yet supply\ncapabilities keep today's behavior."
+						"text": " functions,\r\nsince a bare function has no introspectable capabilities of its own. The\r\neditor (canvas-m4-004) reads this to conditionally show/hide AI actions\r\nrather than surfacing an action that will always fail for a given\r\nprovider. Omitting a list (vs. an empty array) means \"unknown — assume\r\neverything is supported\", so pre-M4 hosts that don't yet supply\r\ncapabilities keep today's behavior."
 					}
 				]
 			},
@@ -2824,7 +2824,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " node throw a typed\n"
+								"text": " node throw a typed\r\n"
 							},
 							{
 								"kind": "code",
@@ -2842,7 +2842,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " instead of applying (A-02,\nPRD 0012 FR-024). Default OFF for backward compatibility — existing\nconsumers (brand apply with its own "
+								"text": " instead of applying (A-02,\r\nPRD 0012 FR-024). Default OFF for backward compatibility — existing\r\nconsumers (brand apply with its own "
 							},
 							{
 								"kind": "code",
@@ -2850,7 +2850,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " semantics,\nextensions, collab replay) are unaffected unless they opt in. The\neditor's action layer enables it for user-initiated operations.\nExemption: a "
+								"text": " semantics,\r\nextensions, collab replay) are unaffected unless they opt in. The\r\neditor's action layer enables it for user-initiated operations.\r\nExemption: a "
 							},
 							{
 								"kind": "code",
@@ -2866,7 +2866,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " always applies —\nthat is how a locked node gets unlocked. Inside a "
+								"text": " always applies —\r\nthat is how a locked node gets unlocked. Inside a "
 							},
 							{
 								"kind": "code",
@@ -2874,7 +2874,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " the option\npropagates to every sub-command; the batch stays all-or-nothing."
+								"text": " the option\r\npropagates to every sub-command; the batch stays all-or-nothing."
 							}
 						]
 					},
@@ -3271,7 +3271,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\nwhen nothing matched. Apply it yourself (e.g. "
+								"text": "\r\nwhen nothing matched. Apply it yourself (e.g. "
 							},
 							{
 								"kind": "code",
@@ -3279,7 +3279,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " in\ncanvas-editor) to get proper undo-stack tracking — "
+								"text": " in\r\ncanvas-editor) to get proper undo-stack tracking — "
 							},
 							{
 								"kind": "code",
@@ -3287,7 +3287,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " alone is\nNOT re-appliable as a command."
+								"text": " alone is\r\nNOT re-appliable as a command."
 							}
 						]
 					},
@@ -3446,7 +3446,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "'s\npre-existing "
+						"text": "'s\r\npre-existing "
 					},
 					{
 						"kind": "code",
@@ -3462,7 +3462,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ") by design, so the editor's\nmapping from this canonical shape is a straight pass-through, not a reshape."
+						"text": ") by design, so the editor's\r\nmapping from this canonical shape is a straight pass-through, not a reshape."
 					}
 				]
 			},
@@ -3784,7 +3784,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "The canonical Brand Kit contract (PRD FR-031, §12.6).\n\nLives in "
+						"text": "The canonical Brand Kit contract (PRD FR-031, §12.6).\r\n\r\nLives in "
 					},
 					{
 						"kind": "code",
@@ -3800,7 +3800,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " or a shared schema\npackage (PRD open question 1, §18): Canvas IR already references brand\n*tokens* ("
+						"text": " or a shared schema\r\npackage (PRD open question 1, §18): Canvas IR already references brand\r\n*tokens* ("
 					},
 					{
 						"kind": "code",
@@ -3816,7 +3816,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\n(allowed/forbidden colors and fonts) are canvas-specific validation\nconcerns with no meaning outside the canvas domain.\n\nKept strictly separate from Canvas IR — a document references brand tokens\nby id only ("
+						"text": "\r\n(allowed/forbidden colors and fonts) are canvas-specific validation\r\nconcerns with no meaning outside the canvas domain.\r\n\r\nKept strictly separate from Canvas IR — a document references brand tokens\r\nby id only ("
 					},
 					{
 						"kind": "code",
@@ -4079,7 +4079,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "A reference to a value owned by an external brand kit (PRD §12.4) — a\ncolor, font, spacing value, asset, or logo — identified by "
+						"text": "A reference to a value owned by an external brand kit (PRD §12.4) — a\r\ncolor, font, spacing value, asset, or logo — identified by "
 					},
 					{
 						"kind": "code",
@@ -4087,7 +4087,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " alone.\nResolution is deliberately EXTERNAL to core: this is just the SHAPE of a\nreference, never a lookup table or a brand-kit type. A consumer (the SVG\nserializer's "
+						"text": " alone.\r\nResolution is deliberately EXTERNAL to core: this is just the SHAPE of a\r\nreference, never a lookup table or a brand-kit type. A consumer (the SVG\r\nserializer's "
 					},
 					{
 						"kind": "code",
@@ -4095,7 +4095,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " option, or a future editor equivalent)\nturns it into a concrete value; core never resolves one itself."
+						"text": " option, or a future editor equivalent)\r\nturns it into a concrete value; core never resolves one itself."
 					}
 				]
 			},
@@ -4724,7 +4724,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\nonly — timing/kind data for a future editor preview or video/GIF export\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\nin its normal resting state (its own "
+						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\r\nonly — timing/kind data for a future editor preview or video/GIF export\r\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\r\nin its normal resting state (its own "
 					},
 					{
 						"kind": "code",
@@ -4740,7 +4740,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/etc., unaffected\nby this field) and merely surface a warning that motion exists but isn't\nrepresented — this metadata is never a second, divergent static appearance."
+						"text": "/etc., unaffected\r\nby this field) and merely surface a warning that motion exists but isn't\r\nrepresented — this metadata is never a second, divergent static appearance."
 					}
 				]
 			},
@@ -4867,7 +4867,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\n(A-05/FR-021 paste, later FR-091 upload). Inverse restores the previous\nentry, or removes the key when it was new — so a paste batch of\n"
+						"text": "\r\n(A-05/FR-021 paste, later FR-091 upload). Inverse restores the previous\r\nentry, or removes the key when it was new — so a paste batch of\r\n"
 					},
 					{
 						"kind": "code",
@@ -5029,7 +5029,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Remove an asset-table entry. The command layer does NOT check for nodes\nstill referencing the asset (invariants are a trust-boundary tool, not\nauto-wired — see "
+						"text": "Remove an asset-table entry. The command layer does NOT check for nodes\r\nstill referencing the asset (invariants are a trust-boundary tool, not\r\nauto-wired — see "
 					},
 					{
 						"kind": "code",
@@ -5085,7 +5085,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Fields shared by the video/audio asset-reference nodes (FR-081,\ncanvas-m6-002). Deliberately holds ONLY an "
+						"text": "Fields shared by the video/audio asset-reference nodes (FR-081,\r\ncanvas-m6-002). Deliberately holds ONLY an "
 					},
 					{
 						"kind": "code",
@@ -5093,7 +5093,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " — no inline media\nbytes ever enter Canvas IR, matching the "
+						"text": " — no inline media\r\nbytes ever enter Canvas IR, matching the "
 					},
 					{
 						"kind": "code",
@@ -5109,7 +5109,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " asset-reference\nconvention. No playback/rendering is implemented in canvas-core: this is a\ncontract an export/render worker consumes later."
+						"text": " asset-reference\r\nconvention. No playback/rendering is implemented in canvas-core: this is a\r\ncontract an export/render worker consumes later."
 					}
 				]
 			},
@@ -5460,7 +5460,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " in order as a single\nundoable unit. Its inverse (produced by "
+						"text": " in order as a single\r\nundoable unit. Its inverse (produced by "
 					},
 					{
 						"kind": "code",
@@ -5476,7 +5476,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\nwhose sub-commands are the reversed inverses, so history replays it like any\nother command with no special-casing. Nestable."
+						"text": "\r\nwhose sub-commands are the reversed inverses, so history replays it like any\r\nother command with no special-casing. Nestable."
 					}
 				]
 			},
@@ -5800,7 +5800,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "An enriched, persistable, replayable record of one applied command (FR-070).\nAdditive alongside "
+						"text": "An enriched, persistable, replayable record of one applied command (FR-070).\r\nAdditive alongside "
 					},
 					{
 						"kind": "inline-tag",
@@ -5818,7 +5818,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " carries the existing\nbest-effort content diff, "
+						"text": " carries the existing\r\nbest-effort content diff, "
 					},
 					{
 						"kind": "code",
@@ -5826,7 +5826,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " carries the original command so a\nsequence of records can be replayed deterministically via "
+						"text": " carries the original command so a\r\nsequence of records can be replayed deterministically via "
 					},
 					{
 						"kind": "inline-tag",
@@ -5975,7 +5975,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "The page the command targeted — resolved even for commands whose type\nomits it. Absent for DOCUMENT-level changes ("
+								"text": "The page the command targeted — resolved even for commands whose type\r\nomits it. Absent for DOCUMENT-level changes ("
 							},
 							{
 								"kind": "code",
@@ -5983,7 +5983,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "), which\ntarget no page."
+								"text": "), which\r\ntarget no page."
 							}
 						]
 					},
@@ -6312,7 +6312,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " must be reversible like the built-in\n"
+						"text": " must be reversible like the built-in\r\n"
 					},
 					{
 						"kind": "code",
@@ -6328,7 +6328,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " so history undo/redo works.\n\n"
+						"text": " so history undo/redo works.\r\n\r\n"
 					},
 					{
 						"kind": "code",
@@ -6344,7 +6344,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " may\nreturn as "
+						"text": " may\r\nreturn as "
 					},
 					{
 						"kind": "code",
@@ -6360,7 +6360,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " — the handler's own\ncommand type (the common \"symmetric\" case, e.g. a toggle whose inverse is\nitself) union the built-in command types (when the inverse happens to be\nexpressible as one) — so a handler that returns a genuinely different\ncustom inverse type supplies it explicitly:\n"
+						"text": " — the handler's own\r\ncommand type (the common \"symmetric\" case, e.g. a toggle whose inverse is\r\nitself) union the built-in command types (when the inverse happens to be\r\nexpressible as one) — so a handler that returns a genuinely different\r\ncustom inverse type supplies it explicitly:\r\n"
 					},
 					{
 						"kind": "code",
@@ -6368,7 +6368,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ". Either way,\n"
+						"text": ". Either way,\r\n"
 					},
 					{
 						"kind": "code",
@@ -6980,7 +6980,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " that no longer exist, even\nwhile the anchor as a whole is still "
+								"text": " that no longer exist, even\r\nwhile the anchor as a whole is still "
 							},
 							{
 								"kind": "code",
@@ -7217,7 +7217,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Headless comment anchor contract (FR-072).\n\nComments (thread, author, body, replies) are stored OUTSIDE Canvas IR and\noutside canvas-core by default — core is React/DOM-free and has no concept\nof a comment thread or platform storage. This module defines only what a\ncomment attaches TO: a stable, serializable, versioned reference that an\nexternal comment-storage system keys its threads on."
+						"text": "Headless comment anchor contract (FR-072).\r\n\r\nComments (thread, author, body, replies) are stored OUTSIDE Canvas IR and\r\noutside canvas-core by default — core is React/DOM-free and has no concept\r\nof a comment thread or platform storage. This module defines only what a\r\ncomment attaches TO: a stable, serializable, versioned reference that an\r\nexternal comment-storage system keys its threads on."
 					}
 				]
 			},
@@ -7277,7 +7277,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Anchors a comment to a set of nodes rather than a fixed rectangle, so the\nanchor survives every node in the set moving — the region is always\nwhatever the current bounds of "
+						"text": "Anchors a comment to a set of nodes rather than a fixed rectangle, so the\r\nanchor survives every node in the set moving — the region is always\r\nwhatever the current bounds of "
 					},
 					{
 						"kind": "code",
@@ -7285,7 +7285,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " are, recomputed by the consumer,\nnever a stale snapshot core would need to keep in sync."
+						"text": " are, recomputed by the consumer,\r\nnever a stale snapshot core would need to keep in sync."
 					}
 				]
 			},
@@ -7364,7 +7364,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "FR-076 per-corner radii (B-03b) for rect/frame. When present it takes\nprecedence over the shared "
+						"text": "FR-076 per-corner radii (B-03b) for rect/frame. When present it takes\r\nprecedence over the shared "
 					},
 					{
 						"kind": "code",
@@ -7372,7 +7372,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ". Values clamp to half the box size at\nrender time."
+						"text": ". Values clamp to half the box size at\r\nrender time."
 					}
 				]
 			},
@@ -7444,7 +7444,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Drop shadow as an entry in the extensible effect list (C-03, PRD 0012\n§9.4/FR-077). Supersedes the legacy per-node "
+						"text": "Drop shadow as an entry in the extensible effect list (C-03, PRD 0012\r\n§9.4/FR-077). Supersedes the legacy per-node "
 					},
 					{
 						"kind": "code",
@@ -7452,7 +7452,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " field — see\n"
+						"text": " field — see\r\n"
 					},
 					{
 						"kind": "inline-tag",
@@ -7462,7 +7462,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " for the documented precedence — and adds\n"
+						"text": " for the documented precedence — and adds\r\n"
 					},
 					{
 						"kind": "code",
@@ -8291,7 +8291,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Format-specific knobs for one export job. Deliberately narrower than the\nplugin's "
+						"text": "Format-specific knobs for one export job. Deliberately narrower than the\r\nplugin's "
 					},
 					{
 						"kind": "code",
@@ -8315,7 +8315,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " move to\n"
+						"text": " move to\r\n"
 					},
 					{
 						"kind": "inline-tag",
@@ -8333,7 +8333,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " here, so they aren't\nduplicated. "
+						"text": " here, so they aren't\r\nduplicated. "
 					},
 					{
 						"kind": "code",
@@ -8341,7 +8341,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " is omitted too — a raster-embedding job contract is\nFR-043 (canvas-m3-004)'s concern, not this one's."
+						"text": " is omitted too — a raster-embedding job contract is\r\nFR-043 (canvas-m3-004)'s concern, not this one's."
 					}
 				]
 			},
@@ -8891,7 +8891,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "One target variant within a batch/campaign export (wiring point for\ncanvas-m3-006's "
+						"text": "One target variant within a batch/campaign export (wiring point for\r\ncanvas-m3-006's "
 					},
 					{
 						"kind": "code",
@@ -8899,7 +8899,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " and canvas-m3-007's campaign resize —\nboth land after this contract, additively)."
+						"text": " and canvas-m3-007's campaign resize —\r\nboth land after this contract, additively)."
 					}
 				]
 			},
@@ -9000,7 +9000,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\nis a plain string rather than a closed union: a single job may touch\nSVG-specific ("
+						"text": "\r\nis a plain string rather than a closed union: a single job may touch\r\nSVG-specific ("
 					},
 					{
 						"kind": "code",
@@ -9016,7 +9016,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ") codes\ndepending on "
+						"text": ") codes\r\ndepending on "
 					},
 					{
 						"kind": "code",
@@ -9024,7 +9024,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ", and this shape must not force every new per-format\ncode to widen a shared enum. Adapters that serialize via\n"
+						"text": ", and this shape must not force every new per-format\r\ncode to widen a shared enum. Adapters that serialize via\r\n"
 					},
 					{
 						"kind": "code",
@@ -9040,7 +9040,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " map those functions' own\ntyped warnings into this shape 1:1 ("
+						"text": " map those functions' own\r\ntyped warnings into this shape 1:1 ("
 					},
 					{
 						"kind": "code",
@@ -9388,7 +9388,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\nonly — timing/kind data for a future editor preview or video/GIF export\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\nin its normal resting state (its own "
+						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\r\nonly — timing/kind data for a future editor preview or video/GIF export\r\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\r\nin its normal resting state (its own "
 					},
 					{
 						"kind": "code",
@@ -9404,7 +9404,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/etc., unaffected\nby this field) and merely surface a warning that motion exists but isn't\nrepresented — this metadata is never a second, divergent static appearance."
+						"text": "/etc., unaffected\r\nby this field) and merely surface a warning that motion exists but isn't\r\nrepresented — this metadata is never a second, divergent static appearance."
 					}
 				]
 			},
@@ -9555,7 +9555,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "A layout container. Unlike a group — which is a pure grouping of siblings and\nderives its bounds from them — a frame has its own bounds, can clip its\nchildren to them, and can paint a background. It is the unit a template stamps\ncontent into."
+						"text": "A layout container. Unlike a group — which is a pure grouping of siblings and\r\nderives its bounds from them — a frame has its own bounds, can clip its\r\nchildren to them, and can paint a background. It is the unit a template stamps\r\ncontent into."
 					}
 				]
 			},
@@ -9934,7 +9934,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " are normalized (0..1) points in\nthe node's local box, so the gradient scales with the node."
+						"text": " are normalized (0..1) points in\r\nthe node's local box, so the gradient scales with the node."
 					}
 				]
 			},
@@ -10401,7 +10401,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Non-destructive image adjustments (C-04, FR-100). All fields optional;\nabsent = neutral. Ranges: "
+						"text": "Non-destructive image adjustments (C-04, FR-100). All fields optional;\r\nabsent = neutral. Ranges: "
 					},
 					{
 						"kind": "code",
@@ -10433,7 +10433,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/\n"
+						"text": "/\r\n"
 					},
 					{
 						"kind": "code",
@@ -10473,7 +10473,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " 0..100 (page\nunits). Rendering math lives in "
+						"text": " 0..100 (page\r\nunits). Rendering math lives in "
 					},
 					{
 						"kind": "code",
@@ -10481,7 +10481,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " — one color\nmatrix shared by the editor canvas and the SVG serializer."
+						"text": " — one color\r\nmatrix shared by the editor canvas and the SVG serializer."
 					}
 				]
 			},
@@ -10704,7 +10704,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Non-destructive image adjustments (C-04, FR-100). Unlike the open-ended\n"
+								"text": "Non-destructive image adjustments (C-04, FR-100). Unlike the open-ended\r\n"
 							},
 							{
 								"kind": "code",
@@ -10712,7 +10712,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " stub, these have a defined vocabulary, defined ranges, and a\ndefined rendering in both the editor and the SVG serializer (one shared\ncolor matrix — see "
+								"text": " stub, these have a defined vocabulary, defined ranges, and a\r\ndefined rendering in both the editor and the SVG serializer (one shared\r\ncolor matrix — see "
 							},
 							{
 								"kind": "code",
@@ -10720,7 +10720,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "). The source asset is\nnever modified."
+								"text": "). The source asset is\r\nnever modified."
 							}
 						]
 					},
@@ -10743,7 +10743,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Accessible alternative text (§12 item 11). Emitted by the SVG serializer\nas the "
+								"text": "Accessible alternative text (§12 item 11). Emitted by the SVG serializer\r\nas the "
 							},
 							{
 								"kind": "code",
@@ -10767,7 +10767,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "; surfaced by the editor's\naccessibility scene tree. Optional and additive."
+								"text": "; surfaced by the editor's\r\naccessibility scene tree. Optional and additive."
 							}
 						]
 					},
@@ -10799,7 +10799,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Live binding to a brand-kit asset/logo token, when this image should track\na token rather than (or alongside) a fixed "
+								"text": "Live binding to a brand-kit asset/logo token, when this image should track\r\na token rather than (or alongside) a fixed "
 							},
 							{
 								"kind": "code",
@@ -10807,7 +10807,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ". Resolution is\nexternal to core."
+								"text": ". Resolution is\r\nexternal to core."
 							}
 						]
 					},
@@ -10918,7 +10918,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " distorts to fill\n(default), "
+								"text": " distorts to fill\r\n(default), "
 							},
 							{
 								"kind": "code",
@@ -10942,7 +10942,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\nplaces the bitmap at its intrinsic size from the node origin, "
+								"text": "\r\nplaces the bitmap at its intrinsic size from the node origin, "
 							},
 							{
 								"kind": "code",
@@ -10950,7 +10950,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\ncenters it — both clipped to the bounds. "
+								"text": "\r\ncenters it — both clipped to the bounds. "
 							},
 							{
 								"kind": "code",
@@ -10958,7 +10958,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " applies within the\nfitted image space."
+								"text": " applies within the\r\nfitted image space."
 							}
 						]
 					},
@@ -11264,7 +11264,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ". The single\nshared insets shape (PRD 0012 §9.3) — "
+						"text": ". The single\r\nshared insets shape (PRD 0012 §9.3) — "
 					},
 					{
 						"kind": "code",
@@ -11272,7 +11272,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " (templates) aliases\nit, and page layout aids (margin/bleed/safeArea) reuse it."
+						"text": " (templates) aliases\r\nit, and page layout aids (margin/bleed/safeArea) reuse it."
 					}
 				]
 			},
@@ -12067,7 +12067,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Fields shared by the video/audio asset-reference nodes (FR-081,\ncanvas-m6-002). Deliberately holds ONLY an "
+						"text": "Fields shared by the video/audio asset-reference nodes (FR-081,\r\ncanvas-m6-002). Deliberately holds ONLY an "
 					},
 					{
 						"kind": "code",
@@ -12075,7 +12075,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " — no inline media\nbytes ever enter Canvas IR, matching the "
+						"text": " — no inline media\r\nbytes ever enter Canvas IR, matching the "
 					},
 					{
 						"kind": "code",
@@ -12091,7 +12091,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " asset-reference\nconvention. No playback/rendering is implemented in canvas-core: this is a\ncontract an export/render worker consumes later."
+						"text": " asset-reference\r\nconvention. No playback/rendering is implemented in canvas-core: this is a\r\ncontract an export/render worker consumes later."
 					}
 				]
 			},
@@ -12654,7 +12654,7 @@
 									},
 									{
 										"kind": "text",
-										"text": " unchanged\nwhen already at "
+										"text": " unchanged\r\nwhen already at "
 									},
 									{
 										"kind": "code",
@@ -12754,7 +12754,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\nonly — timing/kind data for a future editor preview or video/GIF export\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\nin its normal resting state (its own "
+						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\r\nonly — timing/kind data for a future editor preview or video/GIF export\r\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\r\nin its normal resting state (its own "
 					},
 					{
 						"kind": "code",
@@ -12770,7 +12770,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/etc., unaffected\nby this field) and merely surface a warning that motion exists but isn't\nrepresented — this metadata is never a second, divergent static appearance."
+						"text": "/etc., unaffected\r\nby this field) and merely surface a warning that motion exists but isn't\r\nrepresented — this metadata is never a second, divergent static appearance."
 					}
 				]
 			},
@@ -12919,7 +12919,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Paste style onto one node (C-05, FR-121): the payload is intersected with\nthe target kind's compatible keys via "
+						"text": "Paste style onto one node (C-05, FR-121): the payload is intersected with\r\nthe target kind's compatible keys via "
 					},
 					{
 						"kind": "code",
@@ -12927,7 +12927,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " — incompatible\nkeys are ignored (callers report them), never a failure. The inverse is a\n"
+						"text": " — incompatible\r\nkeys are ignored (callers report them), never a failure. The inverse is a\r\n"
 					},
 					{
 						"kind": "code",
@@ -12935,7 +12935,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " restoring the applied keys' prior values exactly. Multi-node\npaste is a "
+						"text": " restoring the applied keys' prior values exactly. Multi-node\r\npaste is a "
 					},
 					{
 						"kind": "code",
@@ -13361,7 +13361,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " must share\nthe same immediate parent group on "
+						"text": " must share\r\nthe same immediate parent group on "
 					},
 					{
 						"kind": "code",
@@ -13369,7 +13369,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "; they are wrapped in their current\nsibling z-order and the new group takes the slot of the topmost selected node.\nNo child transforms are altered (the group is created with an identity\ntransform), so grouping is visually a no-op and exactly reversible."
+						"text": "; they are wrapped in their current\r\nsibling z-order and the new group takes the slot of the topmost selected node.\r\nNo child transforms are altered (the group is created with an identity\r\ntransform), so grouping is visually a no-op and exactly reversible."
 					}
 				]
 			},
@@ -13432,7 +13432,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "), the created group is\nreconstructed verbatim from these fields rather than as a canonical identity\ngroup. "
+								"text": "), the created group is\r\nreconstructed verbatim from these fields rather than as a canonical identity\r\ngroup. "
 							},
 							{
 								"kind": "code",
@@ -13653,7 +13653,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "-style builders in ir-builders.ts.\nOptional: built-in kinds are created via the typed builders, and a\nparse/render-only kind (e.g. one received from a peer) may omit it."
+								"text": "-style builders in ir-builders.ts.\r\nOptional: built-in kinds are created via the typed builders, and a\r\nparse/render-only kind (e.g. one received from a peer) may omit it."
 							}
 						]
 					},
@@ -13735,7 +13735,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " (walked recursively). Default false.\n\nNOT CURRENTLY SUPPORTED for extension kinds (P0-5): "
+								"text": " (walked recursively). Default false.\r\n\r\nNOT CURRENTLY SUPPORTED for extension kinds (P0-5): "
 							},
 							{
 								"kind": "code",
@@ -13743,7 +13743,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " and\n"
+								"text": " and\r\n"
 							},
 							{
 								"kind": "code",
@@ -13783,7 +13783,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "/\n"
+								"text": "/\r\n"
 							},
 							{
 								"kind": "code",
@@ -13791,7 +13791,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "/every other tree operation — recurse only into the static\nbuilt-in container kinds ("
+								"text": "/every other tree operation — recurse only into the static\r\nbuilt-in container kinds ("
 							},
 							{
 								"kind": "code",
@@ -13807,7 +13807,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "), never into this registry.\nOnly "
+								"text": "), never into this registry.\r\nOnly "
 							},
 							{
 								"kind": "code",
@@ -13823,7 +13823,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " fallback is registry-aware. Setting\n"
+								"text": " fallback is registry-aware. Setting\r\n"
 							},
 							{
 								"kind": "code",
@@ -13839,7 +13839,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " time\nwith "
+								"text": " time\r\nwith "
 							},
 							{
 								"kind": "code",
@@ -13847,7 +13847,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " rather than\nsilently accepted and then silently un-walked — a custom container is a\nfuture extension seam (runtime-aware traversal across every walker/\nmutation entry point), not a partially-working feature today. Built-in\ncontainer kinds are seeded directly (bypassing "
+								"text": " rather than\r\nsilently accepted and then silently un-walked — a custom container is a\r\nfuture extension seam (runtime-aware traversal across every walker/\r\nmutation entry point), not a partially-working feature today. Built-in\r\ncontainer kinds are seeded directly (bypassing "
 							},
 							{
 								"kind": "code",
@@ -13855,7 +13855,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ") and are\nunaffected."
+								"text": ") and are\r\nunaffected."
 							}
 						]
 					},
@@ -14194,7 +14194,7 @@
 								"summary": [
 									{
 										"kind": "text",
-										"text": "Register an extension kind. Seeded built-in kinds are unshadowable, a\nkind may only be registered once, and (P0-5) a container kind is rejected\noutright — see "
+										"text": "Register an extension kind. Seeded built-in kinds are unshadowable, a\r\nkind may only be registered once, and (P0-5) a container kind is rejected\r\noutright — see "
 									},
 									{
 										"kind": "inline-tag",
@@ -14221,7 +14221,7 @@
 											},
 											{
 												"kind": "text",
-												"text": " when the\nkind is a seeded built-in, "
+												"text": " when the\r\nkind is a seeded built-in, "
 											},
 											{
 												"kind": "code",
@@ -14229,7 +14229,7 @@
 											},
 											{
 												"kind": "text",
-												"text": " when another extension\nalready registered it, or "
+												"text": " when another extension\r\nalready registered it, or "
 											},
 											{
 												"kind": "code",
@@ -14237,7 +14237,7 @@
 											},
 											{
 												"kind": "text",
-												"text": " when\n"
+												"text": " when\r\n"
 											},
 											{
 												"kind": "code",
@@ -14444,7 +14444,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " is\nclamped to the sibling range; the inverse restores the prior index."
+						"text": " is\r\nclamped to the sibling range; the inverse restores the prior index."
 					}
 				]
 			},
@@ -14504,7 +14504,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Move a node into a different container (group/frame/page-root group) at\n"
+						"text": "Move a node into a different container (group/frame/page-root group) at\r\n"
 					},
 					{
 						"kind": "code",
@@ -14520,7 +14520,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " is clamped to\nthe target's child range; moving a node into itself or a descendant is\nrejected ("
+						"text": " is clamped to\r\nthe target's child range; moving a node into itself or a descendant is\r\nrejected ("
 					},
 					{
 						"kind": "code",
@@ -14528,7 +14528,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "); page roots cannot be reparented. The\ninverse reparents back to the original parent at the original index, so\nlayer-panel drag-and-drop is fully undoable."
+						"text": "); page roots cannot be reparented. The\r\ninverse reparents back to the original parent at the original index, so\r\nlayer-panel drag-and-drop is fully undoable."
 					}
 				]
 			},
@@ -14740,7 +14740,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " is the portable\nstyle payload: appearance only — never id, position, size, rotation,\nchildren, asset ids, or text content. Shadows travel exclusively as\n"
+						"text": " is the portable\r\nstyle payload: appearance only — never id, position, size, rotation,\r\nchildren, asset ids, or text content. Shadows travel exclusively as\r\n"
 					},
 					{
 						"kind": "code",
@@ -14756,7 +14756,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " through core's ONE resolver),\nso pasting always writes the C-03 model."
+						"text": " through core's ONE resolver),\r\nso pasting always writes the C-03 model."
 					}
 				]
 			},
@@ -15094,7 +15094,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Dissolve a group, lifting its children into the group's parent. By default the\nchildren spill out contiguously at the group's former slot. When "
+						"text": "Dissolve a group, lifting its children into the group's parent. By default the\r\nchildren spill out contiguously at the group's former slot. When "
 					},
 					{
 						"kind": "code",
@@ -15102,7 +15102,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " is\npresent (as produced by the inverse of "
+						"text": " is\r\npresent (as produced by the inverse of "
 					},
 					{
 						"kind": "code",
@@ -15110,7 +15110,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "), each child is instead\nplaced back at its recorded original index so the prior tree is reconstructed\nexactly even for non-contiguous selections."
+						"text": "), each child is instead\r\nplaced back at its recorded original index so the prior tree is reconstructed\r\nexactly even for non-contiguous selections."
 					}
 				]
 			},
@@ -15528,6 +15528,62 @@
 			"variant": "declaration",
 			"kind": 256,
 			"flags": {},
+			"comment": {
+				"summary": [
+					{
+						"kind": "text",
+						"text": "Page background. "
+					},
+					{
+						"kind": "code",
+						"text": "`solid`"
+					},
+					{
+						"kind": "text",
+						"text": " (a CSS color string in "
+					},
+					{
+						"kind": "code",
+						"text": "`value`"
+					},
+					{
+						"kind": "text",
+						"text": ") is the only kind\r\nwith first-class rendering across the live stage, thumbnails, and the SVG\r\nserializer. "
+					},
+					{
+						"kind": "code",
+						"text": "`image`"
+					},
+					{
+						"kind": "text",
+						"text": " and "
+					},
+					{
+						"kind": "code",
+						"text": "`gradient`"
+					},
+					{
+						"kind": "text",
+						"text": " are RESERVED: their "
+					},
+					{
+						"kind": "code",
+						"text": "`value`"
+					},
+					{
+						"kind": "text",
+						"text": " format is\r\nnot yet defined, the SVG serializer emits a typed "
+					},
+					{
+						"kind": "code",
+						"text": "`BACKGROUND_UNSUPPORTED`"
+					},
+					{
+						"kind": "text",
+						"text": "\r\nwarning for them, and the editor renders the neutral default page white\r\nrather than interpreting the raw string (FR-063 explicit contract\r\nnarrowing — see PRD 0012 §7.7). Hosts should not persist non-solid\r\nbackgrounds until a format is specified."
+					}
+				]
+			},
 			"children": [
 				{
 					"id": 1348,
@@ -15678,7 +15734,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "'s node\ntree with fresh ids via "
+						"text": "'s node\r\ntree with fresh ids via "
 					},
 					{
 						"kind": "code",
@@ -15686,7 +15742,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " (M0-05), preserves the source\npage's "
+						"text": " (M0-05), preserves the source\r\npage's "
 					},
 					{
 						"kind": "code",
@@ -15710,7 +15766,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/other page-level fields, and\ninserts the duplicate immediately after the source. This is real command\ndomain logic (ID regeneration + positioning), not something a consumer\nshould assemble client-side from "
+						"text": "/other page-level fields, and\r\ninserts the duplicate immediately after the source. This is real command\r\ndomain logic (ID regeneration + positioning), not something a consumer\r\nshould assemble client-side from "
 					},
 					{
 						"kind": "code",
@@ -15726,7 +15782,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ".\n\n"
+						"text": ".\r\n\r\n"
 					},
 					{
 						"kind": "code",
@@ -15734,7 +15790,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " follows the same caller-supplies-the-id convention\n"
+						"text": " follows the same caller-supplies-the-id convention\r\n"
 					},
 					{
 						"kind": "code",
@@ -15750,7 +15806,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " uses — deterministic/testable/replayable, and it\nlets "
+						"text": " uses — deterministic/testable/replayable, and it\r\nlets "
 					},
 					{
 						"kind": "code",
@@ -15774,7 +15830,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " change record\nfrom the command shape alone, exactly like every other id-producing\nbuilt-in. "
+						"text": " change record\r\nfrom the command shape alone, exactly like every other id-producing\r\nbuilt-in. "
 					},
 					{
 						"kind": "code",
@@ -15790,7 +15846,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " label. The\ninverse is a "
+						"text": " label. The\r\ninverse is a "
 					},
 					{
 						"kind": "code",
@@ -15806,7 +15862,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ", removing exactly the duplicate\nand leaving the source and all other pages untouched."
+						"text": ", removing exactly the duplicate\r\nand leaving the source and all other pages untouched."
 					}
 				]
 			},
@@ -15880,7 +15936,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Persistent ruler guides for one page (FR-111): axis-aligned positions in\npage coordinates ("
+						"text": "Persistent ruler guides for one page (FR-111): axis-aligned positions in\r\npage coordinates ("
 					},
 					{
 						"kind": "code",
@@ -15896,7 +15952,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " guides are y-positions,\n"
+						"text": " guides are y-positions,\r\n"
 					},
 					{
 						"kind": "code",
@@ -15966,7 +16022,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Page-level layout aids (PRD 0012 §9.3 / FR-113): persistent guides plus\nmargin/bleed/safe-area insets. Purely advisory editor chrome — serializers\nnever render these unless a caller explicitly opts in. Absent field =\nthat aid is unset; absent object = no aids at all (so pre-existing\ndocuments need no migration)."
+						"text": "Page-level layout aids (PRD 0012 §9.3 / FR-113): persistent guides plus\r\nmargin/bleed/safe-area insets. Purely advisory editor chrome — serializers\r\nnever render these unless a caller explicitly opts in. Absent field =\r\nthat aid is unset; absent object = no aids at all (so pre-existing\r\ndocuments need no migration)."
 					}
 				]
 			},
@@ -16208,7 +16264,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " decides what happens to the page's top-level\ncontent: "
+						"text": " decides what happens to the page's top-level\r\ncontent: "
 					},
 					{
 						"kind": "code",
@@ -16224,7 +16280,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " scales each\ntop-level child's transform uniformly by min(w-ratio, h-ratio), "
+						"text": " scales each\r\ntop-level child's transform uniformly by min(w-ratio, h-ratio), "
 					},
 					{
 						"kind": "code",
@@ -16232,7 +16288,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\nkeeps content size and shifts it by half the size delta. The root group's\nbounds stay synced to the page size. The inverse restores the prior size\nAND the exact prior child transforms (a composite batch for\n"
+						"text": "\r\nkeeps content size and shifts it by half the size delta. The root group's\r\nbounds stay synced to the page size. The inverse restores the prior size\r\nAND the exact prior child transforms (a composite batch for\r\n"
 					},
 					{
 						"kind": "code",
@@ -16422,7 +16478,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Set a page's background fill (B-11, FR-063/§9.1). The inverse restores the\nACTUAL prior background, even when "
+						"text": "Set a page's background fill (B-11, FR-063/§9.1). The inverse restores the\r\nACTUAL prior background, even when "
 					},
 					{
 						"kind": "code",
@@ -16516,7 +16572,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ") a page's layout aids — persistent\nguides, margin, bleed, safe area (C-01, PRD 0012 §9.3/FR-111/FR-113).\nWhole-object replace: guide add/move/delete are expressed by writing the\nfull next "
+						"text": ") a page's layout aids — persistent\r\nguides, margin, bleed, safe area (C-01, PRD 0012 §9.3/FR-111/FR-113).\r\nWhole-object replace: guide add/move/delete are expressed by writing the\r\nfull next "
 					},
 					{
 						"kind": "code",
@@ -16524,7 +16580,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " value, keeping the inverse trivial and exact. The\ninverse restores the ACTUAL prior value, even when "
+						"text": " value, keeping the inverse trivial and exact. The\r\ninverse restores the ACTUAL prior value, even when "
 					},
 					{
 						"kind": "code",
@@ -16697,7 +16753,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\n(FR-061, canvas-m3-007) — absent on every other page. "
+						"text": "\r\n(FR-061, canvas-m3-007) — absent on every other page. "
 					},
 					{
 						"kind": "code",
@@ -16705,7 +16761,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/\n"
+						"text": "/\r\n"
 					},
 					{
 						"kind": "code",
@@ -16721,7 +16777,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ") the page\nwas sized from, since a preset's dimensions can change under a later\n"
+						"text": ") the page\r\nwas sized from, since a preset's dimensions can change under a later\r\n"
 					},
 					{
 						"kind": "code",
@@ -17797,7 +17853,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\nonly — timing/kind data for a future editor preview or video/GIF export\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\nin its normal resting state (its own "
+						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\r\nonly — timing/kind data for a future editor preview or video/GIF export\r\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\r\nin its normal resting state (its own "
 					},
 					{
 						"kind": "code",
@@ -17813,7 +17869,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/etc., unaffected\nby this field) and merely surface a warning that motion exists but isn't\nrepresented — this metadata is never a second, divergent static appearance."
+						"text": "/etc., unaffected\r\nby this field) and merely surface a warning that motion exists but isn't\r\nrepresented — this metadata is never a second, divergent static appearance."
 					}
 				]
 			},
@@ -17956,7 +18012,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Print-oriented PDF metadata (FR-043, canvas-m3-004). Shared verbatim with\n"
+						"text": "Print-oriented PDF metadata (FR-043, canvas-m3-004). Shared verbatim with\r\n"
 					},
 					{
 						"kind": "code",
@@ -17972,7 +18028,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " (that domain is allowed to\nimport this one — "
+						"text": " (that domain is allowed to\r\nimport this one — "
 					},
 					{
 						"kind": "code",
@@ -17980,7 +18036,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " sits at a strictly lower layer rank) so the\njob-contract metadata and the actual print-safety check never drift apart.\n\nRaster PDF ("
+						"text": " sits at a strictly lower layer rank) so the\r\njob-contract metadata and the actual print-safety check never drift apart.\r\n\r\nRaster PDF ("
 					},
 					{
 						"kind": "code",
@@ -17988,7 +18044,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ") remains the only EXECUTABLE path —\n"
+						"text": ") remains the only EXECUTABLE path —\r\n"
 					},
 					{
 						"kind": "code",
@@ -17996,7 +18052,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " records that true vector PDF is a documented future\ncapability, not something this task implements."
+						"text": " records that true vector PDF is a documented future\r\ncapability, not something this task implements."
 					}
 				]
 			},
@@ -18124,7 +18180,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " does not introspect an embedded raster's\ncolor profile, so a "
+								"text": " does not introspect an embedded raster's\r\ncolor profile, so a "
 							},
 							{
 								"kind": "code",
@@ -18132,7 +18188,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "-flagged job never actually verifies the\nsource is CMYK. Surfaced so a host/print vendor can act on the intent."
+								"text": "-flagged job never actually verifies the\r\nsource is CMYK. Surfaced so a host/print vendor can act on the intent."
 							}
 						]
 					},
@@ -18156,7 +18212,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Target DPI for this print job. Doubles as the minimum acceptable DPI for\nembedded rasters — "
+								"text": "Target DPI for this print job. Doubles as the minimum acceptable DPI for\r\nembedded rasters — "
 							},
 							{
 								"kind": "code",
@@ -18172,7 +18228,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\nwhen an embedded raster's effective DPI falls below it. Defaults to 150\n(a common print-safety floor) when "
+								"text": "\r\nwhen an embedded raster's effective DPI falls below it. Defaults to 150\r\n(a common print-safety floor) when "
 							},
 							{
 								"kind": "code",
@@ -18903,7 +18959,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Multi-span, multi-paragraph text with real wrapping.\n\nDeliberately a SEPARATE kind from "
+						"text": "Multi-span, multi-paragraph text with real wrapping.\r\n\r\nDeliberately a SEPARATE kind from "
 					},
 					{
 						"kind": "inline-tag",
@@ -18913,7 +18969,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " rather than an\nextension of it (FR-013): "
+						"text": " rather than an\r\nextension of it (FR-013): "
 					},
 					{
 						"kind": "code",
@@ -18921,7 +18977,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " is a single plain string with one style, and\nits schema, tests and SVG goldens must keep working byte-for-byte.\n\n"
+						"text": " is a single plain string with one style, and\r\nits schema, tests and SVG goldens must keep working byte-for-byte.\r\n\r\n"
 					},
 					{
 						"kind": "code",
@@ -18937,7 +18993,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ") are the authoring intent — the box the text is\nlaid out INTO, and the width paragraphs wrap against. "
+						"text": ") are the authoring intent — the box the text is\r\nlaid out INTO, and the width paragraphs wrap against. "
 					},
 					{
 						"kind": "code",
@@ -18945,7 +19001,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ", inherited from\n"
+						"text": ", inherited from\r\n"
 					},
 					{
 						"kind": "inline-tag",
@@ -18955,7 +19011,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ", remains the node's geometric box: what hit-testing,\nsnapping and group extents read. The two are related but not the same thing,\nand a host reconciles them after measuring (with "
+						"text": ", remains the node's geometric box: what hit-testing,\r\nsnapping and group extents read. The two are related but not the same thing,\r\nand a host reconciles them after measuring (with "
 					},
 					{
 						"kind": "code",
@@ -18963,7 +19019,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ",\n"
+						"text": ",\r\n"
 					},
 					{
 						"kind": "code",
@@ -18979,7 +19035,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " stays unset).\nCore does not reconcile them, because core cannot measure text — see\n"
+						"text": " stays unset).\r\nCore does not reconcile them, because core cannot measure text — see\r\n"
 					},
 					{
 						"kind": "inline-tag",
@@ -19013,7 +19069,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\ncarries "
+						"text": "\r\ncarries "
 					},
 					{
 						"kind": "code",
@@ -19241,7 +19297,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " lets the measured content decide\nthe box width (the editor keeps "
+								"text": " lets the measured content decide\r\nthe box width (the editor keeps "
 							},
 							{
 								"kind": "code",
@@ -19249,7 +19305,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " synced to the measurement);\nabsent/"
+								"text": " synced to the measurement);\r\nabsent/"
 							},
 							{
 								"kind": "code",
@@ -19334,7 +19390,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\n(PRD 0012 §7.9). "
+								"text": "\r\n(PRD 0012 §7.9). "
 							},
 							{
 								"kind": "code",
@@ -19342,7 +19398,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " (default when absent) aligns to the top edge;\n"
+								"text": " (default when absent) aligns to the top edge;\r\n"
 							},
 							{
 								"kind": "code",
@@ -19358,7 +19414,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " aligns to the bottom edge. Applies only when\nthe box is taller than its content — i.e. with an explicit "
+								"text": " aligns to the bottom edge. Applies only when\r\nthe box is taller than its content — i.e. with an explicit "
 							},
 							{
 								"kind": "code",
@@ -19366,7 +19422,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " or\n"
+								"text": " or\r\n"
 							},
 							{
 								"kind": "code",
@@ -19501,7 +19557,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\nonly — timing/kind data for a future editor preview or video/GIF export\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\nin its normal resting state (its own "
+						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\r\nonly — timing/kind data for a future editor preview or video/GIF export\r\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\r\nin its normal resting state (its own "
 					},
 					{
 						"kind": "code",
@@ -19517,7 +19573,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/etc., unaffected\nby this field) and merely surface a warning that motion exists but isn't\nrepresented — this metadata is never a second, divergent static appearance."
+						"text": "/etc., unaffected\r\nby this field) and merely surface a warning that motion exists but isn't\r\nrepresented — this metadata is never a second, divergent static appearance."
 					}
 				]
 			},
@@ -19660,7 +19716,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "The resolved runtime = built-ins + extensions. With NO extension node kinds,\n"
+						"text": "The resolved runtime = built-ins + extensions. With NO extension node kinds,\r\n"
 					},
 					{
 						"kind": "code",
@@ -19676,7 +19732,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " are the exact static module schemas (identity-equal),\nso the zero-extension runtime is behaviourally identical to today."
+						"text": " are the exact static module schemas (identity-equal),\r\nso the zero-extension runtime is behaviourally identical to today."
 					}
 				]
 			},
@@ -19701,7 +19757,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " (and cannot be\nshadowed by an extension); custom types dispatch to their registered handler.\nThrows for an unknown type with no handler.\n\nGeneric over the command type "
+								"text": " (and cannot be\r\nshadowed by an extension); custom types dispatch to their registered handler.\r\nThrows for an unknown type with no handler.\r\n\r\nGeneric over the command type "
 							},
 							{
 								"kind": "code",
@@ -19709,7 +19765,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " (P0-4), defaulted to the built-in\n"
+								"text": " (P0-4), defaulted to the built-in\r\n"
 							},
 							{
 								"kind": "code",
@@ -19717,7 +19773,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " union so a built-in-only caller needs no type argument —\n"
+								"text": " union so a built-in-only caller needs no type argument —\r\n"
 							},
 							{
 								"kind": "code",
@@ -19733,7 +19789,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " would.\nA caller dispatching a custom command supplies "
+								"text": " would.\r\nA caller dispatching a custom command supplies "
 							},
 							{
 								"kind": "code",
@@ -19741,7 +19797,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " (or lets it infer from\na typed "
+								"text": " (or lets it infer from\r\na typed "
 							},
 							{
 								"kind": "code",
@@ -19757,7 +19813,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " instead of\nonly the built-in union, with no cast required at the call site."
+								"text": " instead of\r\nonly the built-in union, with no cast required at the call site."
 							}
 						]
 					},
@@ -19951,7 +20007,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Forward-migrate a persisted/peer IR to the current version via the migration\nregistry, then validate with this runtime's "
+								"text": "Forward-migrate a persisted/peer IR to the current version via the migration\r\nregistry, then validate with this runtime's "
 							},
 							{
 								"kind": "code",
@@ -19959,7 +20015,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ". The default runtime\n(no migrations) accepts already-current documents and rejects others."
+								"text": ". The default runtime\r\n(no migrations) accepts already-current documents and rejects others."
 							}
 						]
 					},
@@ -20085,7 +20141,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\nonly — timing/kind data for a future editor preview or video/GIF export\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\nin its normal resting state (its own "
+						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\r\nonly — timing/kind data for a future editor preview or video/GIF export\r\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\r\nin its normal resting state (its own "
 					},
 					{
 						"kind": "code",
@@ -20101,7 +20157,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/etc., unaffected\nby this field) and merely surface a warning that motion exists but isn't\nrepresented — this metadata is never a second, divergent static appearance."
+						"text": "/etc., unaffected\r\nby this field) and merely surface a warning that motion exists but isn't\r\nrepresented — this metadata is never a second, divergent static appearance."
 					}
 				]
 			},
@@ -20322,7 +20378,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "A lightweight, versioned width/height/unit preset (PRD §12.8) — e.g.\n\"Instagram Post\" or \"LinkedIn Banner\". Deliberately NOT a full design. The\ninitial catalog (Instagram/TikTok/YouTube/etc., "
+						"text": "A lightweight, versioned width/height/unit preset (PRD §12.8) — e.g.\r\n\"Instagram Post\" or \"LinkedIn Banner\". Deliberately NOT a full design. The\r\ninitial catalog (Instagram/TikTok/YouTube/etc., "
 					},
 					{
 						"kind": "code",
@@ -20330,7 +20386,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " in\n"
+						"text": " in\r\n"
 					},
 					{
 						"kind": "code",
@@ -20338,7 +20394,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ") ships in canvas-m3-006 (FR-060); this shape is what\nboth the catalog and "
+						"text": ") ships in canvas-m3-006 (FR-060); this shape is what\r\nboth the catalog and "
 					},
 					{
 						"kind": "inline-tag",
@@ -20348,7 +20404,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\nvalidate against."
+						"text": "\r\nvalidate against."
 					}
 				]
 			},
@@ -20476,7 +20532,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\nonly — timing/kind data for a future editor preview or video/GIF export\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\nin its normal resting state (its own "
+						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\r\nonly — timing/kind data for a future editor preview or video/GIF export\r\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\r\nin its normal resting state (its own "
 					},
 					{
 						"kind": "code",
@@ -20492,7 +20548,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/etc., unaffected\nby this field) and merely surface a warning that motion exists but isn't\nrepresented — this metadata is never a second, divergent static appearance."
+						"text": "/etc., unaffected\r\nby this field) and merely surface a warning that motion exists but isn't\r\nrepresented — this metadata is never a second, divergent static appearance."
 					}
 				]
 			},
@@ -21276,7 +21332,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " hook so\na custom kind can render to the same "
+						"text": " hook so\r\na custom kind can render to the same "
 					},
 					{
 						"kind": "code",
@@ -21578,7 +21634,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "An asset-referencing SVG node (FR-016). Deliberately holds ONLY an\n"
+						"text": "An asset-referencing SVG node (FR-016). Deliberately holds ONLY an\r\n"
 					},
 					{
 						"kind": "code",
@@ -21594,7 +21650,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " performs\nno SVG parsing or sanitization; that is an ingest-time host responsibility\n(see the threat-model doc referenced from this task). Serializers render\nit via the same safe "
+						"text": " performs\r\nno SVG parsing or sanitization; that is an ingest-time host responsibility\r\n(see the threat-model doc referenced from this task). Serializers render\r\nit via the same safe "
 					},
 					{
 						"kind": "code",
@@ -21610,7 +21666,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " nodes use,\nwith a structured "
+						"text": " nodes use,\r\nwith a structured "
 					},
 					{
 						"kind": "code",
@@ -21618,7 +21674,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " warning — true inline vector\nembedding is deferred behind a future "
+						"text": " warning — true inline vector\r\nembedding is deferred behind a future "
 					},
 					{
 						"kind": "code",
@@ -21916,7 +21972,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "The canonical template definition contract (PRD FR-020, §12.5).\n\nNaming: this supersedes "
+						"text": "The canonical template definition contract (PRD FR-020, §12.5).\r\n\r\nNaming: this supersedes "
 					},
 					{
 						"kind": "code",
@@ -21924,7 +21980,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "'s existing\n"
+						"text": "'s existing\r\n"
 					},
 					{
 						"kind": "code",
@@ -21940,7 +21996,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ") — that package migrates\nits 10 templates to this shape and re-exports "
+						"text": ") — that package migrates\r\nits 10 templates to this shape and re-exports "
 					},
 					{
 						"kind": "code",
@@ -21948,7 +22004,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\ndirectly rather than keeping a separate, drifting type (see canvas-m2-004).\n"
+						"text": "\r\ndirectly rather than keeping a separate, drifting type (see canvas-m2-004).\r\n"
 					},
 					{
 						"kind": "code",
@@ -21964,7 +22020,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " remains the editor-facing,\nhost-injected projection of this type — the editor cannot depend on the\nprivate templates package, so it keeps its own structurally-compatible type\nrather than importing this one (see "
+						"text": " remains the editor-facing,\r\nhost-injected projection of this type — the editor cannot depend on the\r\nprivate templates package, so it keeps its own structurally-compatible type\r\nrather than importing this one (see "
 					},
 					{
 						"kind": "code",
@@ -21972,7 +22028,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ").\n\nValidates independently of normal Canvas IR: template-only metadata\n("
+						"text": ").\r\n\r\nValidates independently of normal Canvas IR: template-only metadata\r\n("
 					},
 					{
 						"kind": "code",
@@ -22012,7 +22068,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ", etc.) never leaks\ninto "
+						"text": ", etc.) never leaks\r\ninto "
 					},
 					{
 						"kind": "code",
@@ -22020,7 +22076,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ", which is itself always a normal, independently-valid\n"
+						"text": ", which is itself always a normal, independently-valid\r\n"
 					},
 					{
 						"kind": "inline-tag",
@@ -22785,7 +22841,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\nonly — timing/kind data for a future editor preview or video/GIF export\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\nin its normal resting state (its own "
+						"text": "Serializable animation metadata (FR-080, canvas-m6-001). Describes intent\r\nonly — timing/kind data for a future editor preview or video/GIF export\r\nworker to interpret. Static exports (SVG/PNG/PDF) always render a node/page\r\nin its normal resting state (its own "
 					},
 					{
 						"kind": "code",
@@ -22801,7 +22857,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/etc., unaffected\nby this field) and merely surface a warning that motion exists but isn't\nrepresented — this metadata is never a second, divergent static appearance."
+						"text": "/etc., unaffected\r\nby this field) and merely surface a warning that motion exists but isn't\r\nrepresented — this metadata is never a second, divergent static appearance."
 					}
 				]
 			},
@@ -22944,7 +23000,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Fields shared by the video/audio asset-reference nodes (FR-081,\ncanvas-m6-002). Deliberately holds ONLY an "
+						"text": "Fields shared by the video/audio asset-reference nodes (FR-081,\r\ncanvas-m6-002). Deliberately holds ONLY an "
 					},
 					{
 						"kind": "code",
@@ -22952,7 +23008,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " — no inline media\nbytes ever enter Canvas IR, matching the "
+						"text": " — no inline media\r\nbytes ever enter Canvas IR, matching the "
 					},
 					{
 						"kind": "code",
@@ -22968,7 +23024,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " asset-reference\nconvention. No playback/rendering is implemented in canvas-core: this is a\ncontract an export/render worker consumes later."
+						"text": " asset-reference\r\nconvention. No playback/rendering is implemented in canvas-core: this is a\r\ncontract an export/render worker consumes later."
 					}
 				]
 			},
@@ -23433,7 +23489,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " node throw a typed\n"
+								"text": " node throw a typed\r\n"
 							},
 							{
 								"kind": "code",
@@ -23451,7 +23507,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " instead of applying (A-02,\nPRD 0012 FR-024). Default OFF for backward compatibility — existing\nconsumers (brand apply with its own "
+								"text": " instead of applying (A-02,\r\nPRD 0012 FR-024). Default OFF for backward compatibility — existing\r\nconsumers (brand apply with its own "
 							},
 							{
 								"kind": "code",
@@ -23459,7 +23515,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " semantics,\nextensions, collab replay) are unaffected unless they opt in. The\neditor's action layer enables it for user-initiated operations.\nExemption: a "
+								"text": " semantics,\r\nextensions, collab replay) are unaffected unless they opt in. The\r\neditor's action layer enables it for user-initiated operations.\r\nExemption: a "
 							},
 							{
 								"kind": "code",
@@ -23475,7 +23531,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " always applies —\nthat is how a locked node gets unlocked. Inside a "
+								"text": " always applies —\r\nthat is how a locked node gets unlocked. Inside a "
 							},
 							{
 								"kind": "code",
@@ -23483,7 +23539,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " the option\npropagates to every sub-command; the batch stays all-or-nothing."
+								"text": " the option\r\npropagates to every sub-command; the batch stays all-or-nothing."
 							}
 						]
 					},
@@ -23614,7 +23670,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " node throw a typed\n"
+								"text": " node throw a typed\r\n"
 							},
 							{
 								"kind": "code",
@@ -23632,7 +23688,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " instead of applying (A-02,\nPRD 0012 FR-024). Default OFF for backward compatibility — existing\nconsumers (brand apply with its own "
+								"text": " instead of applying (A-02,\r\nPRD 0012 FR-024). Default OFF for backward compatibility — existing\r\nconsumers (brand apply with its own "
 							},
 							{
 								"kind": "code",
@@ -23640,7 +23696,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " semantics,\nextensions, collab replay) are unaffected unless they opt in. The\neditor's action layer enables it for user-initiated operations.\nExemption: a "
+								"text": " semantics,\r\nextensions, collab replay) are unaffected unless they opt in. The\r\neditor's action layer enables it for user-initiated operations.\r\nExemption: a "
 							},
 							{
 								"kind": "code",
@@ -23656,7 +23712,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " always applies —\nthat is how a locked node gets unlocked. Inside a "
+								"text": " always applies —\r\nthat is how a locked node gets unlocked. Inside a "
 							},
 							{
 								"kind": "code",
@@ -23664,7 +23720,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " the option\npropagates to every sub-command; the batch stays all-or-nothing."
+								"text": " the option\r\npropagates to every sub-command; the batch stays all-or-nothing."
 							}
 						]
 					},
@@ -23752,7 +23808,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " union, so every\nexisting built-in-only call site ("
+						"text": " union, so every\r\nexisting built-in-only call site ("
 					},
 					{
 						"kind": "code",
@@ -23768,7 +23824,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ", the\nEditor's history store) needs no type argument and no change. A command\nextension whose natural inverse is itself a custom command type supplies\n"
+						"text": ", the\r\nEditor's history store) needs no type argument and no change. A command\r\nextension whose natural inverse is itself a custom command type supplies\r\n"
 					},
 					{
 						"kind": "code",
@@ -23784,7 +23840,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ") instead of casting\n"
+						"text": ") instead of casting\r\n"
 					},
 					{
 						"kind": "code",
@@ -26428,7 +26484,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ".\nThe shear is reported entirely as "
+						"text": ".\r\nThe shear is reported entirely as "
 					},
 					{
 						"kind": "code",
@@ -26436,7 +26492,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " (the canonical 2D affine\ndecomposition folds any "
+						"text": " (the canonical 2D affine\r\ndecomposition folds any "
 					},
 					{
 						"kind": "code",
@@ -26460,7 +26516,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " is\nalways 0 and omitted. "
+						"text": " is\r\nalways 0 and omitted. "
 					},
 					{
 						"kind": "code",
@@ -26608,7 +26664,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Marks a frame as an empty slot awaiting content — an image well, a logo well.\nDeliberately minimal: enough to say \"this frame is an image placeholder\".\nTemplate slot binding is a separate concern and does not live here."
+						"text": "Marks a frame as an empty slot awaiting content — an image well, a logo well.\r\nDeliberately minimal: enough to say \"this frame is an image placeholder\".\r\nTemplate slot binding is a separate concern and does not live here."
 					}
 				]
 			},
@@ -26646,7 +26702,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Live binding to a brand-kit asset/logo token, when this placeholder should\ntrack a token rather than (or alongside) a fixed "
+								"text": "Live binding to a brand-kit asset/logo token, when this placeholder should\r\ntrack a token rather than (or alongside) a fixed "
 							},
 							{
 								"kind": "code",
@@ -26654,7 +26710,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ". Resolution is\nexternal to core."
+								"text": ". Resolution is\r\nexternal to core."
 							}
 						]
 					},
@@ -27421,7 +27477,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Asset entries the paste must ADD to the target document (already\nre-keyed where a collision required it). Same-document pastes and\nalready-present identical assets contribute nothing here."
+								"text": "Asset entries the paste must ADD to the target document (already\r\nre-keyed where a collision required it). Same-document pastes and\r\nalready-present identical assets contribute nothing here."
 							}
 						]
 					},
@@ -27682,7 +27738,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "A contiguous piece of ONE span that landed on ONE line.\n\nA span is split across lines when it wraps, so a run is a slice of it, not the\nwhole thing. "
+						"text": "A contiguous piece of ONE span that landed on ONE line.\r\n\r\nA span is split across lines when it wraps, so a run is a slice of it, not the\r\nwhole thing. "
 					},
 					{
 						"kind": "code",
@@ -27690,7 +27746,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " points back into the source paragraph so a caller can\nrecover the styling (and so a hit-test can map a click back to a text offset)\nwithout the measurer having to copy the style onto every run."
+						"text": " points back into the source paragraph so a caller can\r\nrecover the styling (and so a hit-test can map a click back to a text offset)\r\nwithout the measurer having to copy the style onto every run."
 					}
 				]
 			},
@@ -28224,7 +28280,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "The rendered page screenshot: raw PNG/JPEG bytes, or a\n"
+								"text": "The rendered page screenshot: raw PNG/JPEG bytes, or a\r\n"
 							},
 							{
 								"kind": "code",
@@ -28296,7 +28352,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ". Ignored when\n"
+								"text": ". Ignored when\r\n"
 							},
 							{
 								"kind": "code",
@@ -28435,7 +28491,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Pages to emit, by id or index, in order. Defaults to every page in IR order.\nAn unknown selector throws; an explicitly empty list throws (no PDF pages)."
+								"text": "Pages to emit, by id or index, in order. Defaults to every page in IR order.\r\nAn unknown selector throws; an explicitly empty list throws (no PDF pages)."
 							}
 						]
 					},
@@ -28468,7 +28524,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Print-safety metadata (FR-043, canvas-m3-004). When present, every\nsuccessfully-embedded raster's EFFECTIVE dpi (its natural pixel size\ndivided by the page's print size in inches) is compared against\n"
+								"text": "Print-safety metadata (FR-043, canvas-m3-004). When present, every\r\nsuccessfully-embedded raster's EFFECTIVE dpi (its natural pixel size\r\ndivided by the page's print size in inches) is compared against\r\n"
 							},
 							{
 								"kind": "code",
@@ -28476,7 +28532,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " (default 150 DPI); a raster below it\nwarns with "
+								"text": " (default 150 DPI); a raster below it\r\nwarns with "
 							},
 							{
 								"kind": "code",
@@ -28492,7 +28548,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " is\nadvisory only — see "
+								"text": " is\r\nadvisory only — see "
 							},
 							{
 								"kind": "inline-tag",
@@ -28588,7 +28644,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " before emitting and throw on failure\n(default "
+								"text": " before emitting and throw on failure\r\n(default "
 							},
 							{
 								"kind": "code",
@@ -28596,7 +28652,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "). Independently of this flag, a page whose computed\ndimensions are non-finite throws a "
+								"text": "). Independently of this flag, a page whose computed\r\ndimensions are non-finite throws a "
 							},
 							{
 								"kind": "code",
@@ -28604,7 +28660,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " rather than producing a\ncorrupt PDF ("
+								"text": " rather than producing a\r\ncorrupt PDF ("
 							},
 							{
 								"kind": "code",
@@ -28808,7 +28864,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " nodes (FR-014).\n\nShared by the SVG serializer ("
+						"text": " nodes (FR-014).\r\n\r\nShared by the SVG serializer ("
 					},
 					{
 						"kind": "code",
@@ -28824,7 +28880,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ") and available to a\nfuture per-kind hit test — today "
+						"text": ") and available to a\r\nfuture per-kind hit test — today "
 					},
 					{
 						"kind": "code",
@@ -28832,7 +28888,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " uses a uniform bounds test\nfor every kind ("
+						"text": " uses a uniform bounds test\r\nfor every kind ("
 					},
 					{
 						"kind": "code",
@@ -28840,7 +28896,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "), so nothing here is wired into hit-testing\nyet, but the vertex list is the natural input for a precise point-in-polygon\ntest later."
+						"text": "), so nothing here is wired into hit-testing\r\nyet, but the vertex list is the natural input for a precise point-in-polygon\r\ntest later."
 					}
 				]
 			},
@@ -28905,7 +28961,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "). Inject a deterministic\nfactory for reproducible output — ids are assigned in pre-order (parent\nbefore children, children in document order), the same visitation order\nas "
+								"text": "). Inject a deterministic\r\nfactory for reproducible output — ids are assigned in pre-order (parent\r\nbefore children, children in document order), the same visitation order\r\nas "
 							},
 							{
 								"kind": "inline-tag",
@@ -29298,7 +29354,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Receives the parent container's current children and returns the replacement\narray. Runs inside a single tree rewrite, so a batch edit (e.g. grouping or\nungrouping N siblings) costs one O(n) pass instead of N insert/remove\npasses. The caller owns IR invariants (unique ids, no cycles) within the\nreturned array."
+								"text": "Receives the parent container's current children and returns the replacement\r\narray. Runs inside a single tree rewrite, so a batch edit (e.g. grouping or\r\nungrouping N siblings) costs one O(n) pass instead of N insert/remove\r\npasses. The caller owns IR invariants (unique ids, no cycles) within the\r\nreturned array."
 							}
 						]
 					},
@@ -29565,7 +29621,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "A span's style with every optional field resolved.\n\n"
+						"text": "A span's style with every optional field resolved.\r\n\r\n"
 					},
 					{
 						"kind": "inline-tag",
@@ -29575,7 +29631,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " leaves each style field optional, meaning \"inherit the\nhost's default\". Something has to turn that into concrete values before any\nglyph can be measured, and if the editor and the exporter each did it their own\nway they would disagree about where lines break — the exact class of bug this\ncontract exists to prevent. "
+						"text": " leaves each style field optional, meaning \"inherit the\r\nhost's default\". Something has to turn that into concrete values before any\r\nglyph can be measured, and if the editor and the exporter each did it their own\r\nway they would disagree about where lines break — the exact class of bug this\r\ncontract exists to prevent. "
 					},
 					{
 						"kind": "inline-tag",
@@ -29621,7 +29677,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " is inheritance-merged here (span over default), NOT\nbrand-token-resolved — a "
+								"text": " is inheritance-merged here (span over default), NOT\r\nbrand-token-resolved — a "
 							},
 							{
 								"kind": "code",
@@ -29629,7 +29685,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " survives this step unchanged.\nCore has no brand-kit knowledge (PRD FR-030): resolving one to a concrete\nname is each CONSUMER's job (the SVG serializer's "
+								"text": " survives this step unchanged.\r\nCore has no brand-kit knowledge (PRD FR-030): resolving one to a concrete\r\nname is each CONSUMER's job (the SVG serializer's "
 							},
 							{
 								"kind": "code",
@@ -29637,7 +29693,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\noption; a future editor equivalent). "
+								"text": "\r\noption; a future editor equivalent). "
 							},
 							{
 								"kind": "inline-tag",
@@ -29647,7 +29703,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\nnarrows this back to "
+								"text": "\r\nnarrows this back to "
 							},
 							{
 								"kind": "code",
@@ -29655,7 +29711,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " — the host's fallback is always concrete,\nsince layout/measurement needs a real font name to measure glyphs with."
+								"text": " — the host's fallback is always concrete,\r\nsince layout/measurement needs a real font name to measure glyphs with."
 							}
 						]
 					},
@@ -30122,7 +30178,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "A styled run of text. Every style field is optional: an omitted field inherits\nfrom the host's defaults at measure/render time rather than being resolved\nhere, which keeps the IR free of any font or layout knowledge."
+						"text": "A styled run of text. Every style field is optional: an omitted field inherits\r\nfrom the host's defaults at measure/render time rather than being resolved\r\nhere, which keeps the IR free of any font or layout knowledge."
 					}
 				]
 			},
@@ -30863,7 +30919,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ".\n\nFramework-free (no React/Konva): operates purely on world-space rects so the\neditor, headless consumers, and tests share one implementation. Lifted from\nthe editor's "
+						"text": ".\r\n\r\nFramework-free (no React/Konva): operates purely on world-space rects so the\r\neditor, headless consumers, and tests share one implementation. Lifted from\r\nthe editor's "
 					},
 					{
 						"kind": "code",
@@ -30871,7 +30927,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " modules; the edge-pair matching is unchanged, only\nre-expressed without tuple indexing to satisfy "
+						"text": " modules; the edge-pair matching is unchanged, only\r\nre-expressed without tuple indexing to satisfy "
 					},
 					{
 						"kind": "code",
@@ -31118,7 +31174,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Mutable state threaded through emission: accumulates content-level warnings\nand the set of font families actually used (so "
+						"text": "Mutable state threaded through emission: accumulates content-level warnings\r\nand the set of font families actually used (so "
 					},
 					{
 						"kind": "code",
@@ -31126,7 +31182,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " emission can be\nlimited to fonts that appear in the document), plus the resolved options and\nthe document's asset map for image resolution."
+						"text": " emission can be\r\nlimited to fonts that appear in the document), plus the resolved options and\r\nthe document's asset map for image resolution."
 					}
 				]
 			},
@@ -31384,7 +31440,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " is\nnot a built-in kind is emitted via its registered "
+								"text": " is\r\nnot a built-in kind is emitted via its registered "
 							},
 							{
 								"kind": "code",
@@ -31392,7 +31448,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " hook; without one\nit is skipped with an "
+								"text": " hook; without one\r\nit is skipped with an "
 							},
 							{
 								"kind": "code",
@@ -31493,7 +31549,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Fallbacks for span style fields a document leaves unset. Merged over the\nbuilt-in defaults, which mirror "
+								"text": "Fallbacks for span style fields a document leaves unset. Merged over the\r\nbuilt-in defaults, which mirror "
 							},
 							{
 								"kind": "code",
@@ -31581,7 +31637,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " paragraphs. Core cannot measure glyphs (no DOM, no font\nmetrics — see "
+								"text": " paragraphs. Core cannot measure glyphs (no DOM, no font\r\nmetrics — see "
 							},
 							{
 								"kind": "inline-tag",
@@ -31591,7 +31647,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "), so wrapping is only possible when\nthe host injects its measurer here. The editor's measurer is the same one it\nrenders with, which is what makes an export match what the user saw.\n\nOmit it and rich text still exports deterministically — one line per\nparagraph, flagged with "
+								"text": "), so wrapping is only possible when\r\nthe host injects its measurer here. The editor's measurer is the same one it\r\nrenders with, which is what makes an export match what the user saw.\r\n\r\nOmit it and rich text still exports deterministically — one line per\r\nparagraph, flagged with "
 							},
 							{
 								"kind": "code",
@@ -31640,7 +31696,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " before emitting and throw on failure\n(default "
+								"text": " before emitting and throw on failure\r\n(default "
 							},
 							{
 								"kind": "code",
@@ -31656,7 +31712,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " coerces any\nnon-finite number to "
+								"text": " coerces any\r\nnon-finite number to "
 							},
 							{
 								"kind": "code",
@@ -31664,7 +31720,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " to keep the output well-formed; enable this to\nfail fast on a malformed/un-validated IR (NaN/Infinity, wrong types) instead\nof silently emitting zeros."
+								"text": " to keep the output well-formed; enable this to\r\nfail fast on a malformed/un-validated IR (NaN/Infinity, wrong types) instead\r\nof silently emitting zeros."
 							}
 						]
 					},
@@ -31769,7 +31825,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Optional suggested remediation or explanation of the degrade applied\n(FR-041, canvas-m3-002) — e.g. \"falls back to the neutral gray fill\"\nor \"sanitize and re-upload as a raster to embed inline\". Additive;\nevery existing warning site keeps working without setting it."
+								"text": "Optional suggested remediation or explanation of the degrade applied\r\n(FR-041, canvas-m3-002) — e.g. \"falls back to the neutral gray fill\"\r\nor \"sanitize and re-upload as a raster to embed inline\". Additive;\r\nevery existing warning site keeps working without setting it."
 							}
 						]
 					},
@@ -31825,7 +31881,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Attribution metadata for a single asset a template references (FR-082,\ncanvas-m6-003) — who created/owns it, and the credit string required when\nusing it. Keyed by asset id in "
+						"text": "Attribution metadata for a single asset a template references (FR-082,\r\ncanvas-m6-003) — who created/owns it, and the credit string required when\r\nusing it. Keyed by asset id in "
 					},
 					{
 						"kind": "inline-tag",
@@ -31835,7 +31891,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ";\ndistinct from "
+						"text": ";\r\ndistinct from "
 					},
 					{
 						"kind": "inline-tag",
@@ -31845,7 +31901,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ", which describes the TEMPLATE's own\nprovenance, not a referenced asset's."
+						"text": ", which describes the TEMPLATE's own\r\nprovenance, not a referenced asset's."
 					}
 				]
 			},
@@ -32207,7 +32263,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Enterprise governance metadata for a template — approval workflows and\norg-level restrictions (FR-082, canvas-m6-003). Deliberately NOT a field on\n"
+						"text": "Enterprise governance metadata for a template — approval workflows and\r\norg-level restrictions (FR-082, canvas-m6-003). Deliberately NOT a field on\r\n"
 					},
 					{
 						"kind": "inline-tag",
@@ -32217,7 +32273,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ": a marketplace/enterprise platform stores\nthis keyed by "
+						"text": ": a marketplace/enterprise platform stores\r\nthis keyed by "
 					},
 					{
 						"kind": "code",
@@ -32225,7 +32281,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " in its OWN store, so a non-enterprise consumer\nnever has to deal with it, and it can never leak into Canvas IR or a\ntemplate's core validated shape."
+						"text": " in its OWN store, so a non-enterprise consumer\r\nnever has to deal with it, and it can never leak into Canvas IR or a\r\ntemplate's core validated shape."
 					}
 				]
 			},
@@ -32450,7 +32506,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " is a\nhuman-facing label (e.g. \"CC-BY-4.0\", \"Marketplace Standard\",\n\"Enterprise Internal\"); the rest is additive over the canvas-m2-001\nplaceholder shape so existing consumers keep working unchanged."
+						"text": " is a\r\nhuman-facing label (e.g. \"CC-BY-4.0\", \"Marketplace Standard\",\r\n\"Enterprise Internal\"); the rest is additive over the canvas-m2-001\r\nplaceholder shape so existing consumers keep working unchanged."
 					}
 				]
 			},
@@ -32776,7 +32832,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Fields every slot kind shares: an id and the stable ID of the node inside\nthe template's "
+						"text": "Fields every slot kind shares: an id and the stable ID of the node inside\r\nthe template's "
 					},
 					{
 						"kind": "inline-tag",
@@ -33038,7 +33094,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " fills\nin when no value is supplied at instantiation; "
+						"text": " fills\r\nin when no value is supplied at instantiation; "
 					},
 					{
 						"kind": "code",
@@ -33046,7 +33102,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " (with no default)\nsurfaces as a structured warning instead of failing silently — see\n"
+						"text": " (with no default)\r\nsurfaces as a structured warning instead of failing silently — see\r\n"
 					},
 					{
 						"kind": "code",
@@ -33882,7 +33938,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\ncovers in-place edits to the CURRENT document (rewrite-copy,\ngenerate-headline, apply-brand); "
+						"text": "\r\ncovers in-place edits to the CURRENT document (rewrite-copy,\r\ngenerate-headline, apply-brand); "
 					},
 					{
 						"kind": "code",
@@ -33890,7 +33946,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " covers ops that generate new\ncandidate pages (prompt-to-design, prompt-to-template,\ngenerate-layout-variants, resize-campaign, generate-social-pack), inserted\nas same-document pages exactly like "
+						"text": " covers ops that generate new\r\ncandidate pages (prompt-to-design, prompt-to-template,\r\ngenerate-layout-variants, resize-campaign, generate-social-pack), inserted\r\nas same-document pages exactly like "
 					},
 					{
 						"kind": "code",
@@ -33906,7 +33962,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\nalready do. Both must validate against the normal "
+						"text": "\r\nalready do. Both must validate against the normal "
 					},
 					{
 						"kind": "code",
@@ -33914,7 +33970,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/command\nschemas before ever reaching a real document (canvas-m4-003)."
+						"text": "/command\r\nschemas before ever reaching a real document (canvas-m4-003)."
 					}
 				]
 			},
@@ -34099,7 +34155,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "'s FR-050 failed-job\ninvariant: "
+						"text": "'s FR-050 failed-job\r\ninvariant: "
 					},
 					{
 						"kind": "code",
@@ -34123,7 +34179,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " ONLY\non an "
+						"text": " ONLY\r\non an "
 					},
 					{
 						"kind": "code",
@@ -34131,7 +34187,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " one — a failed or cancelled design job has no payload to\naccidentally apply, enforced at compile time rather than by convention."
+						"text": " one — a failed or cancelled design job has no payload to\r\naccidentally apply, enforced at compile time rather than by convention."
 					}
 				]
 			},
@@ -34393,7 +34449,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " rather than\ngeneralizing to an "
+						"text": " rather than\r\ngeneralizing to an "
 					},
 					{
 						"kind": "code",
@@ -34401,7 +34457,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "-style object interface\n(canvas-m4-002's recorded decision): "
+						"text": "-style object interface\r\n(canvas-m4-002's recorded decision): "
 					},
 					{
 						"kind": "code",
@@ -34409,7 +34465,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " is already the\nestablished, widely-consumed shape (mock + real Replicate adapter +\n"
+						"text": " is already the\r\nestablished, widely-consumed shape (mock + real Replicate adapter +\r\n"
 					},
 					{
 						"kind": "code",
@@ -34417,7 +34473,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "), and object-ifying it now would be a breaking change to\nthat existing surface for no behavioral gain — capability discovery\n(below) is handled as sibling metadata instead of restructuring the\nfunction itself."
+						"text": "), and object-ifying it now would be a breaking change to\r\nthat existing surface for no behavioral gain — capability discovery\r\n(below) is handled as sibling metadata instead of restructuring the\r\nfunction itself."
 					}
 				]
 			},
@@ -34598,7 +34654,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Status-discriminated (FR-050's failed-job invariant, canvas-m4-001):\n"
+						"text": "Status-discriminated (FR-050's failed-job invariant, canvas-m4-001):\r\n"
 					},
 					{
 						"kind": "code",
@@ -34622,7 +34678,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " ONLY on an\n"
+						"text": " ONLY on an\r\n"
 					},
 					{
 						"kind": "code",
@@ -34630,7 +34686,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " one, so it is a compile error — not just a documented\nconvention — to read an asset id off a job that didn't succeed. This is\nadditive over the pre-M4 flat shape: every existing construction site\nalready paired "
+						"text": " one, so it is a compile error — not just a documented\r\nconvention — to read an asset id off a job that didn't succeed. This is\r\nadditive over the pre-M4 flat shape: every existing construction site\r\nalready paired "
 					},
 					{
 						"kind": "code",
@@ -34646,7 +34702,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " and\n"
+						"text": " and\r\n"
 					},
 					{
 						"kind": "code",
@@ -35380,7 +35436,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ".\n\nFramework-free (no React): a "
+						"text": ".\r\n\r\nFramework-free (no React): a "
 					},
 					{
 						"kind": "code",
@@ -35388,7 +35444,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " describes the effect of a command\nso consumers (autosave, dirty-tracking, collaborative sync) can react without\ndiffing whole IRs. Records are best-effort and derived from the command shape;\n"
+						"text": " describes the effect of a command\r\nso consumers (autosave, dirty-tracking, collaborative sync) can react without\r\ndiffing whole IRs. Records are best-effort and derived from the command shape;\r\n"
 					},
 					{
 						"kind": "code",
@@ -36179,7 +36235,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " and is therefore recursed into by every walker,\nmutation, and serializer. Group was the only container until frame landed;\nanything gated on \"does this node have children\" must test against this union\nrather than "
+						"text": " and is therefore recursed into by every walker,\r\nmutation, and serializer. Group was the only container until frame landed;\r\nanything gated on \"does this node have children\" must test against this union\r\nrather than "
 					},
 					{
 						"kind": "code",
@@ -36219,7 +36275,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "What a document is: an editable design (the default when absent), an\ninstance stamped from a template, or a variant produced for export."
+						"text": "What a document is: an editable design (the default when absent), an\r\ninstance stamped from a template, or a variant produced for export."
 					}
 				]
 			},
@@ -36251,7 +36307,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "One visual effect on a node (§9.4). Serializable and renderer-independent;\nthe list is ordered (shadows render bottom-up, a trailing blur applies to\nthe composited result)."
+						"text": "One visual effect on a node (§9.4). Serializable and renderer-independent;\r\nthe list is ordered (shadows render bottom-up, a trailing blur applies to\r\nthe composited result)."
 					}
 				]
 			},
@@ -36315,7 +36371,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "The headless export job contract (PRD FR-040, §12.7).\n\nNaming: every type here is "
+						"text": "The headless export job contract (PRD FR-040, §12.7).\r\n\r\nNaming: every type here is "
 					},
 					{
 						"kind": "code",
@@ -36323,7 +36379,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " rather than the PRD's\nproposed bare "
+						"text": " rather than the PRD's\r\nproposed bare "
 					},
 					{
 						"kind": "code",
@@ -36347,7 +36403,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\n— those exact names already exist with DIFFERENT meanings in sibling\npackages: "
+						"text": "\r\n— those exact names already exist with DIFFERENT meanings in sibling\r\npackages: "
 					},
 					{
 						"kind": "code",
@@ -36363,7 +36419,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\n("
+						"text": "\r\n("
 					},
 					{
 						"kind": "code",
@@ -36379,7 +36435,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\npipeline) and "
+						"text": "\r\npipeline) and "
 					},
 					{
 						"kind": "code",
@@ -36395,7 +36451,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "/\n"
+						"text": "/\r\n"
 					},
 					{
 						"kind": "code",
@@ -36411,7 +36467,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ", the export popover's\nquality/resolution/stripMetadata knobs and its downloadable-artifact\nshape). The "
+						"text": ", the export popover's\r\nquality/resolution/stripMetadata knobs and its downloadable-artifact\r\nshape). The "
 					},
 					{
 						"kind": "code",
@@ -36419,7 +36475,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " qualifier keeps this headless, worker-facing contract\nunambiguous from both."
+						"text": " qualifier keeps this headless, worker-facing contract\r\nunambiguous from both."
 					}
 				]
 			},
@@ -36465,7 +36521,7 @@
 					[
 						{
 							"kind": "text",
-							"text": "Raw Canvas IR as JSON (B-04, FR-151). Reconciles the vocabulary with the\neditor's built-in JSON exporter, which predates this entry."
+							"text": "Raw Canvas IR as JSON (B-04, FR-151). Reconciles the vocabulary with the\r\neditor's built-in JSON exporter, which predates this entry."
 						}
 					]
 				]
@@ -36489,7 +36545,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " carries the IR\ninline; "
+						"text": " carries the IR\r\ninline; "
 					},
 					{
 						"kind": "code",
@@ -36497,7 +36553,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " is an opaque reference a host/worker resolves —\n"
+						"text": " is an opaque reference a host/worker resolves —\r\n"
 					},
 					{
 						"kind": "code",
@@ -36505,7 +36561,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " never attempts to resolve one itself (see\n"
+						"text": " never attempts to resolve one itself (see\r\n"
 					},
 					{
 						"kind": "inline-tag",
@@ -36683,7 +36739,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "A node fill: a plain CSS color string (back-compat), a structured gradient,\nor a brand-token reference (unresolved until a consumer looks it up)."
+						"text": "A node fill: a plain CSS color string (back-compat), a structured gradient,\r\nor a brand-token reference (unresolved until a consumer looks it up)."
 					}
 				]
 			},
@@ -36793,7 +36849,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " —\nthe pre-B-02 rendering — so existing documents need no migration."
+						"text": " —\r\nthe pre-B-02 rendering — so existing documents need no migration."
 					}
 				]
 			},
@@ -36833,7 +36889,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Semantic invariant validation (P0-6) — deliberately separate from\n"
+						"text": "Semantic invariant validation (P0-6) — deliberately separate from\r\n"
 					},
 					{
 						"kind": "code",
@@ -36849,7 +36905,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " a\nnon-empty string, is "
+						"text": " a\r\nnon-empty string, is "
 					},
 					{
 						"kind": "code",
@@ -36857,7 +36913,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " an array with >= 1 element); it cannot express\nwhole-document facts like \"every node id is unique\" or \"every "
+						"text": " an array with >= 1 element); it cannot express\r\nwhole-document facts like \"every node id is unique\" or \"every "
 					},
 					{
 						"kind": "code",
@@ -36865,7 +36921,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " a\nnode references exists in "
+						"text": " a\r\nnode references exists in "
 					},
 					{
 						"kind": "code",
@@ -36873,7 +36929,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\" — those require walking the tree and\ncross-referencing, which is exactly what this module does.\n\nThis is NOT wired into "
+						"text": "\" — those require walking the tree and\r\ncross-referencing, which is exactly what this module does.\r\n\r\nThis is NOT wired into "
 					},
 					{
 						"kind": "code",
@@ -36897,7 +36953,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " by\ndefault: those stay O(1)-per-field (schema) or O(single-node) (a command),\nnot O(document) on every call. Call "
+						"text": " by\r\ndefault: those stay O(1)-per-field (schema) or O(single-node) (a command),\r\nnot O(document) on every call. Call "
 					},
 					{
 						"kind": "code",
@@ -36905,7 +36961,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " explicitly\nat a trust boundary instead — decoding a persisted/remote document, a CI\nfixture check, or a host's own post-batch assertion — where an O(document)\npass is proportionate to the cost already being paid there."
+						"text": " explicitly\r\nat a trust boundary instead — decoding a persisted/remote document, a CI\r\nfixture check, or a host's own post-batch assertion — where an O(document)\r\npass is proportionate to the cost already being paid there."
 					}
 				]
 			},
@@ -36989,7 +37045,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Every CanvasIR schema version this build can read. Documents at older\nversions are forward-migrated on read ("
+						"text": "Every CanvasIR schema version this build can read. Documents at older\r\nversions are forward-migrated on read ("
 					},
 					{
 						"kind": "code",
@@ -37005,7 +37061,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ");\n"
+						"text": ");\r\n"
 					},
 					{
 						"kind": "code",
@@ -37013,7 +37069,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " — the version this build writes — is always the\nnewest member."
+						"text": " — the version this build writes — is always the\r\nnewest member."
 					}
 				]
 			},
@@ -37399,7 +37455,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ".\nAlias of the shared "
+						"text": ".\r\nAlias of the shared "
 					},
 					{
 						"kind": "inline-tag",
@@ -37409,7 +37465,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " shape (PRD 0012 §9.3) — kept as a\nnamed export for existing consumers."
+						"text": " shape (PRD 0012 §9.3) — kept as a\r\nnamed export for existing consumers."
 					}
 				]
 			},
@@ -37510,7 +37566,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Lay out rich text. Implementations MUST be pure: the same request has to give\nthe same result, or an export will not match what the editor showed."
+						"text": "Lay out rich text. Implementations MUST be pure: the same request has to give\r\nthe same result, or an export will not match what the editor showed."
 					}
 				]
 			},
@@ -37855,7 +37911,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "How a span's glyphs are cased at render time. Purely presentational — the\nspan's "
+						"text": "How a span's glyphs are cased at render time. Purely presentational — the\r\nspan's "
 					},
 					{
 						"kind": "code",
@@ -38083,7 +38139,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " URIs, reference everything else.\n- "
+						"text": " URIs, reference everything else.\r\n- "
 					},
 					{
 						"kind": "code",
@@ -38099,7 +38155,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ").\n- "
+						"text": ").\r\n- "
 					},
 					{
 						"kind": "code",
@@ -38155,7 +38211,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " to a concrete value: a fill (color/gradient) for\na "
+						"text": " to a concrete value: a fill (color/gradient) for\r\na "
 					},
 					{
 						"kind": "code",
@@ -38171,7 +38227,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " token. Core never\ncalls this itself with a default — it is the host's brand-kit lookup,\ninjected. Return "
+						"text": " token. Core never\r\ncalls this itself with a default — it is the host's brand-kit lookup,\r\ninjected. Return "
 					},
 					{
 						"kind": "code",
@@ -38179,7 +38235,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " (or omit the option) to leave a token\nunresolved; the serializer degrades deterministically and records\n"
+						"text": " (or omit the option) to leave a token\r\nunresolved; the serializer degrades deterministically and records\r\n"
 					},
 					{
 						"kind": "code",
@@ -38411,7 +38467,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "'s\n"
+						"text": "'s\r\n"
 					},
 					{
 						"kind": "code",
@@ -38435,7 +38491,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ". Structured (code +\noffending id), not a thrown error — schema validation only checks shape, not\nthese referential invariants, so callers decide how to surface them (block\ninstantiation, warn, etc.)."
+						"text": ". Structured (code +\r\noffending id), not a thrown error — schema validation only checks shape, not\r\nthese referential invariants, so callers decide how to surface them (block\r\ninstantiation, warn, etc.)."
 					}
 				]
 			},
@@ -38473,7 +38529,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\n(FR-021) — one of the six supported kinds, each referencing a stable node ID.\nKind-specific metadata beyond the shared "
+						"text": "\r\n(FR-021) — one of the six supported kinds, each referencing a stable node ID.\r\nKind-specific metadata beyond the shared "
 					},
 					{
 						"kind": "code",
@@ -38489,7 +38545,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " lives on the\nindividual slot interfaces (e.g. "
+						"text": " lives on the\r\nindividual slot interfaces (e.g. "
 					},
 					{
 						"kind": "inline-tag",
@@ -39176,7 +39232,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " when the system\nclipboard is available — lets AnvilKit instances recognize each other's\npayloads (FR-021 cross-editor paste)."
+						"text": " when the system\r\nclipboard is available — lets AnvilKit instances recognize each other's\r\npayloads (FR-021 cross-editor paste)."
 					}
 				]
 			},
@@ -39202,7 +39258,7 @@
 						"content": [
 							{
 								"kind": "text",
-								"text": "Clipboard payload schema + validation (A-03, PRD 0012 §9.2).\n\nCore owns the DATA contract for copy/paste — the payload shape, its\nvalidation (schema, version, depth, node-count, byte-size caps), and the\npaste-side materialization (fresh ids via "
+								"text": "Clipboard payload schema + validation (A-03, PRD 0012 §9.2).\r\n\r\nCore owns the DATA contract for copy/paste — the payload shape, its\r\nvalidation (schema, version, depth, node-count, byte-size caps), and the\r\npaste-side materialization (fresh ids via "
 							},
 							{
 								"kind": "code",
@@ -39210,7 +39266,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ", asset-ref\ncollision resolution). Clipboard BEHAVIOR (system clipboard access,\nfallback store, selection updates) stays in the editor per §20."
+								"text": ", asset-ref\r\ncollision resolution). Clipboard BEHAVIOR (system clipboard access,\r\nfallback store, selection updates) stays in the editor per §20."
 							}
 						]
 					}
@@ -39248,7 +39304,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "FR-101 presets — plain adjustment values, never a separate model. Applying\none REPLACES the node's adjustments with these values."
+						"text": "FR-101 presets — plain adjustment values, never a separate model. Applying\r\none REPLACES the node's adjustments with these values."
 					}
 				]
 			},
@@ -39290,7 +39346,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Production migrations for the core CanvasIR version chain, seeded into\nevery registry so a zero-extension runtime still reads old documents.\n\nv1 → v2 is a pure structural version bump — every valid v1 document is a\nvalid v2 document — so "
+						"text": "Production migrations for the core CanvasIR version chain, seeded into\r\nevery registry so a zero-extension runtime still reads old documents.\r\n\r\nv1 → v2 is a pure structural version bump — every valid v1 document is a\r\nvalid v2 document — so "
 					},
 					{
 						"kind": "code",
@@ -39298,7 +39354,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " only rewrites the version tag; all other\nfields (including unknown ones) ride along via the spread."
+						"text": " only rewrites the version tag; all other\r\nfields (including unknown ones) ride along via the spread."
 					}
 				]
 			},
@@ -39329,7 +39385,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "The CanvasIR schema version this build emits and treats as current.\n\nPolicy: **migrate-on-read, write current.** Anything parsed through\n"
+						"text": "The CanvasIR schema version this build emits and treats as current.\r\n\r\nPolicy: **migrate-on-read, write current.** Anything parsed through\r\n"
 					},
 					{
 						"kind": "code",
@@ -39345,7 +39401,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " comes out at this version, and\nbuilders/serializers emit it. This is the single version literal — the\nstatic schema below and "
+						"text": " comes out at this version, and\r\nbuilders/serializers emit it. This is the single version literal — the\r\nstatic schema below and "
 					},
 					{
 						"kind": "code",
@@ -39353,7 +39409,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " both derive from it, so the\ntwo can never drift."
+						"text": " both derive from it, so the\r\ntwo can never drift."
 					}
 				]
 			},
@@ -39375,7 +39431,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "The initial social size preset catalog (PRD FR-060, §12.8). Each entry's\n"
+						"text": "The initial social size preset catalog (PRD FR-060, §12.8). Each entry's\r\n"
 					},
 					{
 						"kind": "code",
@@ -39391,7 +39447,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " is the platform's own published dimension for that surface\nas of this catalog's "
+						"text": " is the platform's own published dimension for that surface\r\nas of this catalog's "
 					},
 					{
 						"kind": "code",
@@ -39399,7 +39455,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " — cited per-preset below since these\nnumbers drift as platforms redesign their apps; bump a preset's own\n"
+						"text": " — cited per-preset below since these\r\nnumbers drift as platforms redesign their apps; bump a preset's own\r\n"
 					},
 					{
 						"kind": "code",
@@ -39407,7 +39463,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " (never mutate a shipped one in place) when a platform changes its\nspec, so documents pinned to the old preset keep their original size.\n\n"
+						"text": " (never mutate a shipped one in place) when a platform changes its\r\nspec, so documents pinned to the old preset keep their original size.\r\n\r\n"
 					},
 					{
 						"kind": "code",
@@ -39415,7 +39471,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " is only set for full-bleed short-form video surfaces where the\nhost app's own chrome (profile handle, caption, action rail) is known to\noverlap the canvas edges — it is deliberately omitted where the format has\nno such UI overlap (feed photos, thumbnails, banners)."
+						"text": " is only set for full-bleed short-form video surfaces where the\r\nhost app's own chrome (profile handle, caption, action rail) is known to\r\noverlap the canvas edges — it is deliberately omitted where the format has\r\nno such UI overlap (feed photos, thumbnails, banners)."
 					}
 				]
 			},
@@ -40796,7 +40852,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "Loose (unknown-key-preserving) schema, matching the IR validators'\nconvention so compatible unknown fields survive a copy/paste round-trip\nbetween mixed editor versions."
+						"text": "Loose (unknown-key-preserving) schema, matching the IR validators'\r\nconvention so compatible unknown fields survive a copy/paste round-trip\r\nbetween mixed editor versions."
 					}
 				]
 			},
@@ -42653,7 +42709,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "A fill is a plain color string (back-compat), a structured gradient, or an\nunresolved brand-token reference."
+						"text": "A fill is a plain color string (back-compat), a structured gradient, or an\r\nunresolved brand-token reference."
 					}
 				]
 			},
@@ -43582,7 +43638,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " must be bound\nto whichever node union is being assembled — the static one below, or the\nextension-aware one "
+						"text": " must be bound\r\nto whichever node union is being assembled — the static one below, or the\r\nextension-aware one "
 					},
 					{
 						"kind": "code",
@@ -46015,7 +46071,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ", split out for the same reason\nas "
+						"text": ", split out for the same reason\r\nas "
 					},
 					{
 						"kind": "inline-tag",
@@ -46033,7 +46089,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " must bind to whichever page schema is\nbeing assembled (static vs. extension-aware), while every other top-level\nfield must validate identically either way (P0-3)."
+						"text": " must bind to whichever page schema is\r\nbeing assembled (static vs. extension-aware), while every other top-level\r\nfield must validate identically either way (P0-3)."
 					}
 				]
 			},
@@ -47949,7 +48005,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "'s own (non-recursive) fields, split out for the same reason as\n"
+						"text": "'s own (non-recursive) fields, split out for the same reason as\r\n"
 					},
 					{
 						"kind": "code",
@@ -47965,7 +48021,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " must bind to whichever node union is being\nassembled — the static one below, or the extension-aware one\n"
+						"text": " must bind to whichever node union is being\r\nassembled — the static one below, or the extension-aware one\r\n"
 					},
 					{
 						"kind": "code",
@@ -47973,7 +48029,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " builds — and every OTHER page field (notably\n"
+						"text": " builds — and every OTHER page field (notably\r\n"
 					},
 					{
 						"kind": "code",
@@ -47989,7 +48045,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ") must not drift between the two. Both paths\nspread this shape rather than re-declaring it (P0-3)."
+						"text": ") must not drift between the two. Both paths\r\nspread this shape rather than re-declaring it (P0-3)."
 					}
 				]
 			},
@@ -54317,7 +54373,7 @@
 					},
 					{
 						"kind": "text",
-						"text": "\nfield for inline SVG text to occupy, so raw markup has nowhere to go even\nunder this schema's loose-object (unknown-key-preserving) posture. No\nrenderer in this package ever reads an unknown key, so an attacker-supplied\nextra field survives as inert data, never as executed markup."
+						"text": "\r\nfield for inline SVG text to occupy, so raw markup has nowhere to go even\r\nunder this schema's loose-object (unknown-key-preserving) posture. No\r\nrenderer in this package ever reads an unknown key, so an attacker-supplied\r\nextra field survives as inert data, never as executed markup."
 					}
 				]
 			},
@@ -54825,7 +54881,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " independently of normal Canvas\nIR validation — template-only fields ("
+						"text": " independently of normal Canvas\r\nIR validation — template-only fields ("
 					},
 					{
 						"kind": "code",
@@ -54857,7 +54913,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ",\n"
+						"text": ",\r\n"
 					},
 					{
 						"kind": "code",
@@ -54889,7 +54945,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ") are never accepted on\n"
+						"text": ") are never accepted on\r\n"
 					},
 					{
 						"kind": "code",
@@ -56587,7 +56643,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "The FR-121 compatible-property matrix: which style keys each node kind can\nreceive. Kinds absent from a key's list IGNORE that key on paste (reported,\nnever blocking). Rich text is deliberately base-only — its typography and\nfills live on spans, out of scope for node-level style transfer."
+						"text": "The FR-121 compatible-property matrix: which style keys each node kind can\r\nreceive. Kinds absent from a key's list IGNORE that key on paste (reported,\r\nnever blocking). Rich text is deliberately base-only — its typography and\r\nfills live on spans, out of scope for node-level style transfer."
 					}
 				]
 			},
@@ -57303,7 +57359,7 @@
 				"summary": [
 					{
 						"kind": "text",
-						"text": "A rich-text span. Every style field is optional — an omitted field means\n\"inherit from the host's default\", which is resolved at measure/render time,\nnot here. "
+						"text": "A rich-text span. Every style field is optional — an omitted field means\r\n\"inherit from the host's default\", which is resolved at measure/render time,\r\nnot here. "
 					},
 					{
 						"kind": "code",
@@ -57311,7 +57367,7 @@
 					},
 					{
 						"kind": "text",
-						"text": " may legitimately be empty (an empty span is how an editor\nrepresents a caret sitting in a freshly-split paragraph)."
+						"text": " may legitimately be empty (an empty span is how an editor\r\nrepresents a caret sitting in a freshly-split paragraph)."
 					}
 				]
 			},
@@ -58274,7 +58330,7 @@
 					},
 					{
 						"kind": "text",
-						"text": ".\nA marketplace/enterprise platform validates and stores this separately,\nkeyed by "
+						"text": ".\r\nA marketplace/enterprise platform validates and stores this separately,\r\nkeyed by "
 					},
 					{
 						"kind": "code",
@@ -58841,7 +58897,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Per-rect displacement (along the edge's axis) to align every rect to the\nselection's bounding box: left/right/hcenter move on X, top/bottom/vcenter on\nY. Returned array is index-aligned with "
+								"text": "Per-rect displacement (along the edge's axis) to align every rect to the\r\nselection's bounding box: left/right/hcenter move on X, top/bottom/vcenter on\r\nY. Returned array is index-aligned with "
 							},
 							{
 								"kind": "code",
@@ -58915,7 +58971,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Links every literal (non-token) fill/stroke/background that matches a\nbrand color BY VALUE (case-insensitive) to that color's "
+								"text": "Links every literal (non-token) fill/stroke/background that matches a\r\nbrand color BY VALUE (case-insensitive) to that color's "
 							},
 							{
 								"kind": "code",
@@ -58923,7 +58979,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ", so\nfuture brand-color edits propagate to it. Colors with no matching brand\nswatch are left untouched — this transform never invents a color choice\nfor a node, only formalizes an already-correct one into a token reference."
+								"text": ", so\r\nfuture brand-color edits propagate to it. Colors with no matching brand\r\nswatch are left untouched — this transform never invents a color choice\r\nfor a node, only formalizes an already-correct one into a token reference."
 							}
 						]
 					},
@@ -58995,7 +59051,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Apply a 3x4 color matrix (0..1 space) to interleaved RGBA pixel bytes in\nplace — the editor's Konva filter delegates here so the canvas applies the\nexact matrix the SVG export embeds. Alpha is untouched."
+								"text": "Apply a 3x4 color matrix (0..1 space) to interleaved RGBA pixel bytes in\r\nplace — the editor's Konva filter delegates here so the canvas applies the\r\nexact matrix the SVG export embeds. Alpha is untouched."
 							}
 						]
 					},
@@ -59124,7 +59180,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Apply many commands as one reversible transaction — all-or-nothing, in\norder, in a single fold over a local "
+								"text": "Apply many commands as one reversible transaction — all-or-nothing, in\r\norder, in a single fold over a local "
 							},
 							{
 								"kind": "code",
@@ -59140,7 +59196,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " is\nnever mutated; a throw from any sub-command propagates before "
+								"text": " is\r\nnever mutated; a throw from any sub-command propagates before "
 							},
 							{
 								"kind": "code",
@@ -59148,7 +59204,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "/the\ninverses/records are used, so nothing partial escapes.\n\nEach command's change record is derived from "
+								"text": "/the\r\ninverses/records are used, so nothing partial escapes.\r\n\r\nEach command's change record is derived from "
 							},
 							{
 								"kind": "code",
@@ -59156,7 +59212,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " as it stood\nimmediately BEFORE that command applied (not the transaction's original\n"
+								"text": " as it stood\r\nimmediately BEFORE that command applied (not the transaction's original\r\n"
 							},
 							{
 								"kind": "code",
@@ -59164,7 +59220,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ") — required for commands whose record resolution depends on IR state a\nprior command in the same transaction just created (e.g. "
+								"text": ") — required for commands whose record resolution depends on IR state a\r\nprior command in the same transaction just created (e.g. "
 							},
 							{
 								"kind": "code",
@@ -59172,7 +59228,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\nfollowing the "
+								"text": "\r\nfollowing the "
 							},
 							{
 								"kind": "code",
@@ -59396,7 +59452,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " that exports every variant page\nfrom a "
+								"text": " that exports every variant page\r\nfrom a "
 							},
 							{
 								"kind": "inline-tag",
@@ -59406,7 +59462,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " call in a single batch (FR-061's \"export\njob can export all variants in one batch\"). "
+								"text": " call in a single batch (FR-061's \"export\r\njob can export all variants in one batch\"). "
 							},
 							{
 								"kind": "code",
@@ -59414,7 +59470,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " must already contain\n"
+								"text": " must already contain\r\n"
 							},
 							{
 								"kind": "code",
@@ -59430,7 +59486,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " first) — this only assembles\nthe request; executing a job is a worker/host concern (canvas-m3-001), not\n"
+								"text": " first) — this only assembles\r\nthe request; executing a job is a worker/host concern (canvas-m3-001), not\r\n"
 							},
 							{
 								"kind": "code",
@@ -59563,7 +59619,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " when there is no\nmeaningful granular record (a "
+								"text": " when there is no\r\nmeaningful granular record (a "
 							},
 							{
 								"kind": "code",
@@ -59571,7 +59627,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " — its sub-commands are mapped\nindividually by "
+								"text": " — its sub-commands are mapped\r\nindividually by "
 							},
 							{
 								"kind": "code",
@@ -59651,7 +59707,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\nfor a "
+								"text": "\r\nfor a "
 							},
 							{
 								"kind": "code",
@@ -59675,7 +59731,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " maps sub-commands\nindividually). "
+								"text": " maps sub-commands\r\nindividually). "
 							},
 							{
 								"kind": "code",
@@ -59683,7 +59739,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " must be the pre-mutation IR so page/node lookups for\ncommands that omit "
+								"text": " must be the pre-mutation IR so page/node lookups for\r\ncommands that omit "
 							},
 							{
 								"kind": "code",
@@ -59780,7 +59836,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " when\nevery color adjustment is neutral (blur alone never needs a matrix)."
+								"text": " when\r\nevery color adjustment is neutral (blur alone never needs a matrix)."
 							}
 						]
 					},
@@ -59851,7 +59907,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ",\nevenly spaced starting at the top and going clockwise (SVG's y-down\nconvention). The ellipse "
+								"text": ",\r\nevenly spaced starting at the top and going clockwise (SVG's y-down\r\nconvention). The ellipse "
 							},
 							{
 								"kind": "code",
@@ -59859,7 +59915,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " inscribes need not be a circle — a\nnon-square box stretches the polygon along the wider axis."
+								"text": " inscribes need not be a circle — a\r\nnon-square box stretches the polygon along the wider axis."
 							}
 						]
 					},
@@ -59918,7 +59974,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Compute snap deltas + smart-guide overlays for a candidate rect.\n\nEdge-snap-to-other-nodes beats grid snap when both match within threshold;\ngrid only applies when no edge snap is available on that axis. Guides are\nonly emitted for edge snaps, never for grid snaps."
+								"text": "Compute snap deltas + smart-guide overlays for a candidate rect.\r\n\r\nEdge-snap-to-other-nodes beats grid snap when both match within threshold;\r\ngrid only applies when no edge snap is available on that axis. Guides are\r\nonly emitted for edge snaps, never for grid snaps."
 							}
 						]
 					},
@@ -59979,7 +60035,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " outer tips alternating\nwith "
+								"text": " outer tips alternating\r\nwith "
 							},
 							{
 								"kind": "code",
@@ -59995,7 +60051,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " of the outer radius\n(0 collapses the inner ring to the center; 1 makes every vertex outer,\ntracing a regular "
+								"text": " of the outer radius\r\n(0 collapses the inner ring to the center; 1 makes every vertex outer,\r\ntracing a regular "
 							},
 							{
 								"kind": "code",
@@ -60003,7 +60059,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "-gon whose extra vertices sit exactly on its\nedges' midpoints)."
+								"text": "-gon whose extra vertices sit exactly on its\r\nedges' midpoints)."
 							}
 						]
 					},
@@ -60073,7 +60129,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "FR-121: intersect a style payload with the target's compatible keys. Pure —\nthe "
+								"text": "FR-121: intersect a style payload with the target's compatible keys. Pure —\r\nthe "
 							},
 							{
 								"kind": "code",
@@ -60081,7 +60137,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " command and any pre-commit UI reporting both call\nthis, so what the command applies and what the UI reports never diverge.\nApplying "
+								"text": " command and any pre-commit UI reporting both call\r\nthis, so what the command applies and what the UI reports never diverge.\r\nApplying "
 							},
 							{
 								"kind": "code",
@@ -60097,7 +60153,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " so the target has one\nsource of truth afterwards."
+								"text": " so the target has one\r\nsource of truth afterwards."
 							}
 						]
 					},
@@ -60242,7 +60298,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Resolve a runtime from zero or more extensions. The zero-extension result is\nidentical to the static exports; registering custom node kinds rebuilds the\nschema pair to include them."
+								"text": "Resolve a runtime from zero or more extensions. The zero-extension result is\r\nidentical to the static exports; registering custom node kinds rebuilds the\r\nschema pair to include them."
 							}
 						]
 					},
@@ -60295,7 +60351,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "A minimal, framework-free pub/sub for change batches. Works outside React\n(e.g. in the host's collab/autosave plugins)."
+								"text": "A minimal, framework-free pub/sub for change batches. Works outside React\r\n(e.g. in the host's collab/autosave plugins)."
 							}
 						]
 					},
@@ -60619,7 +60675,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\nadds extension steps (re-registering a "
+								"text": "\r\nadds extension steps (re-registering a "
 							},
 							{
 								"kind": "code",
@@ -60657,7 +60713,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Create a node-kind registry, optionally seeded with built-in definitions.\nSeeding is exempt from the shadow guard; later "
+								"text": "Create a node-kind registry, optionally seeded with built-in definitions.\r\nSeeding is exempt from the shadow guard; later "
 							},
 							{
 								"kind": "code",
@@ -60665,7 +60721,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " calls are not —\nmirroring the built-in command-type protection in "
+								"text": " calls are not —\r\nmirroring the built-in command-type protection in "
 							},
 							{
 								"kind": "code",
@@ -60899,7 +60955,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ", so the two agree unless\na caller deliberately separates them — see "
+								"text": ", so the two agree unless\r\na caller deliberately separates them — see "
 							},
 							{
 								"kind": "inline-tag",
@@ -60909,7 +60965,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " for why\nboth exist.\n\n"
+								"text": " for why\r\nboth exist.\r\n\r\n"
 							},
 							{
 								"kind": "code",
@@ -60925,7 +60981,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ": an empty\narray has no caret position, so an editor would have to special-case it before\nthe user can type. One empty paragraph is the natural \"empty text block\"."
+								"text": ": an empty\r\narray has no caret position, so an editor would have to special-case it before\r\nthe user can type. One empty paragraph is the natural \"empty text block\"."
 							}
 						]
 					},
@@ -61134,7 +61190,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Decompose an affine matrix back into translate/rotate/skew/scale components,\nthe exact inverse of "
+								"text": "Decompose an affine matrix back into translate/rotate/skew/scale components,\r\nthe exact inverse of "
 							},
 							{
 								"kind": "inline-tag",
@@ -61144,7 +61200,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " (and of Konva's\n"
+								"text": " (and of Konva's\r\n"
 							},
 							{
 								"kind": "code",
@@ -61160,7 +61216,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ",\n"
+								"text": ",\r\n"
 							},
 							{
 								"kind": "code",
@@ -61176,7 +61232,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "; for the general case the\nrecomposed matrix "
+								"text": "; for the general case the\r\nrecomposed matrix "
 							},
 							{
 								"kind": "code",
@@ -61245,7 +61301,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ") to even out the gaps between rects,\nkeeping the first and last (by position) fixed — like Figma's \"distribute\nspacing\". Returned array is index-aligned with "
+								"text": ") to even out the gaps between rects,\r\nkeeping the first and last (by position) fixed — like Figma's \"distribute\r\nspacing\". Returned array is index-aligned with "
 							},
 							{
 								"kind": "code",
@@ -61253,7 +61309,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "; needs ≥3 rects,\notherwise all zeros."
+								"text": "; needs ≥3 rects,\r\notherwise all zeros."
 							}
 						]
 					},
@@ -61575,7 +61631,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " per line.\n\nWithout a "
+								"text": " per line.\r\n\r\nWithout a "
 							},
 							{
 								"kind": "code",
@@ -61583,7 +61639,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " core cannot know where lines break (it has no font\nmetrics), so it lays out ONE LINE PER PARAGRAPH and flags the output with\n"
+								"text": " core cannot know where lines break (it has no font\r\nmetrics), so it lays out ONE LINE PER PARAGRAPH and flags the output with\r\n"
 							},
 							{
 								"kind": "code",
@@ -61591,7 +61647,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ". The result is still fully deterministic — it is\nsimply un-wrapped. With a measurer, the measured line boxes drive the tspan\npositions and the two paths differ only in where the breaks land.\n\nPer-span styling rides on nested "
+								"text": ". The result is still fully deterministic — it is\r\nsimply un-wrapped. With a measurer, the measured line boxes drive the tspan\r\npositions and the two paths differ only in where the breaks land.\r\n\r\nPer-span styling rides on nested "
 							},
 							{
 								"kind": "code",
@@ -61607,7 +61663,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\nelement carrying the resolved defaults."
+								"text": "\r\nelement carrying the resolved defaults."
 							}
 						]
 					},
@@ -61808,7 +61864,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " element or a CSS value.\nUsed for "
+								"text": " element or a CSS value.\r\nUsed for "
 							},
 							{
 								"kind": "code",
@@ -61889,7 +61945,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "/newlines (so\nit cannot break out of the "
+								"text": "/newlines (so\r\nit cannot break out of the "
 							},
 							{
 								"kind": "code",
@@ -61897,7 +61953,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " element) and the structural CSS breakout\ncharacters "
+								"text": " element) and the structural CSS breakout\r\ncharacters "
 							},
 							{
 								"kind": "code",
@@ -61921,7 +61977,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " (so it cannot terminate the declaration/rule and\ninject arbitrary CSS — e.g. "
+								"text": " (so it cannot terminate the declaration/rule and\r\ninject arbitrary CSS — e.g. "
 							},
 							{
 								"kind": "code",
@@ -61929,7 +61985,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "), while\npreserving the "
+								"text": "), while\r\npreserving the "
 							},
 							{
 								"kind": "code",
@@ -62035,7 +62091,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "FR-120: extract the portable style of a node — only keys its kind owns per\nthe matrix, only values actually present. A frame's "
+								"text": "FR-120: extract the portable style of a node — only keys its kind owns per\r\nthe matrix, only values actually present. A frame's "
 							},
 							{
 								"kind": "code",
@@ -62043,7 +62099,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " extracts\nas "
+								"text": " extracts\r\nas "
 							},
 							{
 								"kind": "code",
@@ -62357,7 +62413,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " and reports every unresolved brand-token reference,\nforbidden color/font (per "
+								"text": " and reports every unresolved brand-token reference,\r\nforbidden color/font (per "
 							},
 							{
 								"kind": "code",
@@ -62365,7 +62421,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "), and off-brand literal color/font\nvalue (a literal that matches neither a brand color/font nor an\n"
+								"text": "), and off-brand literal color/font\r\nvalue (a literal that matches neither a brand color/font nor an\r\n"
 							},
 							{
 								"kind": "code",
@@ -62373,7 +62429,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " rule — only raised when the brand kit actually defines\ncolors/fonts to compare against, so an empty kit never floods the report).\nPure and read-only: never mutates "
+								"text": " rule — only raised when the brand kit actually defines\r\ncolors/fonts to compare against, so an empty kit never floods the report).\r\nPure and read-only: never mutates "
 							},
 							{
 								"kind": "code",
@@ -62447,7 +62503,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ". Nodes are taken in paint order\n(later siblings paint on top, matching "
+								"text": ". Nodes are taken in paint order\r\n(later siblings paint on top, matching "
 							},
 							{
 								"kind": "code",
@@ -62455,7 +62511,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "), so the last\nmatch wins. Returns null when nothing is hit."
+								"text": "), so the last\r\nmatch wins. Returns null when nothing is hit."
 							}
 						]
 					},
@@ -62607,7 +62663,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " into a fresh, normal Canvas IR\ndocument (FR-022): every node/page gets a brand-new id (via "
+								"text": " into a fresh, normal Canvas IR\r\ndocument (FR-022): every node/page gets a brand-new id (via "
 							},
 							{
 								"kind": "code",
@@ -62615,7 +62671,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ", so\nthe same template can be instantiated any number of times without id\ncollisions), "
+								"text": ", so\r\nthe same template can be instantiated any number of times without id\r\ncollisions), "
 							},
 							{
 								"kind": "code",
@@ -62623,7 +62679,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " are resolved and stamped onto their slots' target\nnodes, and "
+								"text": " are resolved and stamped onto their slots' target\r\nnodes, and "
 							},
 							{
 								"kind": "code",
@@ -62631,7 +62687,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " are never mutated regardless of what a variable\nwould otherwise write there.\n\nDeterministic: given the same "
+								"text": " are never mutated regardless of what a variable\r\nwould otherwise write there.\r\n\r\nDeterministic: given the same "
 							},
 							{
 								"kind": "code",
@@ -62647,7 +62703,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ", and fresh\n"
+								"text": ", and fresh\r\n"
 							},
 							{
 								"kind": "code",
@@ -62663,7 +62719,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " instances producing the same sequence of values,\ntwo calls produce deep-equal output."
+								"text": " instances producing the same sequence of values,\r\ntwo calls produce deep-equal output."
 							}
 						]
 					},
@@ -62722,7 +62778,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Invert an affine matrix. Throws if the matrix is singular (its determinant is\nzero or non-finite), e.g. a zero-scale transform that collapses a dimension."
+								"text": "Invert an affine matrix. Throws if the matrix is singular (its determinant is\r\nzero or non-finite), e.g. a zero-scale transform that collapses a dimension."
 							}
 						]
 					},
@@ -62917,7 +62973,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " when the\nquestion is \"does this node have children\"; use this one only when the\nbehaviour is specific to groups (e.g. ungrouping, which a frame does not\nsupport)."
+								"text": " when the\r\nquestion is \"does this node have children\"; use this one only when the\r\nbehaviour is specific to groups (e.g. ungrouping, which a frame does not\r\nsupport)."
 							}
 						]
 					},
@@ -63077,7 +63133,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ". The single source of truth for\nthis check — canvas-m2-003's "
+								"text": ". The single source of truth for\r\nthis check — canvas-m2-003's "
 							},
 							{
 								"kind": "code",
@@ -63085,7 +63141,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " and any editor-side\n\"can I edit this node\" gate must call this rather than re-reading\n"
+								"text": " and any editor-side\r\n\"can I edit this node\" gate must call this rather than re-reading\r\n"
 							},
 							{
 								"kind": "code",
@@ -63268,7 +63324,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " string — the one free-text field that\nflows into an attribute. Rejects anything outside path commands, numbers,\nseparators, and scientific-notation exponents."
+								"text": " string — the one free-text field that\r\nflows into an attribute. Rejects anything outside path commands, numbers,\r\nseparators, and scientific-notation exponents."
 							}
 						]
 					},
@@ -63309,7 +63365,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Nodes selected by a marquee rectangle (in world coordinates). Uses each\nnode's rotation-aware world AABB; "
+								"text": "Nodes selected by a marquee rectangle (in world coordinates). Uses each\r\nnode's rotation-aware world AABB; "
 							},
 							{
 								"kind": "code",
@@ -63317,7 +63373,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " switches from any-overlap to\nfully-enclosed. Returns matches in input order."
+								"text": " switches from any-overlap to\r\nfully-enclosed. Returns matches in input order."
 							}
 						]
 					},
@@ -63407,7 +63463,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " (FR-021):\n\n- Every node subtree gets fresh ids via the shared "
+								"text": " (FR-021):\r\n\r\n- Every node subtree gets fresh ids via the shared "
 							},
 							{
 								"kind": "code",
@@ -63415,7 +63471,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ".\n- Same-document paste ("
+								"text": ".\r\n- Same-document paste ("
 							},
 							{
 								"kind": "code",
@@ -63423,7 +63479,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "): nodes keep their\n  asset references; nothing is added to the asset table.\n- Cross-document paste: each payload asset is copied into the target unless\n  an IDENTICAL entry already exists; an id collision with a DIFFERENT asset\n  is re-keyed and every "
+								"text": "): nodes keep their\r\n  asset references; nothing is added to the asset table.\r\n- Cross-document paste: each payload asset is copied into the target unless\r\n  an IDENTICAL entry already exists; an id collision with a DIFFERENT asset\r\n  is re-keyed and every "
 							},
 							{
 								"kind": "code",
@@ -63439,7 +63495,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " reference in the pasted\n  nodes is rewritten. Transferring asset BINARIES between hosts stays a\n  host concern — only refs travel."
+								"text": " reference in the pasted\r\n  nodes is rewritten. Transferring asset BINARIES between hosts stays a\r\n  host concern — only refs travel."
 							}
 						]
 					},
@@ -63511,7 +63567,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Parse + forward-migrate an untrusted/persisted IR to the current schema\nversion, then validate it. This is the single seam for schema evolution.\n\nPolicy: **migrate-on-read, write current** ("
+								"text": "Parse + forward-migrate an untrusted/persisted IR to the current schema\r\nversion, then validate it. This is the single seam for schema evolution.\r\n\r\nPolicy: **migrate-on-read, write current** ("
 							},
 							{
 								"kind": "code",
@@ -63519,7 +63575,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "). A\nsupported older version (see "
+								"text": "). A\r\nsupported older version (see "
 							},
 							{
 								"kind": "code",
@@ -63527,7 +63583,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ") is upgraded step by\nstep before the "
+								"text": ") is upgraded step by\r\nstep before the "
 							},
 							{
 								"kind": "code",
@@ -63535,7 +63591,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ", so persisted and peer-supplied\ndocuments (e.g. collaborative editing) keep loading as the schema grows —\nand always come out stamped with the current version. An unsupported\nversion is rejected with a clear, actionable error rather than a cryptic\nschema failure.\n\nPrefer this over a bare "
+								"text": ", so persisted and peer-supplied\r\ndocuments (e.g. collaborative editing) keep loading as the schema grows —\r\nand always come out stamped with the current version. An unsupported\r\nversion is rejected with a clear, actionable error rather than a cryptic\r\nschema failure.\r\n\r\nPrefer this over a bare "
 							},
 							{
 								"kind": "code",
@@ -63543,7 +63599,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " when decoding persisted or\npeer-supplied IR."
+								"text": " when decoding persisted or\r\npeer-supplied IR."
 							}
 						]
 					},
@@ -63652,7 +63708,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " — i.e.\n"
+								"text": " — i.e.\r\n"
 							},
 							{
 								"kind": "code",
@@ -63660,7 +63716,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ".\nUse "
+								"text": ".\r\nUse "
 							},
 							{
 								"kind": "code",
@@ -63668,7 +63724,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " to compose a child transform\ninto its parent's coordinate space."
+								"text": " to compose a child transform\r\ninto its parent's coordinate space."
 							}
 						]
 					},
@@ -63726,7 +63782,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "World-space axis-aligned bounding box of a node, accounting for its\nrotation/scale/skew. Pass "
+								"text": "World-space axis-aligned bounding box of a node, accounting for its\r\nrotation/scale/skew. Pass "
 							},
 							{
 								"kind": "code",
@@ -63734,7 +63790,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " to place a node nested under a\ntransformed ancestor; omit it for top-level (world-space) nodes."
+								"text": " to place a node nested under a\r\ntransformed ancestor; omit it for top-level (world-space) nodes."
 							}
 						]
 					},
@@ -63809,7 +63865,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " uniformly to\nevery "
+								"text": " uniformly to\r\nevery "
 							},
 							{
 								"kind": "code",
@@ -63837,7 +63893,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ",\nwhich only formalize an already-matching value, this one overwrites —\n\"normalize\" means bringing every text element onto the same scale, not\nlinking an existing coincidental match). Font family is untouched — that's\n"
+								"text": ",\r\nwhich only formalize an already-matching value, this one overwrites —\r\n\"normalize\" means bringing every text element onto the same scale, not\r\nlinking an existing coincidental match). Font family is untouched — that's\r\n"
 							},
 							{
 								"kind": "inline-tag",
@@ -63927,7 +63983,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " when the scheme is not allowlisted.\nScheme-less (relative or protocol-relative "
+								"text": " when the scheme is not allowlisted.\r\nScheme-less (relative or protocol-relative "
 							},
 							{
 								"kind": "code",
@@ -63943,7 +63999,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " are\nallowed; "
+								"text": " are\r\nallowed; "
 							},
 							{
 								"kind": "code",
@@ -63959,7 +64015,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " is set and\nthe payload is a known raster image type; everything else is dropped."
+								"text": " is set and\r\nthe payload is a known raster image type; everything else is dropped."
 							}
 						]
 					},
@@ -64137,7 +64193,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Parse serialized clipboard text (byte-size cap → JSON → full validation).\nThis is the entry point for text arriving from the SYSTEM clipboard —\ntreat it as hostile (PRD §14.1)."
+								"text": "Parse serialized clipboard text (byte-size cap → JSON → full validation).\r\nThis is the entry point for text arriving from the SYSTEM clipboard —\r\ntreat it as hostile (PRD §14.1)."
 							}
 						]
 					},
@@ -64188,7 +64244,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " falls inside a node's box, accounting for rotation/scale/\nskew. A degenerate (zero-area / non-invertible) node contains nothing."
+								"text": " falls inside a node's box, accounting for rotation/scale/\r\nskew. A degenerate (zero-area / non-invertible) node contains nothing."
 							}
 						]
 					},
@@ -64262,7 +64318,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Deep-copy a node subtree and give every node a brand-new id, preserving\nhierarchy, order, and every other field (M0-05, PRD 0012 §9.2). This is THE\nshared id-regeneration primitive behind duplicate, paste, page cloning, and\ntemplate instantiation — do not hand-roll another remap loop.\n\n- Non-mutating: the input subtree is "
+								"text": "Deep-copy a node subtree and give every node a brand-new id, preserving\r\nhierarchy, order, and every other field (M0-05, PRD 0012 §9.2). This is THE\r\nshared id-regeneration primitive behind duplicate, paste, page cloning, and\r\ntemplate instantiation — do not hand-roll another remap loop.\r\n\r\n- Non-mutating: the input subtree is "
 							},
 							{
 								"kind": "code",
@@ -64270,7 +64326,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "d first.\n- Pre-order assignment with the same "
+								"text": "d first.\r\n- Pre-order assignment with the same "
 							},
 							{
 								"kind": "inline-tag",
@@ -64280,7 +64336,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " guard as the\n  walkers ("
+								"text": " guard as the\r\n  walkers ("
 							},
 							{
 								"kind": "inline-tag",
@@ -64290,7 +64346,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " on hostile depth).\n- Returns the old→new "
+								"text": " on hostile depth).\r\n- Returns the old→new "
 							},
 							{
 								"kind": "inline-tag",
@@ -64300,7 +64356,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " so callers can\n  translate external references (locked-id lists, selections, asset keys)."
+								"text": " so callers can\r\n  translate external references (locked-id lists, selections, asset keys)."
 							}
 						]
 					},
@@ -64492,7 +64548,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " in one immutable pass. The\nbuilding block the command layer uses for batch sibling edits (group /\nungroup) so they don't pay one full tree clone per affected child."
+								"text": " in one immutable pass. The\r\nbuilding block the command layer uses for batch sibling edits (group /\r\nungroup) so they don't pay one full tree clone per affected child."
 							}
 						]
 					},
@@ -64550,7 +64606,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Links every literal font-family that matches a brand font BY NAME\n(case-insensitive) to that font's "
+								"text": "Links every literal font-family that matches a brand font BY NAME\r\n(case-insensitive) to that font's "
 							},
 							{
 								"kind": "code",
@@ -64566,7 +64622,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " spans are\nout of scope here (canvas-m1-009's MVP applies span-level style uniformly\nvia the editor, not per-property core transforms) — this covers "
+								"text": " spans are\r\nout of scope here (canvas-m1-009's MVP applies span-level style uniformly\r\nvia the editor, not per-property core transforms) — this covers "
 							},
 							{
 								"kind": "code",
@@ -64574,7 +64630,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\nnodes, the common case."
+								"text": "\r\nnodes, the common case."
 							}
 						]
 					},
@@ -64646,7 +64702,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Fills every EMPTY logo-kind frame placeholder with the brand's logo (the\nfirst asset tagged "
+								"text": "Fills every EMPTY logo-kind frame placeholder with the brand's logo (the\r\nfirst asset tagged "
 							},
 							{
 								"kind": "code",
@@ -64654,7 +64710,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ", else the first logo asset). A\nplaceholder that already has an "
+								"text": ", else the first logo asset). A\r\nplaceholder that already has an "
 							},
 							{
 								"kind": "code",
@@ -64670,7 +64726,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " is left alone —\nthis only fills gaps, it never replaces a deliberate choice."
+								"text": " is left alone —\r\nthis only fills gaps, it never replaces a deliberate choice."
 							}
 						]
 					},
@@ -64742,7 +64798,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Deterministically replay a sequence of change records onto an initial IR by\nre-applying each record's original "
+								"text": "Deterministically replay a sequence of change records onto an initial IR by\r\nre-applying each record's original "
 							},
 							{
 								"kind": "code",
@@ -64758,7 +64814,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ".\nIgnores each command's own inverse; only the resulting "
+								"text": ".\r\nIgnores each command's own inverse; only the resulting "
 							},
 							{
 								"kind": "code",
@@ -64845,7 +64901,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Generates one new, fully editable page per preset from an existing page's\ncontent (FR-061, canvas-m3-007). Resolves PRD open question 3: variants are\npages **within the same document**, not separate documents — this keeps a\ncampaign's variants as one undo-able, exportable unit and matches how\n"
+								"text": "Generates one new, fully editable page per preset from an existing page's\r\ncontent (FR-061, canvas-m3-007). Resolves PRD open question 3: variants are\r\npages **within the same document**, not separate documents — this keeps a\r\ncampaign's variants as one undo-able, exportable unit and matches how\r\n"
 							},
 							{
 								"kind": "code",
@@ -64861,7 +64917,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " for templates\n(canvas-m2-003). A separate-document target was considered and rejected for\nthis MVP; nothing here forecloses adding it later if a real product need\nsurfaces.\n\nContent is copied as-is at each preset's dimensions — there is no automatic\nreflow/rescale. The acceptance criteria call for \"fully editable, manually\nadjustable\" variants, not automatic layout adaptation; a user (or a future\nFR) repositions/rescales content to fit each target size after generation.\n\nPure: "
+								"text": " for templates\r\n(canvas-m2-003). A separate-document target was considered and rejected for\r\nthis MVP; nothing here forecloses adding it later if a real product need\r\nsurfaces.\r\n\r\nContent is copied as-is at each preset's dimensions — there is no automatic\r\nreflow/rescale. The acceptance criteria call for \"fully editable, manually\r\nadjustable\" variants, not automatic layout adaptation; a user (or a future\r\nFR) repositions/rescales content to fit each target size after generation.\r\n\r\nPure: "
 							},
 							{
 								"kind": "code",
@@ -64877,7 +64933,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\ndoes not name a page in "
+								"text": "\r\ndoes not name a page in "
 							},
 							{
 								"kind": "code",
@@ -64983,7 +65039,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ". Never throws — a\nmissing target resolves to "
+								"text": ". Never throws — a\r\nmissing target resolves to "
 							},
 							{
 								"kind": "code",
@@ -64999,7 +65055,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ", never a thrown\nerror or a silently dangling reference, so a comment UI can always render\n*something* for a stale anchor instead of crashing.\n\nNode-clone rule (explicit, per FR-072): anchors are keyed by a node's OWN\nid and are never migrated onto a clone. However a host duplicates a node\n(e.g. "
+								"text": ", never a thrown\r\nerror or a silently dangling reference, so a comment UI can always render\r\n*something* for a stale anchor instead of crashing.\r\n\r\nNode-clone rule (explicit, per FR-072): anchors are keyed by a node's OWN\r\nid and are never migrated onto a clone. However a host duplicates a node\r\n(e.g. "
 							},
 							{
 								"kind": "code",
@@ -65007,7 +65063,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " with a freshly generated id copying the source's\nprops), the copy is a distinct node with its own id — an anchor on the\nsource keeps pointing at the source; the clone starts with no anchors of\nits own. Only the SOURCE node's own removal archives the anchor; a clone\nexisting, or later being deleted itself, has no effect on an anchor that\nwas never pointed at it."
+								"text": " with a freshly generated id copying the source's\r\nprops), the copy is a distinct node with its own id — an anchor on the\r\nsource keeps pointing at the source; the clone starts with no anchors of\r\nits own. Only the SOURCE node's own removal archives the anchor; a clone\r\nexisting, or later being deleted itself, has no effect on an anchor that\r\nwas never pointed at it."
 							}
 						]
 					},
@@ -65075,7 +65131,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " to a validated, current-version\n"
+								"text": " to a validated, current-version\r\n"
 							},
 							{
 								"kind": "code",
@@ -65091,7 +65147,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\nsource is a host/worker resolution concern; "
+								"text": "\r\nsource is a host/worker resolution concern; "
 							},
 							{
 								"kind": "code",
@@ -65099,7 +65155,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " never attempts\nto resolve one itself and this function throws rather than guessing.\n\nAlways routes through "
+								"text": " never attempts\r\nto resolve one itself and this function throws rather than guessing.\r\n\r\nAlways routes through "
 							},
 							{
 								"kind": "code",
@@ -65107,7 +65163,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " (not a bare schema parse), so an\ninline document authored at an older IR version still resolves correctly."
+								"text": " (not a bare schema parse), so an\r\ninline document authored at an older IR version still resolves correctly."
 							}
 						]
 					},
@@ -65152,7 +65208,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "The ONE effect resolver (C-03, §9.4) — every consumer (the editor's Konva\nrenderer, the SVG serializer, the inspector) resolves a node's effects\nthrough this so canvas, export, and UI can never disagree.\n\nPrecedence: a present "
+								"text": "The ONE effect resolver (C-03, §9.4) — every consumer (the editor's Konva\r\nrenderer, the SVG serializer, the inspector) resolves a node's effects\r\nthrough this so canvas, export, and UI can never disagree.\r\n\r\nPrecedence: a present "
 							},
 							{
 								"kind": "code",
@@ -65160,7 +65216,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " array wins outright — including an EMPTY\none, which means \"explicitly no effects\" (that is how an edit removes a\nlegacy shadow without deleting history). Only when "
+								"text": " array wins outright — including an EMPTY\r\none, which means \"explicitly no effects\" (that is how an edit removes a\r\nlegacy shadow without deleting history). Only when "
 							},
 							{
 								"kind": "code",
@@ -65168,7 +65224,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " is absent does\nthe legacy "
+								"text": " is absent does\r\nthe legacy "
 							},
 							{
 								"kind": "code",
@@ -65176,7 +65232,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " field apply, interpreted as a single drop-shadow with\nno spread. The legacy field is never mutated here; writes that upgrade a\nnode to the new model are the editor's job."
+								"text": " field apply, interpreted as a single drop-shadow with\r\nno spread. The legacy field is never mutated here; writes that upgrade a\r\nnode to the new model are the editor's job."
 							}
 						]
 					},
@@ -65276,7 +65332,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Resolve one span against the host's defaults. Pure, allocation-only, and\ndeliberately dumb — it is field inheritance, not layout."
+								"text": "Resolve one span against the host's defaults. Pure, allocation-only, and\r\ndeliberately dumb — it is field inheritance, not layout."
 							}
 						]
 					},
@@ -65342,7 +65398,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " against a caller-supplied value map: a\nsupplied value wins, otherwise "
+								"text": " against a caller-supplied value map: a\r\nsupplied value wins, otherwise "
 							},
 							{
 								"kind": "code",
@@ -65350,7 +65406,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " applies, otherwise a\n"
+								"text": " applies, otherwise a\r\n"
 							},
 							{
 								"kind": "code",
@@ -65358,7 +65414,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " variable produces a structured warning (never a thrown error) and\nis simply absent from "
+								"text": " variable produces a structured warning (never a thrown error) and\r\nis simply absent from "
 							},
 							{
 								"kind": "code",
@@ -65500,7 +65556,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Map a screen (stage-pixel) point back to world (canvas) coordinates. Throws\nif "
+								"text": "Map a screen (stage-pixel) point back to world (canvas) coordinates. Throws\r\nif "
 							},
 							{
 								"kind": "code",
@@ -65584,7 +65640,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " document to a multi-page PDF, one PDF page per\nselected "
+								"text": " document to a multi-page PDF, one PDF page per\r\nselected "
 							},
 							{
 								"kind": "inline-tag",
@@ -65594,7 +65650,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ", with each page's pre-rendered raster drawn to fill\nit. Page count always equals the number of selected pages; pages whose raster\nis missing/undecodable/unsupported are emitted blank with a corresponding entry\nin "
+								"text": ", with each page's pre-rendered raster drawn to fill\r\nit. Page count always equals the number of selected pages; pages whose raster\r\nis missing/undecodable/unsupported are emitted blank with a corresponding entry\r\nin "
 							},
 							{
 								"kind": "code",
@@ -65602,7 +65658,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ".\n\nThrows a "
+								"text": ".\r\n\r\nThrows a "
 							},
 							{
 								"kind": "code",
@@ -65610,7 +65666,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " when there are no pages to render (empty document, or a\n"
+								"text": " when there are no pages to render (empty document, or a\r\n"
 							},
 							{
 								"kind": "code",
@@ -65698,7 +65754,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " document to an SVG string.\n\n"
+								"text": " document to an SVG string.\r\n\r\n"
 							},
 							{
 								"kind": "code",
@@ -65706,7 +65762,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " is either the page id (string) or its index (number); an\nunknown selector throws. Content-level degradations (unsupported background,\nunresolved asset, skipped placeholder, …) are reported in "
+								"text": " is either the page id (string) or its index (number); an\r\nunknown selector throws. Content-level degradations (unsupported background,\r\nunresolved asset, skipped placeholder, …) are reported in "
 							},
 							{
 								"kind": "code",
@@ -65912,7 +65968,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "FR-072 \"Tidy Up\" (C-12): arrange a rough scatter into a clean grid.\nRects cluster into rows by vertical-center proximity (threshold: half the\nmedian height), each row lays out left-to-right from the selection's left\nedge, and rows stack from its top edge — with uniform gaps derived from\nthe MEDIAN existing horizontal/vertical gaps (clamped ≥ 0), so a tidy of\nan already-tidy grid is a no-op rather than a re-spacing. Returned array\nis index-aligned with "
+								"text": "FR-072 \"Tidy Up\" (C-12): arrange a rough scatter into a clean grid.\r\nRects cluster into rows by vertical-center proximity (threshold: half the\r\nmedian height), each row lays out left-to-right from the selection's left\r\nedge, and rows stack from its top edge — with uniform gaps derived from\r\nthe MEDIAN existing horizontal/vertical gaps (clamped ≥ 0), so a tidy of\r\nan already-tidy grid is a no-op rather than a re-spacing. Returned array\r\nis index-aligned with "
 							},
 							{
 								"kind": "code",
@@ -65975,7 +66031,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Compose a transform into an affine matrix, replicating Konva's\n"
+								"text": "Compose a transform into an affine matrix, replicating Konva's\r\n"
 							},
 							{
 								"kind": "code",
@@ -65983,7 +66039,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " order exactly: translate → rotate → skew → scale.\n(CanvasIR has no "
+								"text": " order exactly: translate → rotate → skew → scale.\r\n(CanvasIR has no "
 							},
 							{
 								"kind": "code",
@@ -66044,7 +66100,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " form: each RGBA output row is\n"
+								"text": " form: each RGBA output row is\r\n"
 							},
 							{
 								"kind": "code",
@@ -66060,7 +66116,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " with no alpha\ndependence, so an alpha coefficient of 0 is inserted before each offset,\nand the alpha row is identity."
+								"text": " with no alpha\r\ndependence, so an alpha coefficient of 0 is inserted before each offset,\r\nand the alpha row is identity."
 							}
 						]
 					},
@@ -66127,7 +66183,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " for an identity\ntransform. Skewed nodes emit a composed "
+								"text": " for an identity\r\ntransform. Skewed nodes emit a composed "
 							},
 							{
 								"kind": "code",
@@ -66135,7 +66191,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "; everything else emits\nthe readable "
+								"text": "; everything else emits\r\nthe readable "
 							},
 							{
 								"kind": "code",
@@ -66143,7 +66199,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " decomposition, which composes to the\nsame matrix as Konva's translate→rotate→scale nesting."
+								"text": " decomposition, which composes to the\r\nsame matrix as Konva's translate→rotate→scale nesting."
 							}
 						]
 					},
@@ -66186,7 +66242,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Axis-aligned bounding box, in the parent coordinate space, of a\n"
+								"text": "Axis-aligned bounding box, in the parent coordinate space, of a\r\n"
 							},
 							{
 								"kind": "code",
@@ -66210,7 +66266,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ".\nAccounts for rotation/scale/skew, unlike a naive "
+								"text": ".\r\nAccounts for rotation/scale/skew, unlike a naive "
 							},
 							{
 								"kind": "code",
@@ -66309,7 +66365,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " is scaled\nthrough "
+								"text": " is scaled\r\nthrough "
 							},
 							{
 								"kind": "code",
@@ -66317,7 +66373,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " so a screen-pixel page maps to a sensible physical size. Mirrors\nthe unit semantics of "
+								"text": " so a screen-pixel page maps to a sensible physical size. Mirrors\r\nthe unit semantics of "
 							},
 							{
 								"kind": "code",
@@ -66548,7 +66604,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "'s payload against the normal Canvas IR /\ncommand schemas before it is safe to apply to a real document (FR-052,\ncanvas-m4-003). Pure — never mutates anything and never applies the\ncommand itself; it only decides whether the payload is safe, normalizing\neither payload shape to one ready-to-commit "
+								"text": "'s payload against the normal Canvas IR /\r\ncommand schemas before it is safe to apply to a real document (FR-052,\r\ncanvas-m4-003). Pure — never mutates anything and never applies the\r\ncommand itself; it only decides whether the payload is safe, normalizing\r\neither payload shape to one ready-to-commit "
 							},
 							{
 								"kind": "code",
@@ -66556,7 +66612,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ". A\nnon-"
+								"text": ". A\r\nnon-"
 							},
 							{
 								"kind": "code",
@@ -66564,7 +66620,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " job, or one whose payload fails validation, is\nquarantined: this returns "
+								"text": " job, or one whose payload fails validation, is\r\nquarantined: this returns "
 							},
 							{
 								"kind": "code",
@@ -66572,7 +66628,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " with a structured error rather than\nsilently dropping content or force-coercing it into the document."
+								"text": " with a structured error rather than\r\nsilently dropping content or force-coercing it into the document."
 							}
 						]
 					},
@@ -66617,7 +66673,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Validate document-wide semantic invariants a Zod schema cannot express.\nPure and read-only; never throws for a malformed-but-schema-valid "
+								"text": "Validate document-wide semantic invariants a Zod schema cannot express.\r\nPure and read-only; never throws for a malformed-but-schema-valid "
 							},
 							{
 								"kind": "code",
@@ -66625,7 +66681,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\n— malformations are reported as issues, not exceptions (use\n"
+								"text": "\r\n— malformations are reported as issues, not exceptions (use\r\n"
 							},
 							{
 								"kind": "inline-tag",
@@ -66643,7 +66699,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\nover the whole document (O(n) in total node count) plus O(pages) and\nO(assets) passes."
+								"text": "\r\nover the whole document (O(n) in total node count) plus O(pages) and\r\nO(assets) passes."
 							}
 						]
 					},
@@ -66691,7 +66747,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Validate an already-parsed candidate payload: version, schema, node-count\ncap, and tree-depth cap. Throws "
+								"text": "Validate an already-parsed candidate payload: version, schema, node-count\r\ncap, and tree-depth cap. Throws "
 							},
 							{
 								"kind": "inline-tag",
@@ -66701,7 +66757,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "; returns the\nschema-validated payload (unknown keys preserved)."
+								"text": "; returns the\r\nschema-validated payload (unknown keys preserved)."
 							}
 						]
 					},
@@ -66770,7 +66826,7 @@
 							},
 							{
 								"kind": "text",
-								"text": "\nentry on "
+								"text": "\r\nentry on "
 							},
 							{
 								"kind": "code",
@@ -66786,7 +66842,7 @@
 							},
 							{
 								"kind": "text",
-								"text": ".\nReturns an empty array when everything resolves."
+								"text": ".\r\nReturns an empty array when everything resolves."
 							}
 						]
 					},
@@ -66834,7 +66890,7 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Affine matrix mapping world (canvas) coordinates to screen (stage-pixel)\ncoordinates: "
+								"text": "Affine matrix mapping world (canvas) coordinates to screen (stage-pixel)\r\ncoordinates: "
 							},
 							{
 								"kind": "code",

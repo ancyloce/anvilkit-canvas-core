@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### PRD 0012 completion pass
+
+- **shadow→effects reconciliation (§9.4)**: the read-time normalization
+  strategy is now an explicit, recorded decision — `CANVAS_IR_VERSION` stays
+  `"2"`, decode never rewrites `shadow` structurally, `resolveNodeEffects`
+  precedence (`effects[]` wins, empty array suppresses) is the single source
+  of truth, and nodes upgrade lazily on edit. Decision record:
+  `docs/architecture/shadow-effects-normalization-decision.md` (workspace);
+  new decode-boundary contract tests in
+  `src/ir/__tests__/shadow-effects-decode.test.ts` (verbatim round trips for
+  shadow-only / effects-only / both / empty-effects documents, node-level
+  unknown-key preservation across v1→v2).
+- **`CanvasPageBackground` contract narrowed (FR-063)**: `solid` is
+  documented as the only kind with first-class rendering; `image`/`gradient`
+  are reserved (undefined `value` format) — serializer keeps warning
+  `BACKGROUND_UNSUPPORTED`, and the editor now renders a neutral fallback
+  for them instead of interpreting the raw string.
 ### PRD 0012 editing features (Phases 1a/1b/2)
 
 All additive; existing documents need no migration (new fields are optional

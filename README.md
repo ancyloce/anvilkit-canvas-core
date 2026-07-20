@@ -301,6 +301,17 @@ decoding persisted or peer-supplied IR, prefer `migrateCanvasIR(raw)` (or
 `runtime.migrate(raw)`) over a bare `CanvasIRSchema.parse` — it gates on
 `version` and is the seam for future schema migrations.
 
+Migration is deliberately **non-structural** for the legacy `shadow` field:
+decode preserves it verbatim and read-time precedence via
+`resolveNodeEffects` (a present `effects` array — including an empty one —
+wins; otherwise `shadow` applies) keeps old documents rendering identically
+without an IR version bump. Nodes upgrade to `effects[]` lazily when edited.
+Never read `node.shadow` directly — always resolve through
+`resolveNodeEffects`. Rationale and guarantees: the workspace decision record
+`docs/architecture/shadow-effects-normalization-decision.md`; contract tests:
+`src/ir/__tests__/shadow-effects-decode.test.ts` and
+`src/serialize/__tests__/effects.test.ts`.
+
 ### Serializers
 
 - `serializePageToSvg(ir, pageSelector, options?)` → `{ svg, warnings }`. Async
