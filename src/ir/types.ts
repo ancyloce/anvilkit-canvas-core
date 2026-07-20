@@ -81,6 +81,16 @@ export interface CanvasPageLayoutAids {
 	safeArea?: CanvasInsets;
 }
 
+/**
+ * Page background. `solid` (a CSS color string in `value`) is the only kind
+ * with first-class rendering across the live stage, thumbnails, and the SVG
+ * serializer. `image` and `gradient` are RESERVED: their `value` format is
+ * not yet defined, the SVG serializer emits a typed `BACKGROUND_UNSUPPORTED`
+ * warning for them, and the editor renders the neutral default page white
+ * rather than interpreting the raw string (FR-063 explicit contract
+ * narrowing — see PRD 0012 §7.7). Hosts should not persist non-solid
+ * backgrounds until a format is specified.
+ */
 export interface CanvasPageBackground {
 	kind: CanvasBackgroundKind;
 	value: string;
