@@ -16,7 +16,13 @@ import {
 	replaceChildrenInParent,
 	updateNode,
 } from "../mutations.js";
-import type { CanvasFrameNode, CanvasIR, CanvasRectNode } from "../types.js";
+import type {
+	CanvasFrameNode,
+	CanvasGroupNode,
+	CanvasIR,
+	CanvasNode,
+	CanvasRectNode,
+} from "../types.js";
 import {
 	CanvasIRDepthError,
 	findNode,
@@ -467,7 +473,7 @@ describe("moveNode", () => {
 });
 
 describe("reorderChildren", () => {
-	it("is a no-op when from === to (but still bumps updatedAt)", () => {
+	it("is a true no-op when from === to — same reference, no metadata bump (C-6)", () => {
 		const ir = sampleIR();
 		const after = reorderChildren(ir, {
 			parentId: "outer",
@@ -475,17 +481,30 @@ describe("reorderChildren", () => {
 			toIndex: 1,
 			now: () => "2099-01-01T00:00:00.000Z",
 		});
-		const outerBefore = findNode(ir, "outer");
-		const outerAfter = findNode(after, "outer");
-		if (
-			outerBefore?.node.type === "group" &&
-			outerAfter?.node.type === "group"
-		) {
-			expect(outerAfter.node.children.map((c) => c.id)).toEqual(
-				outerBefore.node.children.map((c) => c.id),
-			);
-		}
-		expect(after.metadata.updatedAt).toBe("2099-01-01T00:00:00.000Z");
+		expect(after).toBe(ir);
+		expect(after.metadata.updatedAt).toBe(ir.metadata.updatedAt);
+	});
+
+	it("still validates a from === to reorder against a nonexistent parent (C-6)", () => {
+		const ir = sampleIR();
+		expect(() =>
+			reorderChildren(ir, {
+				parentId: "nope",
+				fromIndex: 5,
+				toIndex: 5,
+			}),
+		).toThrow(CanvasIRMutationError);
+	});
+
+	it("still validates a from === to reorder against out-of-range indices (C-6)", () => {
+		const ir = sampleIR();
+		expect(() =>
+			reorderChildren(ir, {
+				parentId: "outer",
+				fromIndex: 99,
+				toIndex: 99,
+			}),
+		).toThrow(CanvasIRMutationError);
 	});
 
 	it("swaps two siblings", () => {
@@ -603,6 +622,50 @@ describe("mutation depth guard", () => {
 		expect(() =>
 			updateNode(deepIR(), { id: "leaf", patch: { name: "renamed" } }),
 		).toThrow(CanvasIRDepthError);
+	});
+
+	/** A chain of `count` nested groups, innermost holding no children (a leaf). */
+	function nestedGroups(count: number, innermostId: string): CanvasGroupNode {
+		let node: CanvasNode = createGroup({
+			id: innermostId,
+			bounds: { width: 0, height: 0 },
+		});
+		for (let i = count - 1; i >= 0; i--) {
+			node = createGroup({
+				id: `n-${i}`,
+				bounds: { width: 0, height: 0 },
+				children: [node],
+			});
+		}
+		return node as CanvasGroupNode;
+	}
+
+	it("insertNode rejects a deep SUBTREE inserted at a moderately deep parent, even though the parent lookup itself is in-range (C-16)", () => {
+		// Root nests 30 groups deep down to "parent" (well within MAX_TREE_DEPTH),
+		// then insert a subtree that is itself 40 groups deep — combined depth
+		// (30 + 1 + 40) exceeds MAX_TREE_DEPTH even though neither the parent
+		// lookup nor the inserted subtree alone would trip the guard.
+		const page = createPage({ id: "p-moderate" });
+		page.root = nestedGroups(30, "parent");
+		const ir = createCanvasIR({ pages: [page] });
+		expect(() =>
+			insertNode(ir, {
+				parentId: "parent",
+				node: nestedGroups(40, "deep-leaf"),
+			}),
+		).toThrow(CanvasIRDepthError);
+	});
+
+	it("insertNode accepts a subtree that keeps the combined depth within MAX_TREE_DEPTH", () => {
+		const page = createPage({ id: "p-moderate" });
+		page.root = nestedGroups(10, "parent");
+		const ir = createCanvasIR({ pages: [page] });
+		expect(() =>
+			insertNode(ir, {
+				parentId: "parent",
+				node: nestedGroups(5, "shallow-leaf"),
+			}),
+		).not.toThrow();
 	});
 });
 

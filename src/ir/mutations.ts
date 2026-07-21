@@ -180,6 +180,21 @@ function updateNodeInTree<
 }
 
 /**
+ * Depth of the deepest node in `node`'s own subtree, relative to `node`
+ * itself at 0 (a leaf is 0). Used to bound where a subtree may be inserted —
+ * see {@link spliceChild} (C-16).
+ */
+function subtreeDepth(node: CanvasNode): number {
+	if (!isContainerNode(node) || node.children.length === 0) return 0;
+	let max = 0;
+	for (const child of node.children) {
+		const d = 1 + subtreeDepth(child);
+		if (d > max) max = d;
+	}
+	return max;
+}
+
+/**
  * Single-pass immutable insert. Walks `root` once, splicing `node` into the
  * first pre-order group whose id matches `parentId`, and returns the same `root`
  * reference when `parentId` is absent. Throws `parent-not-group` /
@@ -196,7 +211,7 @@ function insertIntoTree<T extends CanvasContainerNode>(
 ): T {
 	assertTreeDepth(depth, root.id);
 	if (root.id === parentId) {
-		return spliceChild(root, node, index);
+		return spliceChild(root, node, index, depth);
 	}
 	let changed = false;
 	const newChildren: CanvasNode[] = root.children.map((child) => {
@@ -209,7 +224,7 @@ function insertIntoTree<T extends CanvasContainerNode>(
 				);
 			}
 			changed = true;
-			return spliceChild(child, node, index);
+			return spliceChild(child, node, index, depth + 1);
 		}
 		if (isContainerNode(child)) {
 			const replaced = insertIntoTree(child, parentId, node, index, depth + 1);
@@ -223,11 +238,19 @@ function insertIntoTree<T extends CanvasContainerNode>(
 	return changed ? { ...root, children: newChildren } : root;
 }
 
-/** Insert `node` into `parent.children` at `index` (append when omitted). */
+/**
+ * Insert `node` into `parent.children` at `index` (append when omitted).
+ * `parentDepth` is `parent`'s own depth in the tree — combined with `node`'s
+ * own subtree depth, this bounds the DEEPEST node the insert would produce,
+ * not just the depth of `parent` itself (C-16): inserting a 40-deep subtree
+ * under a parent already at depth 30 must be rejected up front, not silently
+ * accepted and left for every later reader to trip over.
+ */
 function spliceChild<T extends CanvasContainerNode>(
 	parent: T,
 	node: CanvasNode,
 	index: number | undefined,
+	parentDepth: number,
 ): T {
 	const length = parent.children.length;
 	const at = index ?? length;
@@ -236,6 +259,10 @@ function spliceChild<T extends CanvasContainerNode>(
 			"index-out-of-range",
 			`Insert index ${at} out of range for parent with ${length} children`,
 		);
+	}
+	const deepestInsertedDepth = parentDepth + 1 + subtreeDepth(node);
+	if (deepestInsertedDepth > MAX_TREE_DEPTH) {
+		throw new CanvasIRDepthError([parent.id, node.id]);
 	}
 	const newChildren = [...parent.children];
 	newChildren.splice(at, 0, node);
@@ -494,12 +521,6 @@ export function reorderChildren(
 	ir: CanvasIR,
 	options: ReorderChildrenOptions,
 ): CanvasIR {
-	if (options.fromIndex === options.toIndex) {
-		return {
-			...ir,
-			metadata: bumpUpdatedAt(ir, options),
-		};
-	}
 	const parentInfo = findNode(ir, options.parentId);
 	if (!parentInfo) {
 		throw new CanvasIRMutationError(
@@ -525,6 +546,12 @@ export function reorderChildren(
 			"index-out-of-range",
 			`Reorder indices (${options.fromIndex} → ${options.toIndex}) out of range for parent with ${length} children`,
 		);
+	}
+	// A validated true no-op (parent exists, indices in range, nothing to
+	// move) returns the input as-is — no bumped `updatedAt`, no cloned pages
+	// — instead of dirtying an otherwise-untouched document (C-6).
+	if (options.fromIndex === options.toIndex) {
+		return ir;
 	}
 	const page = parentInfo.page;
 	const newRoot = replaceContainerInTree(page.root, parent.id, (c) => {

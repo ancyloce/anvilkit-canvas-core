@@ -237,6 +237,16 @@ describe("CanvasNodeSchema discriminated union", () => {
 		}
 	});
 
+	it("accepts a node omitting zIndex — reserved/unused, not required (C-9)", () => {
+		const rectWithoutZIndex = {
+			id: "r1",
+			type: "rect",
+			transform: identityTransform,
+			bounds: { width: 10, height: 10 },
+		};
+		expect(CanvasNodeSchema.safeParse(rectWithoutZIndex).success).toBe(true);
+	});
+
 	it("rejects an unknown discriminant value", () => {
 		const bogus = {
 			id: "x",

@@ -320,7 +320,14 @@ export interface CanvasNodeBase {
 	visible?: boolean;
 	locked?: boolean;
 	blendMode?: string;
-	zIndex: number;
+	/**
+	 * Reserved for future explicit paint-order control — currently unused (C-9).
+	 * Paint order is entirely determined by each container's `children` array
+	 * order; no code in `@anvilkit/canvas-core` or `@anvilkit/canvas-editor`
+	 * reads this field. Optional so callers (including AI-generated payloads)
+	 * aren't forced to supply a value that has no effect.
+	 */
+	zIndex?: number;
 	meta?: CanvasNodeMeta;
 }
 

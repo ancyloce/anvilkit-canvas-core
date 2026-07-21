@@ -322,7 +322,8 @@ export const CanvasNodeBaseShape = {
 	visible: z.boolean().optional(),
 	locked: z.boolean().optional(),
 	blendMode: z.string().optional(),
-	zIndex: FiniteNumber,
+	// Reserved/unused — see CanvasNodeBase.zIndex (C-9).
+	zIndex: FiniteNumber.optional(),
 	meta: CanvasNodeMetaSchema.optional(),
 } as const;
 

@@ -6,8 +6,8 @@ import { CANVAS_IR_VERSION, migrateCanvasIR } from "../validators.js";
 
 /**
  * PRD 0012 §9.4 reconciliation (decision record:
- * docs/architecture/shadow-effects-normalization-decision.md in the parent
- * workspace): legacy `shadow` is NOT structurally rewritten to `effects[]` at
+ * docs/architecture/shadow-effects-normalization-decision.md in this
+ * package): legacy `shadow` is NOT structurally rewritten to `effects[]` at
  * the decode boundary and `CANVAS_IR_VERSION` stays "2". These tests pin the
  * decode-boundary contract that decision depends on:
  *
