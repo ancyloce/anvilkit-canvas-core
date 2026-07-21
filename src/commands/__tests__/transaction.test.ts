@@ -246,4 +246,35 @@ describe("applyCommands", () => {
 		expect(nodeOf(ir2, "r1").transform.x).toBe(0);
 		expect(nodeOf(ir2, "r1").transform.rotation).toBe(0);
 	});
+
+	it("derives a change/record for every sub-command of a nested batch, not zero (C-3)", () => {
+		const { ir: ir0 } = makeIR();
+		const nested: CanvasBatchCommand = {
+			type: "batch",
+			commands: [
+				{
+					type: "node.move",
+					nodeId: "r1",
+					from: { x: 0, y: 0 },
+					to: { x: 5, y: 5 },
+				},
+				{ type: "node.rotate", nodeId: "r1", from: 0, to: 90 },
+			],
+		};
+		const { ir: ir1, changes, records, inverse } = applyCommands(ir0, [nested]);
+		expect(nodeOf(ir1, "r1").transform.x).toBe(5);
+		expect(nodeOf(ir1, "r1").transform.rotation).toBe(90);
+		expect(changes).toEqual([
+			{ kind: "transform", nodeId: "r1", dx: 5, dy: 5, drot: 0 },
+			{ kind: "transform", nodeId: "r1", dx: 0, dy: 0, drot: 90 },
+		]);
+		expect(records).toHaveLength(2);
+		expect(records.map((r) => r.sequence)).toEqual([0, 1]);
+
+		// The composite inverse still round-trips, nested batch preserved.
+		expect(inverse.commands).toHaveLength(1);
+		const { ir: ir2 } = applyCommand(ir1, inverse);
+		expect(nodeOf(ir2, "r1").transform.x).toBe(0);
+		expect(nodeOf(ir2, "r1").transform.rotation).toBe(0);
+	});
 });

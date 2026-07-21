@@ -38,14 +38,14 @@ describe("asset.put / asset.remove commands", () => {
 		expect(ir2.assets.existing?.uri).toBe("https://x/old.png");
 	});
 
-	it("asset.remove of a missing id is a typed error", () => {
+	it("asset.remove of a missing id is a typed error (asset-not-found, not node-not-found — C-18)", () => {
 		let code: string | null = null;
 		try {
 			applyCommand(makeIR(), { type: "asset.remove", assetId: "nope" });
 		} catch (err) {
 			code = err instanceof CanvasCommandError ? err.code : "unexpected-type";
 		}
-		expect(code).toBe("node-not-found");
+		expect(code).toBe("asset-not-found");
 	});
 
 	it("produces a document-level change record without a pageId", () => {

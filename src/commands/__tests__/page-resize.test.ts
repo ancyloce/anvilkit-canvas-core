@@ -105,6 +105,40 @@ describe("page.resize command (B-01)", () => {
 		expect(JSON.stringify(ir2.pages)).toBe(JSON.stringify(ir0.pages));
 	});
 
+	it("scale-content: falls back to leaving content untouched for a zero-dimension prior page (C-12)", () => {
+		const page0 = createPage({ id: "p1", size: { width: 0, height: 200 } });
+		page0.root = createGroup({
+			id: "root",
+			bounds: { width: 0, height: 200 },
+			children: [
+				createRect({
+					id: "a",
+					transform: { x: 100, y: 50 },
+					bounds: { width: 40, height: 20 },
+				}),
+			],
+		});
+		const ir0 = createCanvasIR({ id: "ir", pages: [page0], now: () => "T" });
+		const { ir: ir1 } = applyCommand(
+			ir0,
+			{
+				type: "page.resize",
+				pageId: "p1",
+				from: { width: 0, height: 200 },
+				to: { width: 800, height: 300 },
+				mode: "scale-content",
+			},
+			{ now: () => "T" },
+		);
+		const a = page(ir1).root.children[0];
+		// No Infinity/NaN — the pre-existing transform is preserved verbatim,
+		// matching canvas-only's behavior, since a 0-width prior page has no
+		// meaningful scale ratio to compute.
+		expect(a?.transform).toMatchObject({ x: 100, y: 50, scaleX: 1, scaleY: 1 });
+		expect(Number.isFinite(a?.transform.x)).toBe(true);
+		expect(page(ir1).size).toMatchObject({ width: 800, height: 300 });
+	});
+
 	it("inverse uses the ACTUAL prior size even when cmd.from is stale", () => {
 		const ir0 = makeIR();
 		const stale: CanvasPageResizeCommand = {

@@ -154,6 +154,17 @@ describe("enforceLocked (A-02)", () => {
 		expect(node?.name).toBe("unlocked-now");
 	});
 
+	it("does not exempt a patch that keeps the node locked, even with other fields (C-7)", () => {
+		expect(
+			lockedCode({
+				type: "node.update",
+				nodeId: "locked1",
+				kind: "rect",
+				patch: { locked: true, fill: "red" },
+			}),
+		).toBe("node-locked");
+	});
+
 	it("propagates through a batch and stays all-or-nothing", () => {
 		const ir0 = makeIR();
 		const before = JSON.stringify(ir0);

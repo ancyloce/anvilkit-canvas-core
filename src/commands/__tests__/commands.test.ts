@@ -1269,6 +1269,45 @@ describe("applyCommand: node.ungroup", () => {
 			expect((err as CanvasCommandError).code).toBe("node-not-found");
 		}
 	});
+
+	it("preserves world position: a moved group's children don't jump on ungroup (C-4)", () => {
+		const x = createRect({ id: "x", bounds: { width: 10, height: 10 } });
+		const g = createGroup({ id: "g", children: [x] });
+		const page = createPage({ id: "page-1" });
+		page.root = createGroup({
+			id: "root",
+			bounds: page.root.bounds,
+			children: [g],
+		});
+		const ir = createCanvasIR({ id: "ir-1", title: "G", pages: [page], now });
+
+		const moved = applyCommand(
+			ir,
+			{
+				type: "node.move",
+				nodeId: "g",
+				from: { x: 0, y: 0 },
+				to: { x: 100, y: 100 },
+			},
+			{ now },
+		);
+
+		const ungrouped = applyCommand(
+			moved.ir,
+			{ type: "node.ungroup", groupId: "g" },
+			{ now },
+		);
+		const spilledX = findNode(ungrouped.ir, "x")?.node as CanvasRectNode;
+		// Before the fix, `x` kept its group-local transform (0,0) and visually
+		// jumped 100px when the group's translation was dropped on spill.
+		expect(spilledX.transform.x).toBe(100);
+		expect(spilledX.transform.y).toBe(100);
+
+		// And undo restores the exact prior state (round-trip through the
+		// group/ungroup inverse pair stays lossless).
+		const undone = applyCommand(ungrouped.ir, ungrouped.inverse, { now });
+		expect(JSON.stringify(undone.ir)).toBe(JSON.stringify(moved.ir));
+	});
 });
 
 describe("applyCommand: node.update inverse restores absent optionals (P3-1)", () => {

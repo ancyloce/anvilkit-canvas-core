@@ -1,5 +1,12 @@
 import { resolveNow } from "../clock.js";
-import { transformedBoundsExtent } from "../geometry/affine.js";
+import {
+	type AffineMatrix,
+	decomposeMatrix,
+	invertMatrix,
+	multiplyMatrix,
+	toAffineMatrix,
+	transformedBoundsExtent,
+} from "../geometry/affine.js";
 import {
 	CanvasIRMutationError,
 	insertNode,
@@ -20,6 +27,7 @@ import type {
 	CanvasNodeByKind,
 	CanvasNodeKind,
 	CanvasPage,
+	CanvasTransform,
 } from "../ir/types.js";
 import { findNode, isContainerNode, parentOf } from "../ir/walkers.js";
 import { computeStylePatch } from "./apply-style.js";
@@ -59,9 +67,11 @@ export type CanvasCommandErrorCode =
 	| "page-not-found"
 	| "kind-mismatch"
 	| "asset-mismatch"
+	| "asset-not-found"
 	| "index-out-of-range"
 	| "invariant-violated"
-	| "node-locked";
+	| "node-locked"
+	| "unknown-command";
 
 export class CanvasCommandError extends Error {
 	readonly code: CanvasCommandErrorCode;
@@ -331,8 +341,14 @@ function applyNodeUpdate(
 	cmd: CanvasAnyNodeUpdateCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
-	// Lock-state changes are exempt — this is how a locked node gets unlocked.
-	if (!Object.hasOwn(cmd.patch as Record<string, unknown>, "locked")) {
+	// Exempt only a patch that UNLOCKS the node (`locked: false`) — this is how
+	// a locked node becomes editable again, and it may legitimately carry other
+	// field changes alongside the unlock in the same commit. A patch that
+	// merely touches `locked` without setting it to `false` (C-7's `{ locked:
+	// true, fill: "red" }` on an already-locked node) must not smuggle other
+	// field edits through under this exemption.
+	const isUnlockPatch = cmd.patch.locked === false;
+	if (!isUnlockPatch) {
 		assertUnlocked(ir, cmd.nodeId, options);
 	}
 	const { node } = expectNode(ir, cmd.nodeId);
@@ -468,6 +484,33 @@ function computeChildrenBounds(children: readonly CanvasNode[]): CanvasBounds {
 	return { width: maxX - minX, height: maxY - minY };
 }
 
+/**
+ * Recompute a transform on the far side of `matrix`, keeping the transform's
+ * effective WORLD position unchanged when the coordinate space it's declared
+ * relative to changes — e.g. `toAffineMatrix(group.transform)` when a child
+ * spills out of its group (`node.ungroup`), or
+ * `invertMatrix(toAffineMatrix(groupTemplate.transform))` when a child is
+ * re-nested under a restored group (`node.group`'s inverse). Omits `skewX`
+ * when it decomposes to exactly 0, matching how a freshly-authored transform
+ * omits it (C-4).
+ */
+function reprojectTransform(
+	matrix: AffineMatrix,
+	transform: CanvasTransform,
+): CanvasTransform {
+	const decomposed = decomposeMatrix(
+		multiplyMatrix(matrix, toAffineMatrix(transform)),
+	);
+	return {
+		x: decomposed.x,
+		y: decomposed.y,
+		rotation: decomposed.rotation,
+		scaleX: decomposed.scaleX,
+		scaleY: decomposed.scaleY,
+		...(decomposed.skewX !== 0 ? { skewX: decomposed.skewX } : {}),
+	};
+}
+
 interface GroupChildEntry {
 	id: string;
 	node: CanvasNode;
@@ -547,7 +590,20 @@ function applyNodeGroup(
 		);
 	}
 	const minIndex = firstEntry.index;
-	const childNodes = entries.map((e) => e.node);
+	const groupTemplate = cmd.groupTemplate;
+	// A templated group (the inverse of `node.ungroup`, C-4) restores a
+	// non-identity `transform` — its children must be re-expressed relative to
+	// THAT transform (not reused as-is) so their WORLD position doesn't shift
+	// by the group's own transform a second time.
+	const childNodes = groupTemplate
+		? entries.map((e) => ({
+				...e.node,
+				transform: reprojectTransform(
+					invertMatrix(toAffineMatrix(groupTemplate.transform)),
+					e.node.transform,
+				),
+			}))
+		: entries.map((e) => e.node);
 	const groupNode: CanvasGroupNode = cmd.groupTemplate
 		? {
 				...cmd.groupTemplate,
@@ -629,6 +685,18 @@ function applyNodeUngroup(
 			}
 		}
 	}
+	// Children keep their transform local to the (about-to-vanish) group's
+	// coordinate space today; spliced verbatim into the parent, they'd jump by
+	// whatever the group's own transform was (C-4). Re-express each child's
+	// transform relative to the parent instead, so its WORLD position (and
+	// thus its render) is unchanged by the group going away.
+	const spillChildren = children.map((child) => ({
+		...child,
+		transform: reprojectTransform(
+			toAffineMatrix(group.transform),
+			child.transform,
+		),
+	}));
 	let next: CanvasIR;
 	try {
 		// Single tree rewrite: replace the group with its children spilled into the
@@ -642,12 +710,12 @@ function applyNodeUngroup(
 				if (restore && restore.length > 0) {
 					const plan = [...restore].sort((a, b) => a.index - b.index);
 					for (const { id, index } of plan) {
-						const child = children.find((c) => c.id === id);
+						const child = spillChildren.find((c) => c.id === id);
 						if (child) result.splice(index, 0, child);
 					}
 					return result;
 				}
-				result.splice(groupIndex, 0, ...children);
+				result.splice(groupIndex, 0, ...spillChildren);
 				return result;
 			},
 			now: options.now,
@@ -1016,7 +1084,10 @@ function applyPageResize(
 	const priorChildren = page.root.children;
 
 	let children = priorChildren;
-	if (mode === "scale-content") {
+	// A zero-dimension prior page (the schema allows it) would otherwise divide
+	// by zero below, writing Infinity/NaN into every child's transform — fall
+	// back to leaving content untouched (canvas-only's behavior) instead (C-12).
+	if (mode === "scale-content" && prior.width !== 0 && prior.height !== 0) {
 		const s = Math.min(
 			cmd.to.width / prior.width,
 			cmd.to.height / prior.height,
@@ -1046,8 +1117,9 @@ function applyPageResize(
 
 	const newPage: CanvasPage = {
 		...page,
-		// Width/height only — the page's existing `unit` is preserved (OD-1:
-		// unit already persists on CanvasPageSize; DPI remains export-only).
+		// Width/height only — the page's existing `unit` is preserved (OD-1,
+		// see docs/architecture/unit-dpi-export-only-decision.md: unit/dpi
+		// are export-time-only and no command mutates them).
 		size: { ...page.size, width: cmd.to.width, height: cmd.to.height },
 		root: {
 			...page.root,
@@ -1181,7 +1253,7 @@ function applyAssetRemove(
 	const previous = ir.assets[cmd.assetId];
 	if (!previous) {
 		throw new CanvasCommandError(
-			"node-not-found",
+			"asset-not-found",
 			`Asset id "${cmd.assetId}" not found`,
 		);
 	}
@@ -1247,5 +1319,13 @@ export function applyCommand(
 			return applyAssetRemove(ir, cmd, options);
 		case "batch":
 			return applyBatch(ir, cmd, options);
+		default:
+			// `cmd` is statically exhaustive above; this guards untrusted/cast
+			// input (e.g. an AI-provider payload) whose `type` matches no known
+			// command instead of silently returning `undefined` (P1 C-2).
+			throw new CanvasCommandError(
+				"unknown-command",
+				`Unrecognized command type "${(cmd as { type: string }).type}"`,
+			);
 	}
 }

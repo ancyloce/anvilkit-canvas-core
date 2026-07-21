@@ -60,26 +60,43 @@ export function applyCommands(
 		commandIdFactory,
 		...applyOptions
 	} = options;
-	const baseSequence = sequence ?? 0;
 	let working = ir;
-	const inverses: CanvasCommand[] = [];
+	let nextSequence = sequence ?? 0;
 	const changes: CanvasChange[] = [];
 	const records: CanvasChangeRecord[] = [];
-	commands.forEach((cmd, index) => {
+
+	// Recurses into nested `batch` commands so every LEAF sub-command gets its
+	// own change/record — `commandToChange`/`commandToChangeRecord` return
+	// `null` for `"batch"` on the assumption that this function maps
+	// sub-commands individually (see their docstrings); a flat `.forEach`
+	// over just the top-level `commands` broke that contract for a batch
+	// nested inside `commands` (C-3).
+	const applyOne = (cmd: CanvasCommand): CanvasCommand => {
+		if (cmd.type === "batch") {
+			const nestedInverses = cmd.commands.map(applyOne);
+			nestedInverses.reverse();
+			return {
+				type: "batch",
+				...(cmd.label !== undefined ? { label: cmd.label } : {}),
+				commands: nestedInverses,
+			};
+		}
 		const change = commandToChange(cmd);
 		if (change !== null) changes.push(change);
 		const record = commandToChangeRecord(cmd, working, {
 			...applyOptions,
 			actorId,
 			source,
-			sequence: baseSequence + index,
+			sequence: nextSequence++,
 			commandIdFactory,
 		});
 		if (record !== null) records.push(record);
 		const result = applyCommand(working, cmd, applyOptions);
 		working = result.ir;
-		inverses.push(result.inverse);
-	});
+		return result.inverse;
+	};
+
+	const inverses = commands.map(applyOne);
 	inverses.reverse();
 	const inverse: CanvasBatchCommand = {
 		type: "batch",
