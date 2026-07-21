@@ -181,4 +181,18 @@ describe("decomposeMatrix", () => {
 			skewX: 0,
 		});
 	});
+
+	it("reports a finite skewX: 0, not NaN, for a singular (collapsed scaleY:0) matrix (C-10)", () => {
+		const t: CanvasTransform = {
+			x: 4,
+			y: 4,
+			rotation: 15,
+			scaleX: 1.2,
+			scaleY: 0,
+		};
+		const d = decomposeMatrix(toAffineMatrix(t));
+		expect(Number.isFinite(d.skewX)).toBe(true);
+		expect(d.skewX).toBe(0);
+		expect(d.scaleY).toBe(0);
+	});
 });

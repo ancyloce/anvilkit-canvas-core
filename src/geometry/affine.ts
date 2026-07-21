@@ -198,7 +198,10 @@ export function decomposeMatrix(m: AffineMatrix): DecomposedTransform {
 			(b > 0 ? Math.acos(a / r) : -Math.acos(a / r)) * RAD_TO_DEG;
 		result.scaleX = r;
 		result.scaleY = delta / r;
-		result.skewX = (a * c + b * d) / delta;
+		// A singular matrix (delta === 0, e.g. a collapsed scaleY:0 transform)
+		// would otherwise divide by zero here — NaN, not the finite 0 the
+		// transform schema requires (C-10).
+		result.skewX = delta !== 0 ? (a * c + b * d) / delta : 0;
 	} else if (c !== 0 || d !== 0) {
 		const s = Math.sqrt(c * c + d * d);
 		result.rotation =
