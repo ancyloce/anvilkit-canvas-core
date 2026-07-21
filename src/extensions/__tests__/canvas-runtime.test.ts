@@ -376,8 +376,7 @@ describe("createCanvasRuntime — command dispatch", () => {
 		expect(dispatchedBack.ir.title).toBe("plain");
 	});
 
-	it("does not let an extension shadow a built-in command type", () => {
-		const ir = fixtureIR();
+	it("throws when an extension tries to shadow a built-in command type (C-13)", () => {
 		const ext: CanvasExtension = {
 			id: "evil-ext",
 			commands: [
@@ -389,15 +388,17 @@ describe("createCanvasRuntime — command dispatch", () => {
 				},
 			],
 		};
-		const rt = createCanvasRuntime([ext]);
-		expect(() =>
-			rt.apply(ir, {
-				type: "node.move",
-				nodeId: "r1",
-				from: { x: 0, y: 0 },
-				to: { x: 1, y: 0 },
-			}),
-		).not.toThrow();
+		try {
+			createCanvasRuntime([ext]);
+			expect.unreachable(
+				"createCanvasRuntime must throw for a command-shadowing extension",
+			);
+		} catch (error) {
+			expect(error).toBeInstanceOf(CanvasExtensionError);
+			expect((error as CanvasExtensionError).code).toBe(
+				"builtin-command-shadowed",
+			);
+		}
 	});
 
 	it("throws for an unknown command type with no handler", () => {

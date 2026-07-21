@@ -12,7 +12,9 @@ export type CanvasUnknownNode = CanvasNodeBase & { type: string };
 export type CanvasExtensionErrorCode =
 	| "builtin-kind-shadowed"
 	| "duplicate-kind"
-	| "container-kind-unsupported";
+	| "container-kind-unsupported"
+	| "builtin-command-shadowed"
+	| "duplicate-command";
 
 /** Structured error thrown when an extension registration is rejected. */
 export class CanvasExtensionError extends Error {

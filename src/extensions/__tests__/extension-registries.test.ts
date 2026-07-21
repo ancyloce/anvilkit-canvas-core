@@ -123,6 +123,41 @@ describe("createCommandRegistry", () => {
 		const handler = reg.get("custom.noop");
 		expect(handler?.type).toBe("custom.noop");
 	});
+
+	it("rejects shadowing a seeded built-in command type (C-13)", () => {
+		const reg = createCommandRegistry(["node.delete"]);
+		try {
+			reg.register({
+				type: "node.delete",
+				apply: (ir) => ({ ir, inverse: { type: "node.delete" } as never }),
+			});
+			expect.unreachable("register() must throw for a built-in command type");
+		} catch (error) {
+			expect(error).toBeInstanceOf(CanvasExtensionError);
+			expect((error as CanvasExtensionError).code).toBe(
+				"builtin-command-shadowed",
+			);
+		}
+		expect(reg.has("node.delete")).toBe(false);
+	});
+
+	it("rejects registering the same custom command twice (C-13)", () => {
+		const reg = createCommandRegistry();
+		reg.register({
+			type: "custom.noop",
+			apply: (ir) => ({ ir, inverse: { type: "custom.noop" } as never }),
+		});
+		try {
+			reg.register({
+				type: "custom.noop",
+				apply: (ir) => ({ ir, inverse: { type: "custom.noop" } as never }),
+			});
+			expect.unreachable("register() must throw for a duplicate command");
+		} catch (error) {
+			expect(error).toBeInstanceOf(CanvasExtensionError);
+			expect((error as CanvasExtensionError).code).toBe("duplicate-command");
+		}
+	});
 });
 
 describe("createMigrationRegistry", () => {

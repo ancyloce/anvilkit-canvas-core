@@ -237,7 +237,7 @@ export function createCanvasRuntime(
 	extensions: readonly CanvasExtension[] = [],
 ): CanvasRuntime {
 	const nodeKinds = createNodeKindRegistry(BUILTIN_KIND_DEFS);
-	const commands = createCommandRegistry();
+	const commands = createCommandRegistry(BUILTIN_COMMAND_TYPES);
 	const migrations = createMigrationRegistry();
 	const extraSchemas: z.ZodType<CanvasUnknownNode>[] = [];
 
