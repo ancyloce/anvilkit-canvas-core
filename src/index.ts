@@ -1,4 +1,4 @@
-export const CANVAS_CORE_VERSION = "0.1.2-rc.0";
+export const CANVAS_CORE_VERSION = "0.1.2-rc.1";
 
 export type * from "./ai-contracts.js";
 export * from "./ai-design-contracts.js";

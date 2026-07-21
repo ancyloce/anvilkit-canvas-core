@@ -39923,9 +39923,9 @@
 			},
 			"type": {
 				"type": "literal",
-				"value": "0.1.2-rc.0"
+				"value": "0.1.2-rc.1"
 			},
-			"defaultValue": "\"0.1.2-rc.0\""
+			"defaultValue": "\"0.1.2-rc.1\""
 		},
 		{
 			"id": 1176,

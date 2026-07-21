@@ -1,6 +1,6 @@
 {
 	"name": "@anvilkit/canvas-core",
-	"version": "0.1.2-rc.0",
+	"version": "0.1.2-rc.1",
 	"description": "Headless Canvas IR, Zod validators, walkers, mutations, and serializers for AnvilKit Canvas Studio. No React, no Konva.",
 	"type": "module",
 	"main": "./dist/index.cjs",
