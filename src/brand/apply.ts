@@ -92,11 +92,15 @@ function runBrandTransform(
 }
 
 /**
- * Links every literal (non-token) fill/stroke/background that matches a
- * brand color BY VALUE (case-insensitive) to that color's `BrandTokenRef`, so
+ * Links every literal (non-token) fill/background that matches a brand
+ * color BY VALUE (case-insensitive) to that color's `BrandTokenRef`, so
  * future brand-color edits propagate to it. Colors with no matching brand
  * swatch are left untouched — this transform never invents a color choice
  * for a node, only formalizes an already-correct one into a token reference.
+ * `stroke` is deliberately NOT covered (C-17): it is `string`-typed on
+ * every node kind that has one, with no `BrandTokenRef` variant to link to —
+ * `generateBrandComplianceReport` still flags an off-brand/forbidden
+ * literal stroke color, it just can't be tokenized here.
  */
 export function applyBrandColors(
 	document: CanvasIR,

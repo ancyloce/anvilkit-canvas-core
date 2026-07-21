@@ -139,6 +139,13 @@ export function generateBrandComplianceReport(
 			case "star":
 			case "path":
 				checkColor(node.id, "fill", node.fill, brandKit, issues);
+				// `stroke` is always a literal string (it cannot hold a brand
+				// token — see applyBrandColors), but a literal can still be a
+				// forbidden/off-brand color, so it's still worth flagging (C-17).
+				checkColor(node.id, "stroke", node.stroke, brandKit, issues);
+				break;
+			case "line":
+				checkColor(node.id, "stroke", node.stroke, brandKit, issues);
 				break;
 			case "text":
 				checkColor(node.id, "fill", node.fill, brandKit, issues);

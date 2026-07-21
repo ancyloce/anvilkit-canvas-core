@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	createCanvasIR,
 	createGroup,
+	createLine,
 	createPage,
 	createRect,
 	createText,
@@ -97,6 +98,46 @@ describe("generateBrandComplianceReport", () => {
 				code: "forbidden-color",
 				property: "fill",
 				value: "#ff0000",
+			},
+		]);
+	});
+
+	it("flags a forbidden literal stroke color, not just fill (C-17)", () => {
+		const rect = createRect({
+			id: "r1",
+			bounds: { width: 10, height: 10 },
+			stroke: "#ff0000",
+		});
+		const document = makeDocument([rect]);
+		const brandKit = makeBrandKit({
+			colors: [],
+			rules: [{ id: "rule1", kind: "forbidden-color", value: "#ff0000" }],
+		});
+		const report = generateBrandComplianceReport(document, brandKit);
+		expect(report.issues).toEqual([
+			{
+				nodeId: "r1",
+				code: "forbidden-color",
+				property: "stroke",
+				value: "#ff0000",
+			},
+		]);
+	});
+
+	it("flags an off-brand stroke on a line node (C-17)", () => {
+		const line = createLine({
+			id: "l1",
+			points: [0, 0, 10, 10],
+			stroke: "#111111",
+		});
+		const document = makeDocument([line]);
+		const report = generateBrandComplianceReport(document, makeBrandKit());
+		expect(report.issues).toEqual([
+			{
+				nodeId: "l1",
+				code: "off-brand-color",
+				property: "stroke",
+				value: "#111111",
 			},
 		]);
 	});
