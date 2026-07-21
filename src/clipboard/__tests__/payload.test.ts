@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
 	createCanvasIR,
+	createFrame,
 	createGroup,
 	createImage,
 	createPage,
 	createRect,
+	createVideo,
 } from "../../ir/builders.js";
 import type { CanvasIR, CanvasNode } from "../../ir/types.js";
 import {
@@ -131,6 +133,17 @@ describe("parseClipboardPayload", () => {
 		);
 		const huge = `"${"x".repeat(MAX_CLIPBOARD_BYTES + 1)}"`;
 		expect(errorCode(() => parseClipboardPayload(huge))).toBe(
+			"payload-too-large",
+		);
+	});
+
+	it("measures real UTF-8 bytes, not UTF-16 code units, for a CJK payload (C-11)", () => {
+		// Each CJK char is 1 UTF-16 code unit but 3 UTF-8 bytes — `.length`
+		// alone under-counts this payload by 3x and would let it slip past the
+		// cap (real bytes ≈ 3x MAX_CLIPBOARD_BYTES, `.length` ≈ 0.5x it).
+		const cjk = "中".repeat(Math.floor(MAX_CLIPBOARD_BYTES / 2) + 1);
+		expect(cjk.length).toBeLessThan(MAX_CLIPBOARD_BYTES);
+		expect(errorCode(() => parseClipboardPayload(cjk))).toBe(
 			"payload-too-large",
 		);
 	});
@@ -264,5 +277,40 @@ describe("materializeClipboardNodes", () => {
 		const nested = (nodes[1] as { children: { assetId: string }[] })
 			.children[0];
 		expect(nested?.assetId).toBe(newKey);
+	});
+
+	it("re-keys video.poster and frame.placeholder.assetId (C-1)", () => {
+		const target = targetIR("doc-1");
+		target.assets["asset-a"] = { id: "asset-a", uri: "https://x/OTHER.png" };
+		const payload = payloadWith(
+			[
+				createVideo({
+					id: "vid",
+					assetId: "vid-asset",
+					poster: "asset-a",
+					bounds: { width: 10, height: 10 },
+				}),
+				createFrame({
+					id: "frm",
+					bounds: { width: 10, height: 10 },
+					placeholder: { kind: "image", assetId: "asset-a" },
+				}),
+			],
+			{
+				sourceDocumentId: "doc-other",
+				assetRefs: { "asset-a": { id: "asset-a", uri: "https://x/a.png" } },
+			},
+		);
+		const { assetsToAdd, nodes } = materializeClipboardNodes(payload, target, {
+			idFactory: seqFactory("k"),
+		});
+		const addedKeys = Object.keys(assetsToAdd);
+		expect(addedKeys).toHaveLength(1);
+		const newKey = addedKeys[0];
+		if (!newKey) throw new Error("no re-keyed asset");
+		expect((nodes[0] as { poster?: string }).poster).toBe(newKey);
+		expect(
+			(nodes[1] as { placeholder?: { assetId?: string } }).placeholder?.assetId,
+		).toBe(newKey);
 	});
 });

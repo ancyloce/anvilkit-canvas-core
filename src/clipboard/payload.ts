@@ -160,10 +160,14 @@ export function validateClipboardPayload(
  * treat it as hostile (PRD §14.1).
  */
 export function parseClipboardPayload(text: string): CanvasClipboardPayload {
-	if (text.length > MAX_CLIPBOARD_BYTES) {
+	// `text.length` counts UTF-16 code units, not bytes — a CJK/emoji-heavy
+	// hostile payload would pass this cap at ~3-4x its documented byte size
+	// (C-11). Measure the real encoded byte length instead.
+	const byteLength = new TextEncoder().encode(text).byteLength;
+	if (byteLength > MAX_CLIPBOARD_BYTES) {
 		throw new CanvasClipboardError(
 			"payload-too-large",
-			`Clipboard payload is ${text.length} bytes (max ${MAX_CLIPBOARD_BYTES})`,
+			`Clipboard payload is ${byteLength} bytes (max ${MAX_CLIPBOARD_BYTES})`,
 		);
 	}
 	let data: unknown;
@@ -261,10 +265,25 @@ export function materializeClipboardNodes(
 	if (assetIdRewrites.size > 0) {
 		const rewrite = (node: CanvasNode): void => {
 			const record = node as unknown as Record<string, unknown>;
-			for (const field of ["assetId", "maskAssetId"] as const) {
+			// Mirrors the reference fields `ir/invariants.ts`'s
+			// `assetIdsReferencedByNode` enumerates, so a rewritten asset id can
+			// never desync from what the invariant checker considers a reference.
+			for (const field of ["assetId", "maskAssetId", "poster"] as const) {
 				const value = record[field];
 				if (typeof value === "string" && assetIdRewrites.has(value)) {
 					record[field] = assetIdRewrites.get(value);
+				}
+			}
+			const placeholder = record.placeholder as
+				| Record<string, unknown>
+				| undefined;
+			if (placeholder) {
+				const placeholderAssetId = placeholder.assetId;
+				if (
+					typeof placeholderAssetId === "string" &&
+					assetIdRewrites.has(placeholderAssetId)
+				) {
+					placeholder.assetId = assetIdRewrites.get(placeholderAssetId);
 				}
 			}
 			if (isContainerNode(node)) {
