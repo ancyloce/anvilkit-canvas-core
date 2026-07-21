@@ -85,8 +85,17 @@ function applySlotValue(
 			return "unsupported";
 		case "rich-text":
 			if (slot.kind === "text") {
+				// Content (unlike font/color, below) must land in exactly one
+				// place — the first span — or a multi-span/multi-paragraph node
+				// renders the slot value duplicated once per span (C-5). Every
+				// other span keeps its style but is emptied, not removed, so
+				// paragraph/span structure (and per-span styling) survives.
+				let wrote = false;
 				for (const paragraph of node.paragraphs) {
-					for (const span of paragraph.spans) span.text = value;
+					for (const span of paragraph.spans) {
+						span.text = wrote ? "" : value;
+						wrote = true;
+					}
 				}
 				return "applied";
 			}

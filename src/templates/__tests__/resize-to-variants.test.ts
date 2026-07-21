@@ -84,6 +84,18 @@ describe("resizeToVariants", () => {
 		});
 	});
 
+	it("sizes root.bounds to the preset, matching the page.size invariant applyPageResize maintains (C-14)", () => {
+		const document = makeDocument();
+		const { pages } = resizeToVariants(document, "source-page", [
+			youtubeThumbnail,
+		]);
+		expect(pages[0]?.root.bounds).toEqual({ width: 1280, height: 720 });
+		expect(pages[0]?.root.bounds).toEqual({
+			width: pages[0]?.size.width,
+			height: pages[0]?.size.height,
+		});
+	});
+
 	it("stamps variantSource with the source page id and preset id/version", () => {
 		const document = makeDocument();
 		const { pages } = resizeToVariants(document, "source-page", [

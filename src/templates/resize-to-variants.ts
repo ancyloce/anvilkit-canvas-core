@@ -8,9 +8,9 @@ import type {
 	CanvasExportJobRequest,
 	CanvasExportJobVariant,
 } from "../export/types.js";
+import { regenerateNodeIds } from "../ir/regenerate-ids.js";
 import type { CanvasIR, CanvasPage } from "../ir/types.js";
 import { CanvasPageSchema } from "../ir/validators.js";
-import { walkPage } from "../ir/walkers.js";
 import type { CanvasSizePreset } from "./types.js";
 
 function defaultIdFactory(): string {
@@ -60,12 +60,12 @@ export function resizeToVariants(
 	}
 
 	const pages = presets.map((preset): CanvasPage => {
-		const cloned = structuredClone(sourcePage);
-		walkPage(cloned, ({ node }) => {
-			node.id = idFactory();
-		});
+		// Shared id-regeneration primitive (depth-guarded, do-not-hand-roll
+		// mandate) instead of a bespoke walk that just overwrote `node.id` in
+		// place (C-14).
+		const { node: root } = regenerateNodeIds(sourcePage.root, { idFactory });
 		const page: CanvasPage = {
-			...cloned,
+			...sourcePage,
 			id: idFactory(),
 			name: sourcePage.name
 				? `${sourcePage.name} — ${preset.label}`
@@ -76,6 +76,9 @@ export function resizeToVariants(
 				unit: preset.unit,
 				...(preset.dpi !== undefined ? { dpi: preset.dpi } : {}),
 			},
+			// `root.bounds` must track the new page size — `applyPageResize`
+			// maintains this same `root.bounds === page.size` invariant (C-14).
+			root: { ...root, bounds: { width: preset.width, height: preset.height } },
 			variantSource: {
 				sourcePageId,
 				presetId: preset.id,

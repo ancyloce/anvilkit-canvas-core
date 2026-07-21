@@ -6,6 +6,7 @@ import {
 	createLine,
 	createPage,
 	createRect,
+	createRichText,
 	createText,
 } from "../../ir/builders.js";
 import { instantiateTemplate } from "../instantiate.js";
@@ -170,6 +171,45 @@ describe("instantiateTemplate — variable substitution", () => {
 			(n) => n.type === "text",
 		);
 		expect(textNode?.type === "text" && textNode.text).toBe("Big Sale");
+	});
+
+	it("writes a text slot's value into exactly one span, not every span (C-5)", () => {
+		const richText = createRichText({
+			id: "rt1",
+			bounds: { width: 200, height: 80 },
+			paragraphs: [
+				{ spans: [{ text: "Hello " }, { text: "World" }] },
+				{ spans: [{ text: "Second line" }] },
+			],
+		});
+		const page = createPage({
+			id: "page1",
+			root: createGroup({ children: [richText] }),
+		});
+		const document = createCanvasIR({
+			id: "doc1",
+			pages: [page],
+			now: () => "2026-01-01T00:00:00.000Z",
+		});
+		const template = makeTemplate({
+			document,
+			editableSlots: [{ id: "slot-headline", kind: "text", nodeId: "rt1" }],
+			variables: [
+				{ id: "var-headline", label: "Headline", slotId: "slot-headline" },
+			],
+		});
+		const result = instantiateTemplate(template, {
+			variables: { "var-headline": "Big Sale" },
+			...makeDeterministicFactories(),
+		});
+		const node = result.document.pages[0]?.root.children.find(
+			(n) => n.type === "rich-text",
+		);
+		if (node?.type !== "rich-text") throw new Error("expected rich-text node");
+		const allText = node.paragraphs.flatMap((p) => p.spans.map((s) => s.text));
+		// Before the fix this was ["Big Sale", "Big Sale", "Big Sale"] —
+		// the value duplicated into every span across both paragraphs.
+		expect(allText).toEqual(["Big Sale", "", ""]);
 	});
 
 	it("falls back to defaultValue when no value is supplied", () => {
