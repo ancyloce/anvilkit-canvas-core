@@ -6,7 +6,12 @@ import type {
 	CanvasPageCreateCommand,
 } from "./commands/types.js";
 import type { CanvasAiPlaceholderStatus, CanvasPage } from "./ir/types.js";
-import { CanvasNodeSchema, CanvasPageSchema } from "./ir/validators.js";
+import {
+	CanvasBoundsSchema,
+	CanvasNodeSchema,
+	CanvasPageSchema,
+	CanvasTransformSchema,
+} from "./ir/validators.js";
 import type { CanvasSizePreset } from "./templates/types.js";
 
 /**
@@ -193,7 +198,14 @@ export type ValidateAiDesignJobResultOutcome =
 	| { readonly ok: true; readonly command: CanvasBatchCommand }
 	| { readonly ok: false; readonly error: AiDesignQuarantineError };
 
-/** Every embedded node (`node.create`) / page (`page.create`), validated recursively through a `batch`. */
+/**
+ * Every embedded node (`node.create`) / page (`page.create`) payload, plus
+ * the numeric fields a `node.update` patch may carry, validated recursively
+ * through a `batch`. Every other built-in command type is whitelisted
+ * (returns no issues) rather than falling through a catch-all `default` — an
+ * unrecognized `type` (a hostile or future-version AI payload cast to
+ * `CanvasCommand`) is quarantined instead of silently passing (P1 C-2).
+ */
 function collectCommandValidationIssues(command: CanvasCommand): string[] {
 	switch (command.type) {
 		case "node.create": {
@@ -208,10 +220,51 @@ function collectCommandValidationIssues(command: CanvasCommand): string[] {
 				? []
 				: result.error.issues.map((issue) => issue.message);
 		}
+		case "node.update": {
+			const issues: string[] = [];
+			if (command.patch.transform !== undefined) {
+				const result = CanvasTransformSchema.safeParse(command.patch.transform);
+				if (!result.success) {
+					issues.push(...result.error.issues.map((issue) => issue.message));
+				}
+			}
+			if (command.patch.bounds !== undefined) {
+				const result = CanvasBoundsSchema.safeParse(command.patch.bounds);
+				if (!result.success) {
+					issues.push(...result.error.issues.map((issue) => issue.message));
+				}
+			}
+			return issues;
+		}
 		case "batch":
 			return command.commands.flatMap(collectCommandValidationIssues);
-		default:
+		case "node.delete":
+		case "node.reorder":
+		case "node.reparent":
+		case "node.move":
+		case "node.resize":
+		case "node.rotate":
+		case "node.applyStyle":
+		case "image.replace":
+		case "node.group":
+		case "node.ungroup":
+		case "page.delete":
+		case "page.reorder":
+		case "page.rename":
+		case "page.duplicate":
+		case "page.resize":
+		case "page.set-background":
+		case "page.set-layout-aids":
+		case "asset.put":
+		case "asset.remove":
+			// No embedded IR/document payload to schema-check — these commands
+			// only reference existing ids and set primitive fields, which
+			// `applyCommand` validates against live document state at apply time.
 			return [];
+		default:
+			return [
+				`Unrecognized command type "${(command as { type: string }).type}"`,
+			];
 	}
 }
 

@@ -357,4 +357,65 @@ describe("validateAiDesignJobResult — FR-052 validation/quarantine layer", () 
 		const variant = ir.pages.find((p) => p.id === "variant-1");
 		expect(variant?.root.children).toHaveLength(2);
 	});
+
+	it("quarantines an unrecognized top-level command type instead of passing it through (C-2)", () => {
+		const outcome = validateAiDesignJobResult({
+			jobId: "j1",
+			status: "complete",
+			payload: {
+				kind: "command",
+				command: {
+					// biome-ignore lint/suspicious/noExplicitAny: deliberately hallucinated command type to prove quarantine
+					type: "node.teleport" as any,
+					nodeId: "headline",
+				},
+			},
+			startedAt: 0,
+		});
+		expect(outcome.ok).toBe(false);
+		if (outcome.ok) throw new Error("expected quarantine");
+		expect(outcome.error.code).toBe("invalid-payload");
+	});
+
+	it("quarantines a node.update patch carrying a non-finite transform (C-2)", () => {
+		const outcome = validateAiDesignJobResult({
+			jobId: "j1",
+			status: "complete",
+			payload: {
+				kind: "command",
+				command: {
+					type: "node.update",
+					nodeId: "headline",
+					kind: "text",
+					patch: {
+						transform: {
+							x: Number.NaN,
+							y: 0,
+							rotation: 0,
+							scaleX: 1,
+							scaleY: 1,
+						},
+					},
+				} satisfies CanvasNodeUpdateCommand<"text">,
+			},
+			startedAt: 0,
+		});
+		expect(outcome.ok).toBe(false);
+		if (outcome.ok) throw new Error("expected quarantine");
+		expect(outcome.error.code).toBe("invalid-payload");
+		expect(outcome.error.issues?.length).toBeGreaterThan(0);
+	});
+});
+
+describe("applyCommand — rejects unrecognized command types (P1 C-2)", () => {
+	it("throws unknown-command instead of returning undefined", () => {
+		const document = makeDocument();
+		expect(() =>
+			applyCommand(document, {
+				// biome-ignore lint/suspicious/noExplicitAny: deliberately hallucinated command type
+				type: "node.teleport" as any,
+				nodeId: "headline",
+			}),
+		).toThrowError(/Unrecognized command type/);
+	});
 });
