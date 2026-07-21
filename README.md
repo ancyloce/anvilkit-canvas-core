@@ -307,7 +307,7 @@ decode preserves it verbatim and read-time precedence via
 wins; otherwise `shadow` applies) keeps old documents rendering identically
 without an IR version bump. Nodes upgrade to `effects[]` lazily when edited.
 Never read `node.shadow` directly — always resolve through
-`resolveNodeEffects`. Rationale and guarantees: the workspace decision record
+`resolveNodeEffects`. Rationale and guarantees: the decision record
 `docs/architecture/shadow-effects-normalization-decision.md`; contract tests:
 `src/ir/__tests__/shadow-effects-decode.test.ts` and
 `src/serialize/__tests__/effects.test.ts`.
