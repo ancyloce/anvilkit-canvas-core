@@ -20,7 +20,8 @@
 		"./package.json": "./package.json"
 	},
 	"files": [
-		"dist"
+		"dist",
+		"docs"
 	],
 	"license": "MIT",
 	"sideEffects": false,
