@@ -9,11 +9,20 @@
   `"2"`, decode never rewrites `shadow` structurally, `resolveNodeEffects`
   precedence (`effects[]` wins, empty array suppresses) is the single source
   of truth, and nodes upgrade lazily on edit. Decision record:
-  `docs/architecture/shadow-effects-normalization-decision.md` (workspace);
-  new decode-boundary contract tests in
+  `docs/architecture/shadow-effects-normalization-decision.md`; new
+  decode-boundary contract tests in
   `src/ir/__tests__/shadow-effects-decode.test.ts` (verbatim round trips for
   shadow-only / effects-only / both / empty-effects documents, node-level
   unknown-key preservation across v1→v2).
+- The decision record above is now committed inside this package (`docs/`
+  is published via `files`) instead of only existing as an external,
+  untracked workspace note — README/CHANGELOG/test references to it now
+  resolve for anyone consuming this package standalone.
+- **Unit/DPI export-only decision formalized (FR-063, OD-1)**: added
+  `docs/architecture/unit-dpi-export-only-decision.md` recording that
+  `CanvasPageSize.unit`/`.dpi` are export-time-only (consumed only by the
+  SVG/PDF serializers), with no schema, command, or public API change — the
+  decision was already in effect, this documents it durably.
 - **`CanvasPageBackground` contract narrowed (FR-063)**: `solid` is
   documented as the only kind with first-class rendering; `image`/`gradient`
   are reserved (undefined `value` format) — serializer keeps warning
