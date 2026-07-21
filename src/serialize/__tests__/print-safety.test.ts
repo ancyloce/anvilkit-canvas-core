@@ -91,6 +91,20 @@ describe("serializeDocumentToPdf — print safety (FR-043, canvas-m3-004)", () =
 		expect(warnings.filter((w) => w.code === "PRINT_UNSAFE")).toHaveLength(0);
 	});
 
+	it("checks height DPI too, not just width — safe width but unsafe height still warns (C-18)", async () => {
+		// A 1x1 raster: width DPI = 1px / (1/200in) = 200 (safe, clears 150).
+		// Height DPI = 1px / 11in ≈ 0.09 (drastically unsafe). Checking width
+		// alone would miss this.
+		const ir = makeIr([
+			makePage("p1", { width: 1 / 200, height: 11, unit: "in" }),
+		]);
+		const { warnings } = await serializeDocumentToPdf(ir, {
+			rasters: [{ pageId: "p1", image: PNG_1X1_DATA_URL }],
+			print: { capabilities: { raster: true, vector: false } },
+		});
+		expect(warnings.filter((w) => w.code === "PRINT_UNSAFE")).toHaveLength(1);
+	});
+
 	it("does not check pages whose raster is missing (RASTER_MISSING wins, no double-warning)", async () => {
 		const ir = makeIr([makePage("p1", { width: 8.5, height: 11, unit: "in" })]);
 		const { warnings } = await serializeDocumentToPdf(ir, {

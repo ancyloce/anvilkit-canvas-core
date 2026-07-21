@@ -113,9 +113,17 @@ export const DEFAULT_DPI = 96;
 
 // --- escaping ----------------------------------------------------------------
 
+// XML 1.0 forbids these C0 control characters in content outright — unlike
+// `&`/`<`/`>` there is no valid escape/character-reference for them, so an
+// untrusted/corrupted string (e.g. a hostile-peer node's `.text`) containing
+// one would otherwise produce invalid XML no escaping can fix (C-18).
+// biome-ignore lint/suspicious/noControlCharactersInRegex: this regex's purpose is to strip those exact characters
+const XML_INVALID_CHARS_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
+
 /** Escape text content for an XML/SVG element body. */
 export function escapeXml(input: string): string {
 	return input
+		.replace(XML_INVALID_CHARS_RE, "")
 		.replaceAll("&", "&amp;")
 		.replaceAll("<", "&lt;")
 		.replaceAll(">", "&gt;");
@@ -221,10 +229,32 @@ export function bytesToBase64(bytes: Uint8Array): string {
 
 // --- ids and path data -------------------------------------------------------
 
-/** Reduce an arbitrary id to chars safe inside an XML id and `url(#…)` ref. */
+/**
+ * Short, deterministic, dependency-free fingerprint (djb2) — collision
+ * avoidance only, not cryptographic.
+ */
+function fingerprint(input: string): string {
+	let hash = 5381;
+	for (let i = 0; i < input.length; i++) {
+		hash = (hash * 33) ^ input.charCodeAt(i);
+	}
+	return (hash >>> 0).toString(36);
+}
+
+/**
+ * Reduce an arbitrary id to chars safe inside an XML id and `url(#…)` ref.
+ * A `crypto.randomUUID()` id (already all `[0-9a-f-]`) passes through
+ * unchanged. Two DIFFERENT non-safe ids can otherwise clean to the SAME
+ * string (`"a:b"` and `"a.b"` both -> `"a_b"`) — an id collision would
+ * silently misattribute a `url(#…)`-referenced gradient/filter/clip-path to
+ * the wrong element, so a fingerprint of the ORIGINAL id is appended
+ * whenever cleaning actually changed anything (C-18).
+ */
 export function sanitizeId(id: string): string {
 	const cleaned = id.replace(/[^A-Za-z0-9_-]/g, "_");
-	return cleaned.length > 0 ? cleaned : "id";
+	if (cleaned === id) return cleaned.length > 0 ? cleaned : "id";
+	const base = cleaned.length > 0 ? cleaned : "id";
+	return `${base}-${fingerprint(id)}`;
 }
 
 /**
@@ -324,11 +354,15 @@ export type SvgWarningCode =
 	// `ellipsis` overflow is emitted clipped (best effort), without the ellipsis
 	// glyph, so the caller knows the truncation marker is missing.
 	//
-	// There is deliberately no `RICH_TEXT_CLIP_UNSUPPORTED`: `overflow: "clip"` IS
-	// losslessly representable as a `<clipPath>`, exactly like a frame's, so a code
-	// for it could never fire — dead API, which the frame work already ruled out.
+	// `overflow: "clip"`/`"ellipsis"` IS losslessly representable as a
+	// `<clipPath>`, exactly like a frame's — PROVIDED a clip height is
+	// available. Without one (no explicit `height` and no measurer) there is
+	// nothing to clip against, so the block silently renders fully unclipped
+	// instead — `RICH_TEXT_CLIP_UNMEASURED` (C-18) flags exactly that case,
+	// mirroring `RICH_TEXT_VERTICAL_ALIGN_APPROXIMATED` below.
 	| "RICH_TEXT_WRAP_APPROXIMATE"
 	| "RICH_TEXT_ELLIPSIS_UNSUPPORTED"
+	| "RICH_TEXT_CLIP_UNMEASURED"
 	// Added for FR-081 vertical alignment. Fires when `verticalAlign` is
 	// `middle`/`bottom` but the content height is unknown (no measurer and no
 	// explicit `height`), so the block cannot be offset and renders top-aligned.
@@ -574,11 +608,15 @@ function shadowMarkup(id: string, s: CanvasShadow): string {
 function effectsMarkup(id: string, effects: readonly CanvasEffect[]): string {
 	const primitives: string[] = [];
 	const shadowResults: string[] = [];
-	let blurRadius = 0;
+	// Gaussian blur composition is quadrature (variances add), not additive —
+	// two 5px blurs combine to ~7.07px, not 10px. Summing radii directly
+	// overstates the combined blur for any node with more than one blur
+	// effect (C-18).
+	let blurRadiusSumOfSquares = 0;
 	let i = 0;
 	for (const effect of effects) {
 		if (effect.type === "blur") {
-			blurRadius += effect.radius;
+			blurRadiusSumOfSquares += effect.radius * effect.radius;
 			continue;
 		}
 		const spread = effect.spread ?? 0;
@@ -604,9 +642,12 @@ function effectsMarkup(id: string, effects: readonly CanvasEffect[]): string {
 			.join("");
 		primitives.push(`<feMerge>${nodes}</feMerge>`);
 	}
-	if (blurRadius > 0) {
+	if (blurRadiusSumOfSquares > 0) {
+		const combinedBlurRadius = Math.sqrt(blurRadiusSumOfSquares);
 		// With no preceding merge this blurs SourceGraphic; otherwise the merged result.
-		primitives.push(`<feGaussianBlur stdDeviation="${fmt(blurRadius / 2)}" />`);
+		primitives.push(
+			`<feGaussianBlur stdDeviation="${fmt(combinedBlurRadius / 2)}" />`,
+		);
 	}
 	return `<filter id="${id}">${primitives.join("")}</filter>`;
 }
@@ -995,7 +1036,11 @@ export function emitText(node: CanvasTextNode, ctx: SvgEmitContext): string {
 		attrs.push(`font-weight="${escapeAttr(node.fontWeight)}"`);
 	}
 	if (anchor !== "start") attrs.push(`text-anchor="${anchor}"`);
-	attrs.push(`fill="${escapeAttr(decor.fill ?? "")}"`);
+	// An unresolved brand-token fill must paint nothing (matching shapes' own
+	// `paintAttrs`), not the invalid, browser-defaults-to-black `fill=""` (C-8).
+	attrs.push(
+		`fill="${decor.fill !== undefined ? escapeAttr(decor.fill) : "none"}"`,
+	);
 
 	const lines = node.text.split("\n");
 	if (lines.length > 1) {
@@ -1175,7 +1220,9 @@ export function emitRichText(
 		`font-family="${escapeAttr(defaults.fontFamily)}"`,
 		`font-size="${fmt(defaults.fontSize)}"`,
 		`font-weight="${escapeAttr(defaults.fontWeight)}"`,
-		`fill="${escapeAttr(decor.fill ?? "")}"`,
+		// See `emitText` — an unresolved brand-token fill must paint nothing,
+		// not the invalid `fill=""` (C-8).
+		`fill="${decor.fill !== undefined ? escapeAttr(decor.fill) : "none"}"`,
 	];
 
 	const defs: string[] = [];
@@ -1254,8 +1301,18 @@ function richTextClip(
 			node.id,
 		);
 	}
-	// Nothing to clip against: no explicit height, and no measurer to derive one.
-	if (height === undefined) return { defs: "", attr: "" };
+	// Nothing to clip against: no explicit height, and no measurer to derive
+	// one — the block silently renders fully unclipped instead of honoring
+	// the requested overflow (C-18).
+	if (height === undefined) {
+		warn(
+			ctx,
+			"RICH_TEXT_CLIP_UNMEASURED",
+			`overflow "${overflow}" needs a measured or explicit content height; the block renders unclipped.`,
+			node.id,
+		);
+		return { defs: "", attr: "" };
+	}
 
 	const clipId = `richtext-clip-${sanitizeId(node.id)}`;
 	return {
@@ -2122,9 +2179,29 @@ export async function serializePageToSvg(
 	const content: string[] = [];
 	const background = backgroundRect(page, width, height, ctx);
 	if (background) content.push(childPad + background);
-	// The page root group is the page coordinate space; emit its children
-	// directly so the document isn't wrapped in a redundant <g>.
-	content.push(...(await emitChildren(page.root.children, ctx, 1)));
+	// The root's own transform/opacity/blendMode (settable via `updateNode` on
+	// the root) must not be silently dropped — wrap in a <g>, mirroring
+	// emitGroup's own formatting, only when there's something on the root to
+	// carry (C-15). `rootAttrs` is computed once and reused (not recomputed
+	// inside emitGroup) so a BLENDMODE_UNSUPPORTED warning can't double-fire.
+	const rootAttrs = commonAttrs(page.root, ctx);
+	if (rootAttrs.length > 0) {
+		const rootChildren = await emitChildren(page.root.children, ctx, 2);
+		const attrStr = ` ${rootAttrs.join(" ")}`;
+		if (rootChildren.length === 0) {
+			content.push(`${childPad}<g${attrStr} />`);
+		} else if (!pretty) {
+			content.push(`${childPad}<g${attrStr}>${rootChildren.join("")}</g>`);
+		} else {
+			content.push(
+				`${childPad}<g${attrStr}>\n${rootChildren.join("\n")}\n${childPad}</g>`,
+			);
+		}
+	} else {
+		// The page root group is the page coordinate space; emit its children
+		// directly so the document isn't wrapped in a redundant <g>.
+		content.push(...(await emitChildren(page.root.children, ctx, 1)));
+	}
 
 	// Accessible name: prefer the page name, fall back to the document title.
 	// `<title>` is emitted as the first child (screen readers announce it) and is

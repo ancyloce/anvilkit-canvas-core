@@ -391,7 +391,12 @@ export async function serializeDocumentToPdf(
 			if (options.print) {
 				const minDpi = options.print.dpi ?? DEFAULT_PRINT_MIN_DPI;
 				const widthInches = widthPt / 72;
-				const effectiveDpi = widthInches > 0 ? embedded.width / widthInches : 0;
+				const heightInches = heightPt / 72;
+				const widthDpi = widthInches > 0 ? embedded.width / widthInches : 0;
+				const heightDpi = heightInches > 0 ? embedded.height / heightInches : 0;
+				// A non-uniformly scaled raster can be print-safe in one dimension
+				// and not the other — checking width alone misses that (C-18).
+				const effectiveDpi = Math.min(widthDpi, heightDpi);
 				if (effectiveDpi < minDpi) {
 					warnings.push({
 						code: "PRINT_UNSAFE",

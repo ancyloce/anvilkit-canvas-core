@@ -68,6 +68,14 @@ describe("escapeXml", () => {
 	it("escapes ampersands before angle brackets (no double-escaping)", () => {
 		expect(escapeXml("&lt;")).toBe("&amp;lt;");
 	});
+
+	it("strips XML-1.0-invalid control characters no escape can fix (C-18)", () => {
+		expect(escapeXml("a\x00b\x0Bc\x1Fd")).toBe("abcd");
+	});
+
+	it("keeps tab/LF/CR, which XML 1.0 permits", () => {
+		expect(escapeXml("a\tb\nc\rd")).toBe("a\tb\nc\rd");
+	});
 });
 
 describe("escapeAttr", () => {
@@ -164,9 +172,24 @@ describe("bytesToBase64", () => {
 });
 
 describe("sanitizeId", () => {
-	it("replaces unsafe characters with underscores", () => {
-		expect(sanitizeId("a b#c")).toBe("a_b_c");
+	it("replaces unsafe characters with underscores, plus a disambiguating fingerprint (C-18)", () => {
+		expect(sanitizeId("a b#c")).toMatch(/^a_b_c-[0-9a-z]+$/);
+	});
+
+	it("passes an already-safe id through unchanged (the common crypto.randomUUID() case)", () => {
 		expect(sanitizeId("ok-id_1")).toBe("ok-id_1");
+	});
+
+	it("gives two different inputs that clean to the same string DIFFERENT sanitized ids (C-18)", () => {
+		const a = sanitizeId("a:b");
+		const b = sanitizeId("a.b");
+		expect(a).not.toBe(b);
+		expect(a.startsWith("a_b-")).toBe(true);
+		expect(b.startsWith("a_b-")).toBe(true);
+	});
+
+	it("is deterministic for the same input", () => {
+		expect(sanitizeId("a b#c")).toBe(sanitizeId("a b#c"));
 	});
 
 	it("falls back to a placeholder for empty input", () => {
@@ -482,6 +505,23 @@ describe("brand-token resolution", () => {
 		expect(ctx.usedFonts.size).toBe(0);
 	});
 
+	it('degrades an unresolved token fill on plain text to fill="none", not fill="" (C-8)', () => {
+		const text: CanvasTextNode = {
+			id: "t1",
+			type: "text",
+			transform: identity,
+			bounds: { width: 100, height: 20 },
+			zIndex: 0,
+			text: "hi",
+			fontFamily: "Inter",
+			fontSize: 16,
+			fill: colorToken,
+		};
+		const out = emitText(text, createEmitContext());
+		expect(out).toContain('fill="none"');
+		expect(out).not.toContain('fill=""');
+	});
+
 	it("resolves a rich-text span's token fill and fontFamily", () => {
 		const richText: CanvasRichTextNode = {
 			id: "rt1",
@@ -506,6 +546,24 @@ describe("brand-token resolution", () => {
 		expect(ctx.warnings.map((w) => w.code)).not.toContain(
 			"BRAND_TOKEN_UNRESOLVED",
 		);
+	});
+
+	it('degrades an unresolved token fill on the rich-text default to fill="none", not fill="" (C-8)', () => {
+		const richText: CanvasRichTextNode = {
+			id: "rt1",
+			type: "rich-text",
+			transform: identity,
+			bounds: { width: 200, height: 60 },
+			zIndex: 0,
+			width: 200,
+			paragraphs: [{ spans: [{ text: "hi" }] }],
+		};
+		const out = emitRichText(
+			richText,
+			createEmitContext({ richTextDefaults: { fill: colorToken } }),
+		);
+		expect(out).toContain('fill="none"');
+		expect(out).not.toContain('fill=""');
 	});
 
 	it("warns once per unresolved span, not twice, for the usedFonts pre-scan", () => {
@@ -803,6 +861,43 @@ describe("serializePageToSvg", () => {
 		expect(svg).toContain('<g transform="translate(5 5)">');
 		expect(svg).toContain('<rect width="10" height="10"');
 		expect(svg).toContain("</g>");
+	});
+
+	it("wraps the page root's own transform/opacity in a <g> instead of dropping them (C-15)", async () => {
+		const child: CanvasRectNode = {
+			id: "c1",
+			type: "rect",
+			transform: identity,
+			bounds: { width: 10, height: 10 },
+			zIndex: 0,
+			fill: "#000",
+		};
+		const decoratedRoot: CanvasGroupNode = {
+			id: "root",
+			type: "group",
+			transform: { ...identity, x: 5, y: 5 },
+			bounds: { width: 0, height: 0 },
+			zIndex: 0,
+			opacity: 0.5,
+			children: [child],
+		};
+		const { svg } = await serializePageToSvg(makeIR(decoratedRoot), 0);
+		expect(svg).toContain('<g transform="translate(5 5)" opacity="0.5">');
+		expect(svg).toContain('<rect width="10" height="10"');
+	});
+
+	it("does not wrap the page root in a redundant <g> when it carries no transform/opacity/blendMode (C-15)", async () => {
+		const child: CanvasRectNode = {
+			id: "c1",
+			type: "rect",
+			transform: identity,
+			bounds: { width: 10, height: 10 },
+			zIndex: 0,
+			fill: "#000",
+		};
+		const { svg } = await serializePageToSvg(makeIR(group([child])), 0);
+		expect(svg).not.toContain("<g");
+		expect(svg).toContain('<rect width="10" height="10"');
 	});
 
 	it("warns for an unsupported background kind", async () => {
@@ -1477,14 +1572,19 @@ describe("emitRichText — overflow", () => {
 	});
 
 	// Honest degradation: with neither an explicit height nor a measurer there is
-	// nothing to clip against, so no bogus clip box is invented.
-	it("emits no clip when it has neither a height nor a measurer", () => {
-		const out = emitRichText(
-			{ ...richText, overflow: "clip" },
-			createEmitContext(),
-		);
+	// nothing to clip against, so no bogus clip box is invented — and the caller
+	// is warned the block renders fully unclipped instead (C-18), not left to
+	// silently discover it.
+	it("emits no clip and warns when it has neither a height nor a measurer", () => {
+		const ctx = createEmitContext();
+		const out = emitRichText({ ...richText, overflow: "clip" }, ctx);
 		expect(out).not.toContain("clipPath");
 		expect(out).not.toContain("clip-path");
+		// Also RICH_TEXT_WRAP_APPROXIMATE — no measurer was supplied at all,
+		// which is a separate, expected degradation from the clip warning.
+		expect(ctx.warnings.map((w) => w.code)).toContain(
+			"RICH_TEXT_CLIP_UNMEASURED",
+		);
 	});
 
 	it("clips an ellipsis overflow and warns that the marker is missing", () => {
@@ -1498,6 +1598,14 @@ describe("emitRichText — overflow", () => {
 			"RICH_TEXT_ELLIPSIS_UNSUPPORTED",
 		]);
 		expect(ctx.warnings[0]?.nodeId).toBe("rt1");
+	});
+
+	it("warns with both clip and ellipsis codes for an unmeasured ellipsis overflow (C-18)", () => {
+		const ctx = createEmitContext();
+		emitRichText({ ...richText, overflow: "ellipsis" }, ctx);
+		const codes = ctx.warnings.map((w) => w.code);
+		expect(codes).toContain("RICH_TEXT_CLIP_UNMEASURED");
+		expect(codes).toContain("RICH_TEXT_ELLIPSIS_UNSUPPORTED");
 	});
 
 	it("clips nothing for visible or auto-height", () => {

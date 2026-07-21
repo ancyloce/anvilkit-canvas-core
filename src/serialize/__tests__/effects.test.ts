@@ -158,6 +158,22 @@ describe("SVG serialization of effects (C-03)", () => {
 		expect(svg).not.toContain("<feMerge>");
 	});
 
+	it("combines multiple blur effects by quadrature, not by summing radii (C-18)", async () => {
+		// sqrt(6² + 8²) = sqrt(100) = 10 → stdDeviation 5. A naive sum would
+		// give radius 14 → stdDeviation 7, overstating the combined blur.
+		const { svg } = await serializePageToSvg(
+			irWith({
+				...baseRect,
+				effects: [
+					{ type: "blur", radius: 6 },
+					{ type: "blur", radius: 8 },
+				],
+			}),
+			"p1",
+		);
+		expect(svg).toContain('<feGaussianBlur stdDeviation="5" />');
+	});
+
 	it("effects: [] suppresses the legacy shadow (explicit removal)", async () => {
 		const { svg } = await serializePageToSvg(
 			irWith({ ...baseRect, shadow: LEGACY_SHADOW, effects: [] }),
