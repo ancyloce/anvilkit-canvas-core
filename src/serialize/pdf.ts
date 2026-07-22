@@ -47,7 +47,7 @@ const MM_PER_INCH = 25.4;
 /**
  * Convert a page dimension to PDF points. `in`/`mm` are physical; `px` is scaled
  * through `dpi` so a screen-pixel page maps to a sensible physical size. Mirrors
- * the unit semantics of `unitToPx` in `./svg.ts` (which shares {@link DEFAULT_DPI}).
+ * the unit semantics of `unitToPx` in `./svg.ts` (which shares `DEFAULT_DPI`).
  */
 export function unitToPt(value: number, unit: CanvasUnit, dpi: number): number {
 	switch (unit) {
@@ -222,7 +222,7 @@ export interface PdfSerializeOptions {
 	 * An unknown selector throws; an explicitly empty list throws (no PDF pages).
 	 */
 	pages?: Array<string | number>;
-	/** Fallback px→pt DPI when a page omits `size.dpi`. Defaults to {@link DEFAULT_DPI}. */
+	/** Fallback px→pt DPI when a page omits `size.dpi`. Defaults to `DEFAULT_DPI`. */
 	dpi?: number;
 	/** Written to the PDF document's title metadata. */
 	title?: string;
