@@ -13,7 +13,6 @@ import {
 	findNode,
 	isContainerNode,
 	MAX_TREE_DEPTH,
-	walkPage,
 } from "./walkers.js";
 
 export type CanvasIRMutationCode =
@@ -294,17 +293,6 @@ function findContainerInTree(
 			const inner = findContainerInTree(child, id, depth + 1);
 			if (inner) return inner;
 		}
-	}
-	return null;
-}
-
-function pageContaining(ir: CanvasIR, id: string): CanvasPage | null {
-	for (const page of ir.pages) {
-		let found = false;
-		walkPage(page, ({ node }) => {
-			if (node.id === id) found = true;
-		});
-		if (found) return page;
 	}
 	return null;
 }
@@ -615,9 +603,3 @@ export function replaceChildrenInParent(
 		metadata: bumpUpdatedAt(ir, options),
 	};
 }
-
-// Internal helper exported for tests + walkers; not part of the public mutation surface.
-export const __internal = {
-	pageContaining,
-	descendantIds,
-};
