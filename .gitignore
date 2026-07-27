@@ -39,3 +39,9 @@ next-env.d.ts
 
 # bundle
 .bundle-check
+
+# size-limit
+.size-limit
+
+# Bench
+/bench
