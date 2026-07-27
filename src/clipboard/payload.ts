@@ -7,6 +7,7 @@ import {
 	isContainerNode,
 	MAX_TREE_DEPTH,
 } from "../ir/walkers.js";
+import { MAX_CLIPBOARD_BYTES, MAX_CLIPBOARD_NODES } from "../limits.js";
 
 /**
  * @file Clipboard payload schema + validation (A-03, PRD 0012 §9.2).
@@ -27,9 +28,15 @@ export const CANVAS_CLIPBOARD_VERSION = 1;
  */
 export const CANVAS_CLIPBOARD_MIME = "application/x-anvilkit-canvas+json";
 
-/** Hostile/accidental mega-payload caps (PRD §9.2, §14.1). */
-export const MAX_CLIPBOARD_NODES = 1_000;
-export const MAX_CLIPBOARD_BYTES = 2 * 1024 * 1024;
+/**
+ * Hostile/accidental mega-payload caps (PRD §9.2, §14.1).
+ *
+ * Re-exported for back-compatibility: the canonical definitions moved to the
+ * rank-0 `limits.ts` (T-M0-03), which collects every resource ceiling this
+ * package enforces in one reviewable place, but this module was their
+ * original public home.
+ */
+export { MAX_CLIPBOARD_BYTES, MAX_CLIPBOARD_NODES };
 
 export interface CanvasClipboardBounds {
 	x: number;
