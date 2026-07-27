@@ -23,6 +23,10 @@ const SOURCE_DIR = resolve(PACKAGE_ROOT, "src");
  */
 const LAYERS = [
 	{ domain: "clock", rank: 0, match: (p) => p === "clock.ts" },
+	// Central resource ceilings (T-M0-03). MUST rank below `ir` because
+	// `ir/walkers.ts` imports MAX_TREE_DEPTH from it; it imports nothing
+	// itself, so rank 0 alongside `clock` is the correct floor.
+	{ domain: "limits", rank: 0, match: (p) => p === "limits.ts" },
 	{ domain: "ir", rank: 1, match: (p) => p.startsWith("ir/") },
 	{ domain: "ai-contracts", rank: 2, match: (p) => p === "ai-contracts.ts" },
 	// The headless text-measurement port. A host-implemented contract over IR
