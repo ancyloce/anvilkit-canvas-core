@@ -108,9 +108,12 @@ export interface CanvasRuntime {
  * reaches `applyCommand` at all — it falls through to the custom-handler
  * lookup first.
  *
- * `commands/__tests__/registry-parity.test.ts` additionally cross-checks
- * these keys against the `applyCommand` switch read from source, covering
- * the inverse drift (a type listed here that Core does not implement).
+ * The `Record` also makes the inverse drift a compile error: naming a type
+ * Core does not implement is an excess-property failure. `commands/__tests__/
+ * registry-parity.test.ts` covers the runtime half behaviourally, asserting
+ * that every command `applyCommand` implements is un-shadowable — deliberately
+ * without importing this set, so it tests the guarantee rather than restating
+ * the list.
  */
 const BUILTIN_COMMAND_TYPE_FLAGS: Readonly<
 	Record<CanvasCommand["type"], true>
@@ -140,12 +143,7 @@ const BUILTIN_COMMAND_TYPE_FLAGS: Readonly<
 	batch: true,
 };
 
-/**
- * Built-in command types as a lookup set. Exported as a test seam for the
- * registry-parity suite; not re-exported from the package entry point, so
- * this carries no public API-surface delta.
- */
-export const BUILTIN_COMMAND_TYPES: ReadonlySet<string> = new Set(
+const BUILTIN_COMMAND_TYPES: ReadonlySet<string> = new Set(
 	Object.keys(BUILTIN_COMMAND_TYPE_FLAGS),
 );
 
