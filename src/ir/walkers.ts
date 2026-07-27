@@ -1,3 +1,4 @@
+import { MAX_TREE_DEPTH } from "../limits.js";
 import type {
 	CanvasContainerNode,
 	CanvasFrameNode,
@@ -10,7 +11,12 @@ import type {
 	CanvasPage,
 } from "./types.js";
 
-export const MAX_TREE_DEPTH = 64;
+/**
+ * Re-exported for back-compatibility: the canonical definition moved to the
+ * rank-0 `limits.ts` (T-M0-03) so `clipboard/` and the layout resolver can
+ * share it, but this module was its original public home.
+ */
+export { MAX_TREE_DEPTH };
 
 export class CanvasIRDepthError extends Error {
 	readonly idChain: readonly string[];
