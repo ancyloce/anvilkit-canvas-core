@@ -240,6 +240,29 @@ describe("createCanvasRuntime — command dispatch", () => {
 	});
 
 	/**
+	 * T-M0-02 regression: `node.applyStyle` was implemented by `applyCommand`
+	 * but absent from `BUILTIN_COMMAND_TYPES` in 0.1.2-rc.1 — the same drift
+	 * the `page.set-layout-aids` case above was written to catch, recurring on
+	 * a different command because that test only covered its own command.
+	 * Two distinct failures followed from the omission: dispatch fell through
+	 * to the custom-handler lookup ("no command handler registered"), and the
+	 * registry accepted an extension shadowing a core command. The exhaustive
+	 * cross-check now lives in `commands/__tests__/registry-parity.test.ts`;
+	 * this keeps a direct behavioural assertion next to its sibling.
+	 */
+	it("dispatches node.applyStyle through the runtime (not just applyCommand)", () => {
+		const ir = fixtureIR();
+		const rt = createCanvasRuntime();
+		const { ir: next, inverse } = rt.apply(ir, {
+			type: "node.applyStyle",
+			nodeId: "r1",
+			style: { opacity: 0.5 },
+		});
+		expect(next.pages[0]?.root.children[0]?.opacity).toBe(0.5);
+		expect(inverse).toMatchObject({ type: "node.update", nodeId: "r1" });
+	});
+
+	/**
 	 * P0-7 regression: `applyCommand`'s own "batch" case recurses through the
 	 * STATIC dispatch (commands/runtime.ts), which has no knowledge of this
 	 * runtime's registry. Routing `rt.apply(ir, batchCmd)` straight to

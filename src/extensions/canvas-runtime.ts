@@ -96,31 +96,58 @@ export interface CanvasRuntime {
 /**
  * Built-in command types — routed to the core `applyCommand` and never
  * overridable by a registered handler. Mirrors the `applyCommand` switch.
+ *
+ * Declared as a `Record` keyed by the `CanvasCommand` union rather than a
+ * bare array so that parity is **compiler-enforced**: omitting a member is a
+ * typecheck failure naming the missing command, and naming a non-command is
+ * an excess-property error. Previously this was a `Set` of loose strings, and
+ * two built-ins drifted out of it undetected (`page.set-layout-aids`, then
+ * `node.applyStyle` — the latter shipped in 0.1.2-rc.1, where it left a core
+ * command shadowable by any extension). `applyCommand`'s throwing `default:`
+ * cannot catch that class of omission, because the omitted type never
+ * reaches `applyCommand` at all — it falls through to the custom-handler
+ * lookup first.
+ *
+ * `commands/__tests__/registry-parity.test.ts` additionally cross-checks
+ * these keys against the `applyCommand` switch read from source, covering
+ * the inverse drift (a type listed here that Core does not implement).
  */
-const BUILTIN_COMMAND_TYPES: ReadonlySet<string> = new Set([
-	"node.create",
-	"node.delete",
-	"node.reorder",
-	"node.reparent",
-	"node.move",
-	"node.resize",
-	"node.rotate",
-	"node.update",
-	"image.replace",
-	"node.group",
-	"node.ungroup",
-	"page.create",
-	"page.delete",
-	"page.reorder",
-	"page.rename",
-	"page.duplicate",
-	"page.resize",
-	"page.set-background",
-	"page.set-layout-aids",
-	"asset.put",
-	"asset.remove",
-	"batch",
-]);
+const BUILTIN_COMMAND_TYPE_FLAGS: Readonly<
+	Record<CanvasCommand["type"], true>
+> = {
+	"node.create": true,
+	"node.delete": true,
+	"node.reorder": true,
+	"node.reparent": true,
+	"node.move": true,
+	"node.resize": true,
+	"node.rotate": true,
+	"node.update": true,
+	"node.applyStyle": true,
+	"image.replace": true,
+	"node.group": true,
+	"node.ungroup": true,
+	"page.create": true,
+	"page.delete": true,
+	"page.reorder": true,
+	"page.rename": true,
+	"page.duplicate": true,
+	"page.resize": true,
+	"page.set-background": true,
+	"page.set-layout-aids": true,
+	"asset.put": true,
+	"asset.remove": true,
+	batch: true,
+};
+
+/**
+ * Built-in command types as a lookup set. Exported as a test seam for the
+ * registry-parity suite; not re-exported from the package entry point, so
+ * this carries no public API-surface delta.
+ */
+export const BUILTIN_COMMAND_TYPES: ReadonlySet<string> = new Set(
+	Object.keys(BUILTIN_COMMAND_TYPE_FLAGS),
+);
 
 function asKindSchema(s: z.ZodType<unknown>): z.ZodType<CanvasUnknownNode> {
 	return s as unknown as z.ZodType<CanvasUnknownNode>;
