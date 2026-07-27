@@ -110,7 +110,28 @@ export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
 		case "batch":
 			// Batches carry no single record; applyCommands maps each sub-command.
 			return null;
+		default:
+			// Compile-time exhaustiveness (T-M0-02): every `CanvasCommand`
+			// member is handled above, so `cmd` narrows to `never` here. Adding
+			// a command without a case makes this assignment fail typecheck,
+			// naming the unhandled command — previously an omission fell out of
+			// the switch and returned `undefined`, silently violating the
+			// declared `CanvasChange | null` return type.
+			return assertNoUnmappedCommand(cmd);
 	}
+}
+
+/**
+ * Exhaustiveness guard for {@link commandToChange}.
+ *
+ * Returns `null` rather than throwing: the parameter type makes an unmapped
+ * BUILT-IN command a compile error, which is where that defect belongs, while
+ * the runtime path stays non-fatal for a caller that reaches here with a cast
+ * or extension-authored command. Throwing would turn a missing change record —
+ * a telemetry/collab concern — into a failed edit.
+ */
+function assertNoUnmappedCommand(_cmd: never): null {
+	return null;
 }
 
 /** Who produced a {@link CanvasChangeRecord}: applied locally, or received from a remote peer/server. */
