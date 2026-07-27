@@ -39,6 +39,7 @@
 		"format": "pnpm exec biome check --write package.json tsconfig.json rslib.config.ts vitest.config.ts vitest.bench.config.ts src bench",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
+		"test:coverage": "vitest run --coverage",
 		"test:watch": "vitest",
 		"bench:layout": "vitest run --config vitest.bench.config.ts",
 		"publint": "publint",
@@ -50,6 +51,7 @@
 		"check:bundle-budget": "node ./scripts/check-bundle-budget.mjs",
 		"check:api-snapshot": "node ./scripts/check-api-snapshot.mjs",
 		"check:all": "pnpm check:publint && pnpm check:circular && pnpm check:layering && pnpm check:react-free-runtime && pnpm check:peer-deps && pnpm check:bundle-budget && pnpm check:api-snapshot",
+		"verify": "pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build && pnpm check:all",
 		"update:api-snapshot": "node ./scripts/check-api-snapshot.mjs --update",
 		"size": "size-limit"
 	},
