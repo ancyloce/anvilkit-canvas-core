@@ -195,7 +195,10 @@ describe("createMigrationRegistry", () => {
 
 	it("throws on a missing step", () => {
 		const reg = createMigrationRegistry();
-		expect(() => reg.migrate({ version: "2" }, "3")).toThrow(/no migration/);
+		// Deliberately a version pair the built-in seed does NOT cover — every
+		// real step (1→2, 2→3) is pre-seeded, so probing one of those would
+		// assert the opposite of what this test is for.
+		expect(() => reg.migrate({ version: "97" }, "98")).toThrow(/no migration/);
 	});
 
 	it("throws when the version is unreadable", () => {

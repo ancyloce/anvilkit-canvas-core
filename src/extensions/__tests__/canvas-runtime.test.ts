@@ -439,11 +439,11 @@ describe("createCanvasRuntime — migrate", () => {
 		expect(rt.migrate(ir)).toEqual(ir);
 	});
 
-	it("default runtime migrates a v1 document to v2 (built-in seed)", () => {
+	it("default runtime migrates a v1 document to the current version (built-in seed)", () => {
 		const rt = createCanvasRuntime();
 		const v1 = { ...fixtureIR(), version: "1", experimental: true };
 		const migrated = rt.migrate(v1);
-		expect(migrated.version).toBe("2");
+		expect(migrated.version).toBe("3");
 		expect(
 			(migrated as unknown as { experimental?: boolean }).experimental,
 		).toBe(true);
@@ -467,9 +467,9 @@ describe("createCanvasRuntime — migrate", () => {
 		};
 		const rt = createCanvasRuntime([ext]);
 		const old = { ...fixtureIR(), version: "0" };
-		// Extension step 0→1 chains into the built-in 1→2.
+		// Extension step 0→1 chains into the built-in 1→2→3.
 		const migrated = rt.migrate(old);
-		expect(migrated.version).toBe("2");
+		expect(migrated.version).toBe("3");
 	});
 });
 
