@@ -91,6 +91,25 @@ export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
 			return { kind: "added", nodeId: cmd.groupId, pageId: cmd.pageId };
 		case "node.ungroup":
 			return { kind: "removed", nodeId: cmd.groupId };
+		// Layout writes map onto the EXISTING `updated`/`added` kinds — no new
+		// `CanvasChange` kind is introduced, so `commandToChangeRecord` and
+		// `replayChanges` keep working unchanged.
+		//
+		// The derived record is deliberately LOSSY for the two composite
+		// commands: `CanvasChange` expresses one change per command, so
+		// `frame.remove-layout` reports the `autoLayout` key change and not the
+		// descendant geometry it also rewrote, and
+		// `selection.wrap-in-layout-frame` reports the added frame and not the
+		// N reparents. This matches the `node.group` precedent exactly. It is
+		// safe because `CanvasChangeRecord` carries the ORIGINAL command and
+		// `replayChanges` replays commands rather than diffs — so replay stays
+		// lossless even where the derived diff is not. A consumer that needs
+		// the full effect must read `record.command`, not `record.change`.
+		case "frame.set-layout":
+		case "frame.remove-layout":
+			return { kind: "updated", nodeId: cmd.nodeId, keys: ["autoLayout"] };
+		case "selection.wrap-in-layout-frame":
+			return { kind: "added", nodeId: cmd.frameId, pageId: cmd.pageId };
 		case "page.create":
 			return { kind: "page", pageId: cmd.page.id, op: "create" };
 		case "page.delete":

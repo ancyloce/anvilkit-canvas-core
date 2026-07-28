@@ -1,13 +1,17 @@
 import type {
 	CanvasAssetRef,
+	CanvasAutoLayout,
+	CanvasBounds,
 	CanvasGroupNode,
 	CanvasIR,
+	CanvasLayoutItem,
 	CanvasNode,
 	CanvasNodeByKind,
 	CanvasNodeKind,
 	CanvasPage,
 	CanvasPageBackground,
 	CanvasPageLayoutAids,
+	CanvasTransform,
 } from "../ir/types.js";
 import type { CanvasNodeStyle } from "./apply-style.js";
 
@@ -274,6 +278,80 @@ export interface CanvasBatchCommand {
 	commands: CanvasCommand[];
 }
 
+/**
+ * One node's caller-computed geometry, written atomically as part of a layout
+ * command.
+ *
+ * **The caller computes these, not `commands/`.** `commands/` is layering rank
+ * 3 and `layout/` (the resolver) is rank 4, so a command handler cannot call
+ * the resolver — it would be an upward import. Passing resolved values in the
+ * payload is what keeps that boundary intact, and it also makes every layout
+ * command deterministic and replayable from its payload alone, with no
+ * dependence on which resolver version the replaying build happens to ship.
+ */
+export interface CanvasLayoutGeometryWrite {
+	nodeId: string;
+	transform?: CanvasTransform;
+	bounds?: CanvasBounds;
+	/** Replaces `layoutItem`; `null` clears it (the field is dropped entirely). */
+	layoutItem?: CanvasLayoutItem | null;
+}
+
+/**
+ * Set or replace a frame's Auto Layout intent, optionally writing resolved
+ * geometry for its descendants in the same atomic step.
+ *
+ * Also the vehicle for batched Inspector property edits: changing gap,
+ * padding, direction and alignment together is one `frame.set-layout`, hence
+ * one Undo entry, rather than four commands.
+ */
+export interface CanvasFrameSetLayoutCommand {
+	type: "frame.set-layout";
+	nodeId: string;
+	layout: CanvasAutoLayout;
+	/** Caller-computed geometry to write alongside the intent. */
+	geometry?: readonly CanvasLayoutGeometryWrite[];
+}
+
+/**
+ * Remove a frame's Auto Layout intent, baking the caller-computed resolved
+ * geometry into its descendants so the document keeps its appearance.
+ *
+ * The inverse restores both the intent and every prior geometry value, so a
+ * remove/undo round-trip is exact.
+ */
+export interface CanvasFrameRemoveLayoutCommand {
+	type: "frame.remove-layout";
+	nodeId: string;
+	/** Resolved geometry to bake in as the descendants' new authoritative values. */
+	geometry?: readonly CanvasLayoutGeometryWrite[];
+}
+
+/**
+ * Wrap sibling nodes in a NEW Auto Layout frame.
+ *
+ * Mirrors `node.group` — same-parent validation, current sibling z-order, the
+ * topmost selected node's slot, a caller-supplied stable id — with one
+ * deliberate difference: `node.group` creates an *identity* group so grouping
+ * is visually a no-op, whereas this creates a frame that lays its children
+ * out, so child transforms **do** change and the inverse must restore them
+ * explicitly (which is what `geometry` is for).
+ */
+export interface CanvasSelectionWrapInLayoutFrameCommand {
+	type: "selection.wrap-in-layout-frame";
+	pageId: string;
+	childIds: string[];
+	/** Caller-supplied stable id, following the `node.group`/`page.duplicate` convention. */
+	frameId: string;
+	frameName?: string;
+	/** Caller-computed frame placement (typically the selection bounds). */
+	transform: CanvasTransform;
+	bounds: CanvasBounds;
+	layout: CanvasAutoLayout;
+	/** Caller-computed child geometry, relative to the new frame. */
+	geometry?: readonly CanvasLayoutGeometryWrite[];
+}
+
 export type CanvasCommand =
 	| CanvasNodeCreateCommand
 	| CanvasNodeMoveCommand
@@ -287,6 +365,9 @@ export type CanvasCommand =
 	| CanvasImageReplaceCommand
 	| CanvasNodeGroupCommand
 	| CanvasNodeUngroupCommand
+	| CanvasFrameSetLayoutCommand
+	| CanvasFrameRemoveLayoutCommand
+	| CanvasSelectionWrapInLayoutFrameCommand
 	| CanvasPageCreateCommand
 	| CanvasPageReorderCommand
 	| CanvasPageRenameCommand

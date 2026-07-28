@@ -18,8 +18,10 @@ import {
 } from "../ir/mutations.js";
 import { regenerateNodeIds } from "../ir/regenerate-ids.js";
 import type {
+	CanvasAutoLayout,
 	CanvasBounds,
 	CanvasContainerNode,
+	CanvasFrameNode,
 	CanvasGroupNode,
 	CanvasImageNode,
 	CanvasIR,
@@ -30,6 +32,7 @@ import type {
 	CanvasTransform,
 } from "../ir/types.js";
 import { findNode, isContainerNode, parentOf } from "../ir/walkers.js";
+import { MAX_COMPOSITE_COMMAND_DESCENDANTS } from "../limits.js";
 import { computeStylePatch } from "./apply-style.js";
 import type {
 	CanvasAnyNodeUpdateCommand,
@@ -37,7 +40,10 @@ import type {
 	CanvasAssetRemoveCommand,
 	CanvasBatchCommand,
 	CanvasCommand,
+	CanvasFrameRemoveLayoutCommand,
+	CanvasFrameSetLayoutCommand,
 	CanvasImageReplaceCommand,
+	CanvasLayoutGeometryWrite,
 	CanvasNodeApplyStyleCommand,
 	CanvasNodeCreateCommand,
 	CanvasNodeDeleteCommand,
@@ -56,6 +62,7 @@ import type {
 	CanvasPageResizeCommand,
 	CanvasPageSetBackgroundCommand,
 	CanvasPageSetLayoutAidsCommand,
+	CanvasSelectionWrapInLayoutFrameCommand,
 	CommandApplyOptions,
 	CommandApplyResult,
 } from "./types.js";
@@ -644,6 +651,351 @@ function applyNodeGroup(
 		restore: entries.map((e) => ({ id: e.id, index: e.index })),
 	};
 	return { ir: next, inverse };
+}
+
+/**
+ * Apply the caller-computed geometry writes carried by a layout command, and
+ * return the writes that would undo them.
+ *
+ * `mergeNodePatch` deletes any key whose patch value is `undefined`, so a
+ * `layoutItem: null` write physically removes the field rather than leaving an
+ * `undefined` behind — which is what makes the inverse *exact* rather than
+ * merely equivalent-after-serialization.
+ *
+ * Lock enforcement covers every node named here, because a geometry write
+ * moves and resizes that node. It does NOT cover siblings whose index merely
+ * shifts as a side effect — locking protects a node's own properties and
+ * position, not its neighbours' indices, and the alternative would let one
+ * locked child freeze an entire container.
+ */
+/**
+ * Nodes in a subtree, including the root. Used to bound composite layout
+ * command payloads (T-M1-09) before any allocation proportional to them.
+ */
+function countSubtree(node: CanvasNode): number {
+	let count = 1;
+	if (isContainerNode(node)) {
+		for (const child of node.children) count += countSubtree(child);
+	}
+	return count;
+}
+
+/**
+ * Reject a composite layout command whose payload exceeds the descendant
+ * ceiling, BEFORE doing any O(descendants) work.
+ */
+function assertWithinCompositeCeiling(
+	commandType: string,
+	count: number,
+	what: string,
+): void {
+	if (count > MAX_COMPOSITE_COMMAND_DESCENDANTS) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`${commandType} exceeds the composite payload ceiling: ${count} ${what} > MAX_COMPOSITE_COMMAND_DESCENDANTS (${MAX_COMPOSITE_COMMAND_DESCENDANTS}). Value + inverse means roughly 2x this per history entry.`,
+		);
+	}
+}
+
+function applyLayoutGeometryWrites(
+	ir: CanvasIR,
+	writes: readonly CanvasLayoutGeometryWrite[] | undefined,
+	options: CommandApplyOptions,
+): { ir: CanvasIR; prior: CanvasLayoutGeometryWrite[] } {
+	const prior: CanvasLayoutGeometryWrite[] = [];
+	let next = ir;
+	assertWithinCompositeCeiling(
+		"A layout command",
+		writes?.length ?? 0,
+		"geometry writes",
+	);
+	for (const write of writes ?? []) {
+		assertUnlocked(next, write.nodeId, options);
+		const { node } = expectNode(next, write.nodeId);
+		const patch: Record<string, unknown> = {};
+		const before: CanvasLayoutGeometryWrite = { nodeId: write.nodeId };
+		if (write.transform !== undefined) {
+			patch.transform = write.transform;
+			before.transform = node.transform;
+		}
+		if (write.bounds !== undefined) {
+			patch.bounds = write.bounds;
+			before.bounds = node.bounds;
+		}
+		if (write.layoutItem !== undefined) {
+			patch.layoutItem =
+				write.layoutItem === null ? undefined : write.layoutItem;
+			before.layoutItem = node.layoutItem ?? null;
+		}
+		if (Object.keys(patch).length === 0) continue;
+		try {
+			next = updateNode<CanvasNodeKind>(next, {
+				id: write.nodeId,
+				patch: patch as Partial<Omit<CanvasNode, "id" | "type">>,
+				now: options.now,
+			});
+		} catch (err) {
+			rethrowMutationError(err);
+		}
+		prior.push(before);
+	}
+	return { ir: next, prior };
+}
+
+function expectFrame(ir: CanvasIR, nodeId: string): CanvasFrameNode {
+	const { node } = expectNode(ir, nodeId);
+	if (node.type !== "frame") {
+		throw new CanvasCommandError(
+			"kind-mismatch",
+			`Node "${nodeId}" is of kind "${node.type}", not "frame" — only a frame can carry Auto Layout`,
+		);
+	}
+	return node;
+}
+
+/**
+ * Build the inverse of a command that changed a frame's layout intent:
+ * restore the prior intent if there was one, otherwise remove it again.
+ */
+function invertFrameLayoutChange(
+	nodeId: string,
+	previous: CanvasAutoLayout | undefined,
+	prior: readonly CanvasLayoutGeometryWrite[],
+): CanvasFrameSetLayoutCommand | CanvasFrameRemoveLayoutCommand {
+	const geometry = prior.length > 0 ? { geometry: prior } : {};
+	return previous
+		? { type: "frame.set-layout", nodeId, layout: previous, ...geometry }
+		: { type: "frame.remove-layout", nodeId, ...geometry };
+}
+
+function applyFrameSetLayout(
+	ir: CanvasIR,
+	cmd: CanvasFrameSetLayoutCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options);
+	const previous = expectFrame(ir, cmd.nodeId).autoLayout;
+	const { ir: withGeometry, prior } = applyLayoutGeometryWrites(
+		ir,
+		cmd.geometry,
+		options,
+	);
+	let next: CanvasIR;
+	try {
+		next = updateNode<CanvasNodeKind>(withGeometry, {
+			id: cmd.nodeId,
+			patch: { autoLayout: cmd.layout } as Partial<
+				Omit<CanvasNode, "id" | "type">
+			>,
+			now: options.now,
+		});
+	} catch (err) {
+		rethrowMutationError(err);
+	}
+	return {
+		ir: next,
+		inverse: invertFrameLayoutChange(cmd.nodeId, previous, prior),
+	};
+}
+
+function applyFrameRemoveLayout(
+	ir: CanvasIR,
+	cmd: CanvasFrameRemoveLayoutCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options);
+	const frame = expectFrame(ir, cmd.nodeId);
+	const previous = frame.autoLayout;
+	// The inverse must be able to restore every descendant's prior geometry, so
+	// the subtree — not just the supplied payload — is what has to stay bounded.
+	assertWithinCompositeCeiling(
+		"frame.remove-layout",
+		countSubtree(frame) - 1,
+		"descendants",
+	);
+	const { ir: withGeometry, prior } = applyLayoutGeometryWrites(
+		ir,
+		cmd.geometry,
+		options,
+	);
+	let next: CanvasIR;
+	try {
+		next = updateNode<CanvasNodeKind>(withGeometry, {
+			// `undefined` deletes the key outright (see mergeNodePatch), so the
+			// frame is left with no `autoLayout` rather than an explicit undefined.
+			patch: { autoLayout: undefined } as Partial<
+				Omit<CanvasNode, "id" | "type">
+			>,
+			id: cmd.nodeId,
+			now: options.now,
+		});
+	} catch (err) {
+		rethrowMutationError(err);
+	}
+	return {
+		ir: next,
+		inverse: invertFrameLayoutChange(cmd.nodeId, previous, prior),
+	};
+}
+
+function applyWrapInLayoutFrame(
+	ir: CanvasIR,
+	cmd: CanvasSelectionWrapInLayoutFrameCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	for (const childId of cmd.childIds) {
+		assertUnlocked(ir, childId, options);
+	}
+	if (cmd.childIds.length === 0) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			"selection.wrap-in-layout-frame requires at least one childId",
+		);
+	}
+	if (new Set(cmd.childIds).size !== cmd.childIds.length) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			"selection.wrap-in-layout-frame childIds contains duplicates",
+		);
+	}
+	const page = expectPage(ir, cmd.pageId);
+	if (findNode(ir, cmd.frameId)) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Frame id "${cmd.frameId}" already exists`,
+		);
+	}
+
+	let parent: CanvasContainerNode | undefined;
+	const entries: GroupChildEntry[] = [];
+	for (const id of cmd.childIds) {
+		const found = findNode(ir, id);
+		if (!found || found.page.id !== page.id) {
+			throw new CanvasCommandError(
+				"node-not-found",
+				`Node "${id}" not found on page "${cmd.pageId}"`,
+			);
+		}
+		const parentResult = parentOf(ir, id);
+		if (!parentResult) {
+			throw new CanvasCommandError(
+				"invariant-violated",
+				`Cannot wrap page-root node "${id}"`,
+			);
+		}
+		if (parent === undefined) {
+			parent = parentResult.parent;
+		} else if (parent.id !== parentResult.parent.id) {
+			throw new CanvasCommandError(
+				"invariant-violated",
+				"selection.wrap-in-layout-frame requires all childIds to share the same parent",
+			);
+		}
+		entries.push({
+			id,
+			node: found.node,
+			index: parentResult.parent.children.findIndex((c) => c.id === id),
+		});
+	}
+	if (parent === undefined) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			"selection.wrap-in-layout-frame could not resolve a parent",
+		);
+	}
+	entries.sort((a, b) => a.index - b.index);
+	const firstEntry = entries[0];
+	if (!firstEntry) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			"selection.wrap-in-layout-frame resolved no children",
+		);
+	}
+	assertWithinCompositeCeiling(
+		"selection.wrap-in-layout-frame",
+		entries.reduce((sum, e) => sum + countSubtree(e.node), 0),
+		"wrapped nodes",
+	);
+
+	const frameNode: CanvasFrameNode = {
+		id: cmd.frameId,
+		type: "frame",
+		...(cmd.frameName !== undefined ? { name: cmd.frameName } : {}),
+		transform: cmd.transform,
+		bounds: cmd.bounds,
+		zIndex: 0,
+		autoLayout: cmd.layout,
+		children: entries.map((e) => e.node),
+	};
+
+	const parentId = parent.id;
+	const minIndex = firstEntry.index;
+	const selectedIds = new Set(cmd.childIds);
+	let next: CanvasIR;
+	try {
+		next = replaceChildrenInParent(ir, {
+			parentId,
+			replace: (children) => {
+				const remaining = children.filter((c) => !selectedIds.has(c.id));
+				remaining.splice(minIndex, 0, frameNode);
+				return remaining;
+			},
+			now: options.now,
+		});
+	} catch (err) {
+		rethrowMutationError(err);
+	}
+	const { ir: withGeometry, prior } = applyLayoutGeometryWrites(
+		next,
+		cmd.geometry,
+		options,
+	);
+
+	// The inverse is expressed entirely in EXISTING commands — no fourth
+	// command type is introduced. Reparent restores membership, `node.reorder`
+	// then restores the exact permutation (reparent alone cannot: a
+	// non-contiguous selection's indices do not survive a straight re-insert
+	// while the frame still occupies a slot), `node.delete` drops the emptied
+	// frame, and `node.update` restores any geometry this command rewrote.
+	const inverse: CanvasBatchCommand = {
+		type: "batch",
+		label: `unwrap:${cmd.frameId}`,
+		commands: [
+			...entries.map(
+				(e): CanvasNodeReparentCommand => ({
+					type: "node.reparent",
+					nodeId: e.id,
+					toParentId: parentId,
+					toIndex: e.index,
+				}),
+			),
+			{ type: "node.delete", nodeId: cmd.frameId },
+			...entries.map(
+				(e): CanvasNodeReorderCommand => ({
+					type: "node.reorder",
+					nodeId: e.id,
+					toIndex: e.index,
+				}),
+			),
+			...prior.map((write): CanvasCommand => {
+				const patch: Record<string, unknown> = {};
+				if (write.transform !== undefined) patch.transform = write.transform;
+				if (write.bounds !== undefined) patch.bounds = write.bounds;
+				if (write.layoutItem !== undefined) {
+					patch.layoutItem =
+						write.layoutItem === null ? undefined : write.layoutItem;
+				}
+				return {
+					type: "node.update",
+					nodeId: write.nodeId,
+					kind: (findNode(withGeometry, write.nodeId)?.node.type ??
+						"rect") as CanvasNodeKind,
+					patch,
+				} as CanvasCommand;
+			}),
+		],
+	};
+	return { ir: withGeometry, inverse };
 }
 
 function applyNodeUngroup(
@@ -1297,6 +1649,12 @@ export function applyCommand(
 			return applyNodeGroup(ir, cmd, options);
 		case "node.ungroup":
 			return applyNodeUngroup(ir, cmd, options);
+		case "frame.set-layout":
+			return applyFrameSetLayout(ir, cmd, options);
+		case "frame.remove-layout":
+			return applyFrameRemoveLayout(ir, cmd, options);
+		case "selection.wrap-in-layout-frame":
+			return applyWrapInLayoutFrame(ir, cmd, options);
 		case "page.create":
 			return applyPageCreate(ir, cmd, options);
 		case "page.delete":
