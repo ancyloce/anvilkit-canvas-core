@@ -85,16 +85,20 @@ export interface BoundsExtent {
 }
 
 /**
- * Axis-aligned bounding box, in the parent coordinate space, of a
- * `width`×`height` box anchored at the local origin after applying `transform`.
- * Accounts for rotation/scale/skew, unlike a naive `x + width` extent.
+ * Axis-aligned bounding box of a `width`×`height` box anchored at the local
+ * origin, after applying an already-composed matrix.
+ *
+ * The matrix-taking form exists because a **world** AABB needs
+ * `parentWorld × local`, which is not expressible as a single
+ * `CanvasTransform`. Three copies of this corner loop existed before it
+ * (here, `hit-test.ts`, and the layout resolver would have been the third);
+ * both other sites now delegate here.
  */
-export function transformedBoundsExtent(
-	transform: CanvasTransform,
+export function matrixBoundsExtent(
+	m: AffineMatrix,
 	width: number,
 	height: number,
 ): BoundsExtent {
-	const m = toAffineMatrix(transform);
 	const corners: Array<[number, number]> = [
 		applyMatrix(m, 0, 0),
 		applyMatrix(m, width, 0),
@@ -112,6 +116,19 @@ export function transformedBoundsExtent(
 		if (y > maxY) maxY = y;
 	}
 	return { minX, minY, maxX, maxY };
+}
+
+/**
+ * Axis-aligned bounding box, in the parent coordinate space, of a
+ * `width`×`height` box anchored at the local origin after applying `transform`.
+ * Accounts for rotation/scale/skew, unlike a naive `x + width` extent.
+ */
+export function transformedBoundsExtent(
+	transform: CanvasTransform,
+	width: number,
+	height: number,
+): BoundsExtent {
+	return matrixBoundsExtent(toAffineMatrix(transform), width, height);
 }
 
 /**

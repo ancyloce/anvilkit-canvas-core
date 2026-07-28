@@ -90,9 +90,25 @@ export class CanvasCommandError extends Error {
 	}
 }
 
+/**
+ * Stamp `updatedAt` and drop the materialized-layout cache stamp.
+ *
+ * Every command routes through here, and every command changes the inputs a
+ * layout resolution depended on — so a stamp surviving one would claim a
+ * freshness it does not have, and `layout-materialization-stale` would then
+ * never fire for it. A stamp that lies is strictly worse than no stamp
+ * (PRD 0014 §9.4), so it is cleared here rather than at the handful of sites
+ * the plan enumerates: `page.duplicate` and the `page.create` batch
+ * `resizeToVariants` produces are then covered by construction, along with
+ * every command added later.
+ *
+ * This is a **field deletion**, not a resolver call — `commands/` (rank 3)
+ * must gain no dependency on `layout/` (rank 4), and does not.
+ */
 function bumpMetadata(ir: CanvasIR, options: CommandApplyOptions): CanvasIR {
+	const { layoutMaterialization: _invalidated, ...rest } = ir;
 	return {
-		...ir,
+		...rest,
 		metadata: { ...ir.metadata, updatedAt: resolveNow(options.now)() },
 	};
 }

@@ -64,6 +64,33 @@ export interface RichTextStyleDefaults extends ResolvedSpanStyle {
 }
 
 /**
+ * The package-wide fallbacks for rich-text style fields a document leaves
+ * unset. Chosen to match `createText`'s defaults (`ir/builders.ts`) so a
+ * rich-text block with no explicit styling renders like a plain `text` node.
+ *
+ * Lives here rather than in either consumer because there are now two: the SVG
+ * serializer merges `SvgSerializeOptions.richTextDefaults` onto it, and the
+ * layout resolver merges `CanvasLayoutResolveOptions.richTextDefaults` onto it
+ * (TD §5.4). Two copies of these numbers would let the exporter and the
+ * resolver break lines differently for an unstyled document — the exact
+ * divergence {@link CanvasTextMeasurer} exists to prevent — and the drift
+ * would be invisible until an export disagreed with the canvas.
+ */
+export const DEFAULT_RICH_TEXT_STYLE: RichTextStyleDefaults = {
+	fontFamily: "Inter",
+	fontSize: 16,
+	fontWeight: "400",
+	italic: false,
+	underline: false,
+	strikethrough: false,
+	letterSpacing: 0,
+	textTransform: "none",
+	fill: "#000000",
+	lineHeight: 1.4,
+	align: "left",
+};
+
+/**
  * Resolve one span against the host's defaults. Pure, allocation-only, and
  * deliberately dumb — it is field inheritance, not layout.
  */

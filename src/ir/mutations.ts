@@ -42,6 +42,30 @@ function bumpUpdatedAt(ir: CanvasIR, options: NowOption): CanvasIR["metadata"] {
 	return { ...ir.metadata, updatedAt: resolveNow(options.now)() };
 }
 
+/**
+ * Rebuild the document after a node mutation: new pages, a bumped `updatedAt`,
+ * and **no materialized-layout stamp**.
+ *
+ * Every mutation here changes the node tree, which is an input the layout
+ * resolver depended on — so a stamp surviving one would claim a freshness it
+ * does not have, and `layout-materialization-stale` would never fire for it. A
+ * stamp that lies is strictly worse than no stamp (PRD 0014 §9.4).
+ *
+ * This is a field deletion, not a resolver call: `ir/` is rank 1 and must gain
+ * no dependency on `layout/` (rank 4), and does not. It mirrors the identical
+ * rule in `commands/runtime.ts`'s `bumpMetadata` — the two exist because node
+ * mutations and page/asset commands bump `updatedAt` through different paths,
+ * which is exactly why clearing at only one of them left a gap.
+ */
+function mutatedDocument(
+	ir: CanvasIR,
+	pages: CanvasPage[],
+	options: NowOption,
+): CanvasIR {
+	const { layoutMaterialization: _invalidated, ...rest } = ir;
+	return { ...rest, pages, metadata: bumpUpdatedAt(ir, options) };
+}
+
 function isPageRoot(ir: CanvasIR, id: string): boolean {
 	return ir.pages.some((p) => p.root.id === id);
 }
@@ -328,11 +352,7 @@ export function insertNode(ir: CanvasIR, options: InsertNodeOptions): CanvasIR {
 			`Parent id "${options.parentId}" not found`,
 		);
 	}
-	return {
-		...ir,
-		pages: newPages,
-		metadata: bumpUpdatedAt(ir, options),
-	};
+	return mutatedDocument(ir, newPages, options);
 }
 
 export interface RemoveNodeOptions extends NowOption {
@@ -362,11 +382,7 @@ export function removeNode(ir: CanvasIR, options: RemoveNodeOptions): CanvasIR {
 			`Node id "${options.id}" not found`,
 		);
 	}
-	return {
-		...ir,
-		pages: newPages,
-		metadata: bumpUpdatedAt(ir, options),
-	};
+	return mutatedDocument(ir, newPages, options);
 }
 
 export interface UpdateNodeOptions<K extends CanvasNodeKind> extends NowOption {
@@ -389,11 +405,7 @@ export function updateNode<K extends CanvasNodeKind>(
 		const newPages = ir.pages.map((p) =>
 			p.id === rootPage.id ? { ...p, root: newRoot } : p,
 		);
-		return {
-			...ir,
-			pages: newPages,
-			metadata: bumpUpdatedAt(ir, options),
-		};
+		return mutatedDocument(ir, newPages, options);
 	}
 	let updated = false;
 	const newPages = ir.pages.map((page) => {
@@ -411,11 +423,7 @@ export function updateNode<K extends CanvasNodeKind>(
 			`Node id "${options.id}" not found`,
 		);
 	}
-	return {
-		...ir,
-		pages: newPages,
-		metadata: bumpUpdatedAt(ir, options),
-	};
+	return mutatedDocument(ir, newPages, options);
 }
 
 export interface MoveNodeOptions extends NowOption {
@@ -492,11 +500,7 @@ export function moveNode(ir: CanvasIR, options: MoveNodeOptions): CanvasIR {
 		return { ...c, children: newChildren };
 	});
 	const newPage: CanvasPage = { ...page, root: newRoot };
-	return {
-		...ir,
-		pages: replacePage(ir, newPage),
-		metadata: bumpUpdatedAt(ir, options),
-	};
+	return mutatedDocument(ir, replacePage(ir, newPage), options);
 }
 
 export interface ReorderChildrenOptions extends NowOption {
@@ -550,11 +554,7 @@ export function reorderChildren(
 		return { ...c, children: newChildren };
 	});
 	const newPage: CanvasPage = { ...page, root: newRoot };
-	return {
-		...ir,
-		pages: replacePage(ir, newPage),
-		metadata: bumpUpdatedAt(ir, options),
-	};
+	return mutatedDocument(ir, replacePage(ir, newPage), options);
 }
 
 export interface ReplaceChildrenInParentOptions extends NowOption {
@@ -597,9 +597,5 @@ export function replaceChildrenInParent(
 		children: options.replace(c.children),
 	}));
 	const newPage: CanvasPage = { ...page, root: newRoot };
-	return {
-		...ir,
-		pages: replacePage(ir, newPage),
-		metadata: bumpUpdatedAt(ir, options),
-	};
+	return mutatedDocument(ir, replacePage(ir, newPage), options);
 }

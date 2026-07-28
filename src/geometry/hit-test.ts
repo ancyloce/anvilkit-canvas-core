@@ -4,6 +4,7 @@ import {
 	applyMatrix,
 	type BoundsExtent,
 	invertMatrix,
+	matrixBoundsExtent,
 	multiplyMatrix,
 	toAffineMatrix,
 } from "./affine.js";
@@ -27,25 +28,8 @@ interface Point {
 
 const IDENTITY: AffineMatrix = [1, 0, 0, 1, 0, 0];
 
-function boxAabb(m: AffineMatrix, width: number, height: number): Aabb {
-	const corners: Array<[number, number]> = [
-		applyMatrix(m, 0, 0),
-		applyMatrix(m, width, 0),
-		applyMatrix(m, width, height),
-		applyMatrix(m, 0, height),
-	];
-	let minX = Number.POSITIVE_INFINITY;
-	let minY = Number.POSITIVE_INFINITY;
-	let maxX = Number.NEGATIVE_INFINITY;
-	let maxY = Number.NEGATIVE_INFINITY;
-	for (const [x, y] of corners) {
-		if (x < minX) minX = x;
-		if (y < minY) minY = y;
-		if (x > maxX) maxX = x;
-		if (y > maxY) maxY = y;
-	}
-	return { minX, minY, maxX, maxY };
-}
+/** The shared corner-loop, kept under this module's local name. */
+const boxAabb = matrixBoundsExtent;
 
 /**
  * World-space axis-aligned bounding box of a node, accounting for its
