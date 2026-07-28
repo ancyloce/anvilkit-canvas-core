@@ -30,6 +30,12 @@ const LAYERS = [
 	// `ir/walkers.ts` imports MAX_TREE_DEPTH from it; it imports nothing
 	// itself, so rank 0 alongside `clock` is the correct floor.
 	{ domain: "limits", rank: 0, match: (p) => p === "limits.ts" },
+	// Deterministic string fingerprints (T-M2-03). Imported by BOTH
+	// `serialize/` (rank 5, XML id disambiguation) and `layout/` (rank 4,
+	// measurement keys + inputHash); rank 4 cannot reach rank 5, so the shared
+	// algorithm has to sit below both. It imports nothing, so rank 0 is the
+	// correct floor rather than an arbitrary low rank.
+	{ domain: "hash", rank: 0, match: (p) => p === "hash.ts" },
 	{ domain: "ir", rank: 1, match: (p) => p.startsWith("ir/") },
 	{ domain: "ai-contracts", rank: 2, match: (p) => p === "ai-contracts.ts" },
 	// The headless text-measurement port. A host-implemented contract over IR
