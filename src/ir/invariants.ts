@@ -1,5 +1,5 @@
-import type { CanvasIR, CanvasNode } from "./types.js";
-import { CanvasIRDepthError, walk } from "./walkers.js";
+import type { CanvasIR, CanvasNode, CanvasPage } from "./types.js";
+import { CanvasIRDepthError, walk, walkPage } from "./walkers.js";
 
 /**
  * Semantic invariant validation (P0-6) — deliberately separate from
@@ -74,8 +74,12 @@ function assetIdsReferencedByNode(node: CanvasNode): readonly string[] {
  * `fixed`) is semantically identical to no `layoutItem` at all, so it does
  * NOT make the capability required — otherwise a normalizer that writes an
  * empty record would silently make a plain document layout-bearing.
+ *
+ * Exported (T-M3-02) so the SVG serializer's `LAYOUT_UNRESOLVED` detection
+ * shares this exact predicate — a second copy would let "capability required"
+ * and "resolution required" drift apart, and they are the same question.
  */
-function nodeCarriesLayoutIntent(node: CanvasNode): boolean {
+export function nodeCarriesLayoutIntent(node: CanvasNode): boolean {
 	if (node.type === "frame" && node.autoLayout !== undefined) return true;
 	const item = node.layoutItem;
 	if (!item) return false;
@@ -84,6 +88,20 @@ function nodeCarriesLayoutIntent(node: CanvasNode): boolean {
 		(item.widthSizing !== undefined && item.widthSizing !== "fixed") ||
 		(item.heightSizing !== undefined && item.heightSizing !== "fixed")
 	);
+}
+
+/**
+ * Does any node on this page carry layout intent (see
+ * {@link nodeCarriesLayoutIntent})? One `walkPage` pass; used by consumers
+ * that need to know whether stored geometry alone can be trusted for a page —
+ * e.g. the SVG serializer deciding whether to warn `LAYOUT_UNRESOLVED`.
+ */
+export function pageCarriesLayoutIntent(page: CanvasPage): boolean {
+	let found = false;
+	walkPage(page, ({ node }) => {
+		if (!found && nodeCarriesLayoutIntent(node)) found = true;
+	});
+	return found;
 }
 
 /**

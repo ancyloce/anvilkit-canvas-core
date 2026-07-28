@@ -1,6 +1,7 @@
 import { resolveNow } from "../clock.js";
 import {
 	type AffineMatrix,
+	childrenBoundsFromExtents,
 	decomposeMatrix,
 	invertMatrix,
 	multiplyMatrix,
@@ -485,26 +486,18 @@ function applyImageReplace(
 }
 
 function computeChildrenBounds(children: readonly CanvasNode[]): CanvasBounds {
-	// Transform-aware AABB across all children (accounts for rotation/scale/skew,
-	// not just `x + width`), anchored to include the group origin (0,0). So
-	// positive-coord content still measures from 0, while rotated/scaled content
-	// that spills into negative coordinates is fully covered.
-	let minX = 0;
-	let minY = 0;
-	let maxX = 0;
-	let maxY = 0;
-	for (const child of children) {
-		const ext = transformedBoundsExtent(
-			child.transform,
-			child.bounds.width,
-			child.bounds.height,
-		);
-		if (ext.minX < minX) minX = ext.minX;
-		if (ext.minY < minY) minY = ext.minY;
-		if (ext.maxX > maxX) maxX = ext.maxX;
-		if (ext.maxY > maxY) maxY = ext.maxY;
-	}
-	return { width: maxX - minX, height: maxY - minY };
+	// Transform-aware AABB across all children, anchored to include the group
+	// origin (0,0). The merge itself lives in geometry so the resolved-layout
+	// path (feeding `layoutFootprint` extents) shares it verbatim.
+	return childrenBoundsFromExtents(
+		children.map((child) =>
+			transformedBoundsExtent(
+				child.transform,
+				child.bounds.width,
+				child.bounds.height,
+			),
+		),
+	);
 }
 
 /**
