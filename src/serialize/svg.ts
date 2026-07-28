@@ -8,6 +8,7 @@ import {
 	computePolygonVertices,
 	computeStarVertices,
 } from "../geometry/polygon.js";
+import { fingerprint } from "../hash.js";
 import { resolveNodeEffects } from "../ir/effects.js";
 import {
 	adjustmentBlurRadius,
@@ -53,6 +54,7 @@ import { CanvasIRSchema } from "../ir/validators.js";
 import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir/walkers.js";
 import {
 	type CanvasTextMeasurer,
+	DEFAULT_RICH_TEXT_STYLE as DEFAULT_RICH_TEXT_STYLE_DEFAULTS,
 	type MeasuredText,
 	type ResolvedSpanStyle,
 	type RichTextStyleDefaults,
@@ -230,18 +232,6 @@ export function bytesToBase64(bytes: Uint8Array): string {
 // --- ids and path data -------------------------------------------------------
 
 /**
- * Short, deterministic, dependency-free fingerprint (djb2) — collision
- * avoidance only, not cryptographic.
- */
-function fingerprint(input: string): string {
-	let hash = 5381;
-	for (let i = 0; i < input.length; i++) {
-		hash = (hash * 33) ^ input.charCodeAt(i);
-	}
-	return (hash >>> 0).toString(36);
-}
-
-/**
  * Reduce an arbitrary id to chars safe inside an XML id and `url(#…)` ref.
  * A `crypto.randomUUID()` id (already all `[0-9a-f-]`) passes through
  * unchanged. Two DIFFERENT non-safe ids can otherwise clean to the SAME
@@ -407,23 +397,16 @@ export interface SvgSerializeWarning {
 }
 
 /**
- * Fallbacks for the rich-text style fields a document leaves unset. Chosen to
- * match `createText`'s defaults (`ir/builders.ts`) so a rich-text block with no
- * explicit styling renders like a plain `text` node would.
+ * Fallbacks for the rich-text style fields a document leaves unset.
+ *
+ * Moved to `text-contracts.ts` (T-M2-03) so the layout resolver merges its
+ * `richTextDefaults` option onto the SAME base this serializer does. Two
+ * copies would let the editor and the exporter break lines differently for a
+ * document that styles nothing — precisely the divergence the measurement
+ * contract exists to prevent.
  */
-const DEFAULT_RICH_TEXT_STYLE: RichTextStyleDefaults = {
-	fontFamily: "Inter",
-	fontSize: 16,
-	fontWeight: "400",
-	italic: false,
-	underline: false,
-	strikethrough: false,
-	letterSpacing: 0,
-	textTransform: "none",
-	fill: "#000000",
-	lineHeight: 1.4,
-	align: "left",
-};
+const DEFAULT_RICH_TEXT_STYLE: RichTextStyleDefaults =
+	DEFAULT_RICH_TEXT_STYLE_DEFAULTS;
 
 /** Options resolved to concrete values, threaded through emission. */
 export interface ResolvedSvgOptions {
