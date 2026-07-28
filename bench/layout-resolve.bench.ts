@@ -40,11 +40,21 @@
  * Scheduling noise shows up there first, so a run whose numbers cannot be
  * trusted is visible rather than silently authoritative.
  *
- * ### Swapping in the real resolver (M2)
+ * ### Swapping in the real resolver (M2 — done)
  *
- * No edit to this file is required. `loadResolver()` dynamically imports
- * `../src/layout/index.js` and uses its `resolveCanvasLayout` export when
- * present, falling back to the stub when it is not.
+ * `loadResolver()` dynamically imports `../src/layout/index.js` and uses its
+ * `resolveCanvasLayout` export when present, falling back to the stub when it
+ * is not. That much needed no edit.
+ *
+ * What DID need an edit was the warm path. The M0 stub had no cache, so
+ * `resolveWarm` ignored its `previous` argument and simply re-resolved — which
+ * against the real resolver measures a **second cold pass** and reports it as
+ * warm. It passed the 16 ms budget by accident rather than because the cache
+ * worked (measured: warm 6.150 ms vs cold 5.651 ms — indistinguishable). The
+ * warm path now threads `previous` into the resolver, and each workload
+ * defines the localized edit TD §15.1 calls for, so the warm figure measures
+ * "re-resolve after one small change with a valid subtree cache" — which is
+ * what the ≤16 ms target is actually about.
  */
 
 import { arch, cpus, platform, release, totalmem } from "node:os";
@@ -57,7 +67,7 @@ import {
 	createRect,
 	createText,
 } from "../src/ir/builders.js";
-import { insertNode } from "../src/ir/mutations.js";
+import { insertNode, updateNode } from "../src/ir/mutations.js";
 import type { CanvasIR, CanvasNode } from "../src/ir/types.js";
 
 /**
@@ -266,13 +276,17 @@ async function loadResolver(): Promise<ResolverUnderBench> {
 		const mod = (await import(
 			/* @vite-ignore */ "../src/layout/index.js"
 		)) as Record<string, unknown>;
-		const resolve = mod.resolveCanvasLayout;
+		const resolve = mod.resolveCanvasLayout as
+			| ((ir: CanvasIR, options: Record<string, unknown>) => unknown)
+			| undefined;
 		if (typeof resolve === "function") {
 			return {
 				id: "resolveCanvasLayout",
 				isStub: false,
-				resolveCold: (ir) => (resolve as (ir: CanvasIR) => unknown)(ir),
-				resolveWarm: (ir) => (resolve as (ir: CanvasIR) => unknown)(ir),
+				resolveCold: (ir) => resolve(ir, {}),
+				// Threading `previous` is what makes this the WARM path. Without
+				// it this is a second cold pass wearing a warm label.
+				resolveWarm: (ir, previous) => resolve(ir, { previous }),
 			};
 		}
 	} catch {
@@ -372,26 +386,58 @@ describe("Auto Layout resolver benchmark (T-M0-07)", () => {
 		const resolver = await loadResolver();
 		const env = referenceEnvironmentStatus();
 
-		const workloads: { name: string; ir: CanvasIR }[] = [
-			{ name: "1k-nodes-30pct-frames", ir: buildLargeDocument() },
-			{ name: "100-text-20-keys", ir: buildTextDocument() },
-			{ name: "hug-chain-depth-3", ir: buildHugChain() },
+		const workloads: {
+			name: string;
+			ir: CanvasIR;
+			/** The localized edit whose re-resolution the warm figure measures. */
+			edit: (ir: CanvasIR) => CanvasIR;
+		}[] = [
+			{
+				name: "1k-nodes-30pct-frames",
+				ir: buildLargeDocument(),
+				edit: (ir) =>
+					updateNode(ir, {
+						id: "r1",
+						patch: { bounds: { width: 111, height: 40 } },
+					}),
+			},
+			{
+				name: "100-text-20-keys",
+				ir: buildTextDocument(),
+				edit: (ir) => updateNode(ir, { id: "t7", patch: { text: "edited" } }),
+			},
+			{
+				// TD §15.1 workload 3 exactly: one localized text edit
+				// invalidating a three-level Hug chain.
+				name: "hug-chain-depth-3",
+				ir: buildHugChain(),
+				edit: (ir) =>
+					updateNode(ir, {
+						id: "hug-text",
+						patch: { text: "localized-edit" },
+					}),
+			},
 		];
 
 		const rows: Row[] = [];
-		for (const { name, ir } of workloads) {
+		for (const { name, ir, edit } of workloads) {
 			rows.push({
 				workload: name,
 				phase: "cold",
 				targetMs: TARGET_COLD_MS,
 				summary: measure(() => resolver.resolveCold(ir)),
 			});
+			// Warm = "one localized edit landed, re-resolve with a valid subtree
+			// cache" (TD §15.1), not "resolve the identical document again" —
+			// the latter short-circuits at the page root and measures nothing
+			// the ≤16 ms target cares about.
 			const primed = resolver.resolveCold(ir);
+			const editedIr = edit(ir);
 			rows.push({
 				workload: name,
 				phase: "warm",
 				targetMs: TARGET_WARM_MS,
-				summary: measure(() => resolver.resolveWarm(ir, primed)),
+				summary: measure(() => resolver.resolveWarm(editedIr, primed)),
 			});
 		}
 

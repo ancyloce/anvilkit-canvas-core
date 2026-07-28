@@ -128,6 +128,46 @@ Every spread is `n/a` because every median is far below the 0.5 ms relevance
 floor. Expect the 1k-node cold row to be the first to produce a real spread
 once the M2 resolver lands.
 
+## M2 baseline — the REAL resolver (2026-07-27, plan 0022 T-M2-11)
+
+`resolveCanvasLayout` has landed, so both gating conditions are now satisfied
+and **these figures are a pass/fail signal on this host.**
+
+Three consecutive runs, otherwise-idle machine:
+
+| Workload | Phase | Median (ms) | p95 (ms) | Spread | Target |
+| --- | --- | --- | --- | --- | --- |
+| `1k-nodes-30pct-frames` | cold | 5.02 / 5.28 / 5.83 | 10.38 / 11.27 / 12.23 | 2.07 / 2.14 / 2.10 | 50 ms |
+| `1k-nodes-30pct-frames` | warm | 2.35 / 2.49 / 2.30 | 4.22 / 5.06 / 5.36 | 1.80 / 2.03 / 2.33 | 16 ms |
+| `100-text-20-keys` | cold | 0.52 | 1.04 | 2.00 | 50 ms |
+| `100-text-20-keys` | warm | 0.35 | 0.55 | n/a | 16 ms |
+| `hug-chain-depth-3` | cold | 0.04 | 0.11 | n/a | 50 ms |
+| `hug-chain-depth-3` | warm | 0.04 | 0.14 | n/a | 16 ms |
+
+**Verdict: both targets met with ~4x headroom cold and ~3x warm.**
+
+### A false green found and fixed while recording this
+
+The first M2 run reported warm 6.150 ms against cold 5.651 ms — statistically
+indistinguishable, and passing the 16 ms budget purely by accident. The cause
+was in this harness, not the resolver: the M0 stub had no cache, so
+`resolveWarm` ignored its `previous` argument and simply re-resolved. Against
+the real resolver that measures a **second cold pass** and labels it warm.
+
+The warm path now threads `previous` into the resolver and each workload
+defines the localized edit TD §15.1 calls for, so the warm figure measures
+"re-resolve after one small change with a valid subtree cache". Warm is now
+**~2.1x faster than cold** on the 1k-node workload, which is the cache doing
+its job rather than a label doing it.
+
+### Residual caution
+
+Spreads on the 1k-node rows sit at **2.0–2.3 against a 2.5 limit** — real
+headroom, but not much. A run on a busy machine will trip the stability gate
+before it trips a latency budget, which is the intended order: a figure too
+noisy to trust fails as noisy rather than passing or failing on latency by
+luck. Quote a run only from an otherwise-idle host.
+
 ## Running it
 
 ```sh
@@ -141,17 +181,17 @@ Environment overrides: `ANVILKIT_CANVAS_BENCH_RUNS`,
 
 Gating requires **both** conditions; the run prints which one is missing.
 
-1. **A real resolver.** `layout/` gains its solver in M2. A stub meeting a
-   latency budget proves nothing, so while `isStub` is true the harness
-   asserts only that every workload produced a real sample — never that the
-   sample was fast. **This is currently the only blocker.**
+1. **A real resolver.** `layout/` gained its solver in M2. **Satisfied as of
+   2026-07-27** — `loadResolver()` dynamically imports `../src/layout/index.js`
+   and switched to its `resolveCanvasLayout` export as soon as that module
+   existed, so gating turned on by itself.
 2. **The recorded reference environment.** Satisfied on the machine above as
    of this nomination.
 
-M2 requires no edit to the harness: `loadResolver()` dynamically imports
-`../src/layout/index.js` and switches to its `resolveCanvasLayout` export as
-soon as that module exists. At that moment gating turns on by itself, and the
-p95 targets become enforceable — which is exactly what closing OQ-1 was for.
+Both hold, so **gating is ENABLED** and the p95 targets are enforced — which is
+exactly what closing OQ-1 was for. Probe-verified: tightening `TARGET_COLD_MS`
+to 1 fails the run with `1k-nodes-30pct-frames/cold p95 exceeds the PRD §13.1
+budget`, and restoring it returns the suite to 2/2.
 
 ## Changing the reference machine
 
