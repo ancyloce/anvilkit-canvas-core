@@ -8,6 +8,7 @@ import type {
 } from "../ir/types.js";
 import { CanvasIRDepthError, walk } from "../ir/walkers.js";
 import { MAX_FINITE_LAYOUT_MAGNITUDE } from "../limits.js";
+import { SIZING_FIELD_AXIS, SIZING_FIELDS } from "./axis.js";
 
 /**
  * @file Layout invariants (TD §14) — the level-3 half of Auto Layout
@@ -126,14 +127,25 @@ export const CANVAS_LAYOUT_ISSUE_DEFAULTS: Readonly<
 	},
 };
 
-/** Build an issue with its severity/fallback taken from the normative table. */
-function issue(
+/**
+ * Build an issue with its severity/fallback taken from the normative table.
+ *
+ * Exported for the rest of the `layout/` domain — the resolver, the dependency
+ * graph and the measurement pass all emit issues, and each choosing its own
+ * severity literal is how a code's severity ends up disagreeing with TD §14
+ * depending on which module happened to raise it. Deliberately **not** in
+ * `layout/index.ts`: emitting a diagnostic is the resolver's job, not a host's.
+ */
+export function createLayoutIssue(
 	code: CanvasLayoutIssueCode,
 	detail: { message: string; nodeId?: string; axis?: CanvasLayoutDirection },
 ): CanvasLayoutIssue {
 	const { severity, fallback } = CANVAS_LAYOUT_ISSUE_DEFAULTS[code];
 	return { code, severity, ...(fallback ? { fallback } : {}), ...detail };
 }
+
+/** Domain-internal alias keeping the emit sites in this file terse. */
+const issue = createLayoutIssue;
 
 /**
  * Capabilities this build implements. Used ONLY to decide whether a declared
@@ -176,13 +188,14 @@ function isFrameWithLayout(node: CanvasNode | null): node is CanvasFrameNode & {
 	);
 }
 
-/** Axis a given sizing field controls. */
-const AXIS_OF = {
-	widthSizing: "horizontal",
-	heightSizing: "vertical",
-} as const satisfies Record<string, CanvasLayoutDirection>;
-
-const SIZING_FIELDS = ["widthSizing", "heightSizing"] as const;
+/**
+ * Axis a given sizing field controls, and the fields to iterate.
+ *
+ * Both moved to `axis.ts` in T-M2-04 so the dependency graph and the solver
+ * read the same table this validator does — a second copy is how an issue's
+ * `axis` ends up disagreeing with the axis the solver actually demoted.
+ */
+const AXIS_OF = SIZING_FIELD_AXIS;
 
 function isBadNumber(value: number): boolean {
 	return (
@@ -297,14 +310,24 @@ export function validateLayoutInvariants(ir: CanvasIR): CanvasLayoutIssue[] {
 								message: `Node "${node.id}" is absolutely positioned and cannot ${axis} Fill — Fill divides the flow's remaining space.`,
 							}),
 						);
-					} else if (node.type === "text" && axis === "horizontal") {
+					} else if (
+						node.type === "text" &&
+						axis === SIZING_FIELD_AXIS.widthSizing
+					) {
 						// A plain `text` node is single-line and cannot wrap, so its
 						// inline extent is dictated by its content, not by its container.
+						//
+						// Reported as `layout-hug-unsupported`, NOT
+						// `layout-fill-without-parent`: PRD §9.2 and TD §7.2 both name
+						// this code, and the parent here IS a valid Auto Layout frame —
+						// telling a host "no Auto Layout parent" would send it to fix
+						// the one thing that is not wrong. The shared meaning is "this
+						// axis cannot be sized that way by intrinsic means".
 						issues.push(
-							issue("layout-fill-without-parent", {
+							issue("layout-hug-unsupported", {
 								nodeId: node.id,
 								axis,
-								message: `Text node "${node.id}" cannot Fill its inline (horizontal) axis — a "text" node does not wrap. Use "rich-text" for wrapping content.`,
+								message: `Text node "${node.id}" cannot Fill its inline (${axis}) axis — a "text" node does not wrap. Use "rich-text" for wrapping content.`,
 							}),
 						);
 					}
@@ -364,7 +387,7 @@ export function validateLayoutInvariants(ir: CanvasIR): CanvasLayoutIssue[] {
 		}
 	}
 
-	return sortLayoutIssues(issues, position);
+	return orderLayoutIssues(issues, position);
 }
 
 const AXIS_RANK: Record<string, number> = {
@@ -372,6 +395,44 @@ const AXIS_RANK: Record<string, number> = {
 	horizontal: 1,
 	vertical: 2,
 };
+
+/** Where a node sits in the normative ordering: page index, then pre-order rank. */
+export interface CanvasLayoutDocumentOrder {
+	readonly pageIndex: number;
+	readonly order: number;
+}
+
+/**
+ * Build the pre-order position index the TD §14 sort key needs.
+ *
+ * Exported so the resolver orders *its* diagnostics by exactly the same index
+ * this validator uses. `validateLayoutInvariants` does not call it — it fills
+ * the map during the walk it was already doing, which is free — but both
+ * produce the identical mapping, and a test pins that.
+ *
+ * Depth failures are swallowed: an over-deep document still gets an ordering
+ * for the part that could be walked, because refusing to order diagnostics is
+ * strictly worse than ordering most of them.
+ */
+export function buildDocumentOrder(
+	ir: CanvasIR,
+): ReadonlyMap<string, CanvasLayoutDocumentOrder> {
+	const position = new Map<string, CanvasLayoutDocumentOrder>();
+	const pageIndexOf = new Map<string, number>();
+	ir.pages.forEach((page, index) => pageIndexOf.set(page.id, index));
+	let order = 0;
+	try {
+		walk(ir, ({ node, page }) => {
+			position.set(node.id, {
+				pageIndex: pageIndexOf.get(page.id) ?? 0,
+				order: order++,
+			});
+		});
+	} catch (err) {
+		if (!(err instanceof CanvasIRDepthError)) throw err;
+	}
+	return position;
+}
 
 /**
  * The fully specified TD §14 ordering: page order, then pre-order tree order,
@@ -382,10 +443,15 @@ const AXIS_RANK: Record<string, number> = {
  * collation would make diagnostic order depend on the host's locale, which is
  * exactly the kind of environment coupling AC-008's determinism forbids.
  * Document-scoped issues (no `nodeId`) sort before every node-scoped one.
+ *
+ * `Array.prototype.sort` is stable in every engine this package supports, so
+ * two issues identical on all four key components keep their emission order
+ * rather than being permuted — which is what makes the output byte-stable
+ * rather than merely set-equal.
  */
-function sortLayoutIssues(
+export function orderLayoutIssues(
 	issues: readonly CanvasLayoutIssue[],
-	position: ReadonlyMap<string, { pageIndex: number; order: number }>,
+	position: ReadonlyMap<string, CanvasLayoutDocumentOrder>,
 ): CanvasLayoutIssue[] {
 	const at = (issue: CanvasLayoutIssue) =>
 		(issue.nodeId ? position.get(issue.nodeId) : undefined) ?? {

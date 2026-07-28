@@ -167,7 +167,13 @@ describe("statically decidable codes (M1)", () => {
 		).toBe("vertical");
 	});
 
-	it("layout-fill-without-parent — a `text` node cannot Fill its inline axis", () => {
+	// PRD §9.2 ("`layout-fill-without-parent`'s sibling diagnostic
+	// `layout-hug-unsupported`") and TD §7.2's per-kind table both name
+	// `layout-hug-unsupported` here, and plan TS-11 tests for it. M1 emitted
+	// `layout-fill-without-parent`, which is also the misleading answer: the
+	// parent IS a valid Auto Layout frame, so that code would send a host to
+	// fix the one thing that is not wrong. Corrected in T-M2-04.
+	it("layout-hug-unsupported — a `text` node cannot Fill its inline axis", () => {
 		const ir = docOf([
 			frameWith("f1", [
 				{
@@ -176,11 +182,17 @@ describe("statically decidable codes (M1)", () => {
 				} as CanvasNode,
 			]),
 		]);
-		const issue = validateLayoutInvariants(ir).find(
-			(i) => i.code === "layout-fill-without-parent",
-		);
+		const issues = validateLayoutInvariants(ir);
+		const issue = issues.find((i) => i.code === "layout-hug-unsupported");
 		expect(issue?.nodeId).toBe("t1");
+		expect(issue?.axis).toBe("horizontal");
 		expect(issue?.message).toContain("does not wrap");
+		expect(issue?.fallback).toBe("fixed-size");
+		// The parent is a perfectly good Auto Layout frame, so the "no parent"
+		// diagnostic must NOT also fire.
+		expect(issues.map((i) => i.code)).not.toContain(
+			"layout-fill-without-parent",
+		);
 	});
 
 	it("...but a `text` node MAY Fill its block (vertical) axis", () => {
