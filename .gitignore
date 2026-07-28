@@ -44,4 +44,12 @@ next-env.d.ts
 .size-limit
 
 # Bench
-/bench
+# Generated bench output only. The harness and its companion record are SOURCE
+# and must be tracked: `vitest.bench.config.ts` (tracked) points at
+# `bench/**/*.bench.ts`, and `bench/REFERENCE-ENVIRONMENT.md` is the recorded
+# performance reference environment that the p95 targets are defined against
+# (OQ-1). A blanket `/bench` ignored both, so neither survived a fresh clone
+# and CI could never run the benchmark it was configured to run.
+/bench/*
+!/bench/*.bench.ts
+!/bench/*.md
