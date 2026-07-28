@@ -12,6 +12,7 @@ import type { CanvasIR, CanvasNode } from "../../ir/types.js";
 import {
 	CANVAS_CLIPBOARD_VERSION,
 	CanvasClipboardError,
+	CanvasClipboardPayloadSchema,
 	type CanvasClipboardPayload,
 	MAX_CLIPBOARD_BYTES,
 	MAX_CLIPBOARD_NODES,
@@ -312,5 +313,78 @@ describe("materializeClipboardNodes", () => {
 		expect(
 			(nodes[1] as { placeholder?: { assetId?: string } }).placeholder?.assetId,
 		).toBe(newKey);
+	});
+});
+
+describe("capability gating (T-M1-11)", () => {
+	const base = () => ({
+		version: CANVAS_CLIPBOARD_VERSION,
+		nodes: [],
+		assetRefs: {},
+		bounds: { x: 0, y: 0, width: 0, height: 0 },
+	});
+
+	it("accepts a payload with no capability field at all", () => {
+		expect(() => validateClipboardPayload(base())).not.toThrow();
+	});
+
+	it("accepts a capability this build implements", () => {
+		const payload = {
+			...base(),
+			requiredCapabilities: ["layout.auto.v1"],
+		};
+		expect(
+			validateClipboardPayload(payload).requiredCapabilities,
+		).toEqual(["layout.auto.v1"]);
+	});
+
+	it("rejects an unknown capability using the EXISTING error taxonomy", () => {
+		try {
+			validateClipboardPayload({
+				...base(),
+				requiredCapabilities: ["test.future.v9"],
+			});
+			expect.unreachable("must throw");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CanvasClipboardError);
+			// No new code was invented for this.
+			expect((err as CanvasClipboardError).code).toBe("unsupported-version");
+			expect((err as CanvasClipboardError).message).toContain("test.future.v9");
+		}
+	});
+
+	it("names every unsupported capability, not just the first", () => {
+		try {
+			validateClipboardPayload({
+				...base(),
+				requiredCapabilities: ["a.v1", "layout.auto.v1", "b.v2"],
+			});
+			expect.unreachable("must throw");
+		} catch (err) {
+			const message = (err as CanvasClipboardError).message;
+			expect(message).toContain("a.v1");
+			expect(message).toContain("b.v2");
+			expect(message).not.toContain("layout.auto.v1");
+		}
+	});
+
+	it("parses an unknown capability rather than failing the SCHEMA", () => {
+		// The distinction that matters: it must survive parse so it can be
+		// reported as unsupported. A z.enum here would fail earlier and lose
+		// the actionable message.
+		const parsed = CanvasClipboardPayloadSchema.safeParse({
+			...base(),
+			requiredCapabilities: ["test.future.v9"],
+		});
+		expect(parsed.success).toBe(true);
+	});
+
+	it("rejects a non-string capability entry", () => {
+		expect(
+			CanvasClipboardPayloadSchema.safeParse({
+				...base(),
+				requiredCapabilities: [42],
+			}).success,
+		).toBe(false);
 	});
 });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CANVAS_LAYOUT_AUTO_CAPABILITY } from "../ir/invariants.js";
 import { regenerateNodeIds } from "../ir/regenerate-ids.js";
 import type { CanvasAssetRef, CanvasIR, CanvasNode } from "../ir/types.js";
 import { CanvasAssetRefSchema, CanvasNodeSchema } from "../ir/validators.js";
@@ -53,7 +54,24 @@ export interface CanvasClipboardPayload {
 	assetRefs: Readonly<Record<string, CanvasAssetRef>>;
 	/** Combined AABB of `nodes` at copy time (paste-offset math). */
 	bounds: CanvasClipboardBounds;
+	/**
+	 * Capabilities a reader needs in order to interpret these nodes correctly
+	 * — e.g. `"layout.auto.v1"` when any copied node carries layout intent.
+	 *
+	 * Open by construction, exactly like
+	 * `CanvasDocumentCompatibility.requiredCapabilities`: an unknown string
+	 * must survive parsing so it can be reported as unsupported rather than
+	 * dying as a schema error. This is a PAYLOAD-level check, not the document
+	 * migration chain — a clipboard payload is a bag of nodes, not a
+	 * `CanvasIR`, so it has its own version and its own error taxonomy.
+	 */
+	requiredCapabilities?: readonly string[];
 }
+
+/** Capabilities this build can honour on paste. */
+const KNOWN_CLIPBOARD_CAPABILITIES: ReadonlySet<string> = new Set([
+	CANVAS_LAYOUT_AUTO_CAPABILITY,
+]);
 
 export type CanvasClipboardErrorCode =
 	| "invalid-json"
@@ -94,6 +112,8 @@ export const CanvasClipboardPayloadSchema: z.ZodType<CanvasClipboardPayload> =
 		nodes: z.array(CanvasNodeSchema),
 		assetRefs: z.record(z.string(), CanvasAssetRefSchema),
 		bounds: CanvasClipboardBoundsSchema,
+		// Open string array, never a z.enum — see `requiredCapabilities`.
+		requiredCapabilities: z.array(z.string()).optional(),
 	}) as z.ZodType<CanvasClipboardPayload>;
 
 function countNodes(roots: readonly CanvasNode[]): number {
@@ -156,6 +176,22 @@ export function validateClipboardPayload(
 		throw new CanvasClipboardError(
 			"too-many-nodes",
 			`Clipboard payload contains ${total} nodes (max ${MAX_CLIPBOARD_NODES})`,
+		);
+	}
+	// Capability gate, reusing the EXISTING taxonomy rather than adding a code:
+	// "this build cannot interpret what the payload needs" is the same class of
+	// failure as an unsupported payload version. Rejecting is right here even
+	// though the DOCUMENT-level equivalent only warns — pasting content whose
+	// semantics this build does not implement would silently drop that meaning
+	// into the user's document, whereas a document merely opened can safely
+	// render read-only from its materialized cache.
+	const unsupported = (parsed.data.requiredCapabilities ?? []).filter(
+		(capability) => !KNOWN_CLIPBOARD_CAPABILITIES.has(capability),
+	);
+	if (unsupported.length > 0) {
+		throw new CanvasClipboardError(
+			"unsupported-version",
+			`Clipboard payload requires capabilities this build does not implement: ${unsupported.join(", ")}`,
 		);
 	}
 	return parsed.data;
