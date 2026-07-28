@@ -10,8 +10,11 @@ const PACKAGE_ROOT = resolve(__dirname, "..");
 const SOURCE_DIR = resolve(PACKAGE_ROOT, "src");
 
 /**
- * Dependency-direction gate for the domain layout documented in
- * docs/architecture/canvas-core-src-layout-review.md (§4). A module may only
+ * Dependency-direction gate for the domain layout documented in this package's
+ * own docs/architecture/src-layer-map.md. (It previously cited the
+ * superproject's canvas-core-src-layout-review.md — a file that does not ship
+ * with this submodule, so the record was unreachable from a standalone clone
+ * and had drifted out of date. See OQ-2 / T-M1-07.) A module may only
  * import strictly lower-ranked domains (or its own domain). This is a coarse
  * direction check, not the full per-domain allowlist — its job is to stop
  * upward edges (e.g. ir/ importing extensions/) from creeping back in.
@@ -61,6 +64,22 @@ const LAYERS = [
 	// their edits as a reversible `commands/` batch, the same pattern
 	// `templates/` uses — so brand needs the same rank templates has.
 	{ domain: "brand", rank: 4, match: (p) => p.startsWith("brand/") },
+	// The Auto Layout resolver and its validators (PLAN 0022 M1/M2). Rank 4
+	// rather than something lower is forced, and forces four things in turn:
+	//   1. layout COMMANDS stay in `commands/` (rank 3) — rank 3 cannot import
+	//      rank 4, so composite commands take caller-computed geometry and
+	//      `commands/` never calls the resolver;
+	//   2. `export/` (rank 2) cannot import layout diagnostics, so export
+	//      warnings are mapped caller-side into the open-string
+	//      `CanvasExportWarning.code`;
+	//   3. `templates/` (rank 4, a sibling) cannot import it either, which is
+	//      why a layout-aware `resizeToVariants` is deferred, not attempted;
+	//   4. the PERSISTED shapes (`CanvasAutoLayout`, `CanvasLayoutItem`,
+	//      `CanvasDocumentCompatibility`, `CanvasLayoutMaterialization`) live
+	//      in `ir/types.ts` at rank 1, because `ir/validators.ts` must type
+	//      the shapes it spreads and `clipboard/` (rank 2) needs the
+	//      capability type. Only RESOLVED-tree contracts belong here.
+	{ domain: "layout", rank: 4, match: (p) => p.startsWith("layout/") },
 	{ domain: "serialize", rank: 5, match: (p) => p.startsWith("serialize/") },
 	// Design-level AI job contracts (FR-050/052, canvas-m4-001/003). Needs
 	// BOTH templates (CanvasSizePreset id) and brand (BrandKitDefinition)
@@ -200,7 +219,7 @@ async function main() {
 	}
 	console.error("");
 	console.error(
-		"Lower layers must not depend on higher ones (see docs/architecture/canvas-core-src-layout-review.md §4).",
+		"Lower layers must not depend on higher ones (see docs/architecture/src-layer-map.md).",
 	);
 	process.exit(1);
 }
