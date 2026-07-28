@@ -23,7 +23,19 @@ export type CanvasInvariantIssueCode =
 	| "invalid-page-root"
 	| "asset-key-id-mismatch"
 	| "dangling-asset-reference"
-	| "excessive-tree-depth";
+	| "excessive-tree-depth"
+	| "missing-required-capability";
+
+/**
+ * The capability string a document must declare once any of its content
+ * carries Auto Layout intent.
+ *
+ * A runtime constant rather than a bare literal at each call site, but note it
+ * is deliberately NOT the type of any schema field: `requiredCapabilities` is
+ * an open `string[]`, so an unknown capability parses and degrades gracefully
+ * instead of failing validation (see `CanvasDocumentCompatibility`).
+ */
+export const CANVAS_LAYOUT_AUTO_CAPABILITY = "layout.auto.v1";
 
 export interface CanvasInvariantIssue {
 	readonly code: CanvasInvariantIssueCode;
@@ -52,6 +64,26 @@ function assetIdsReferencedByNode(node: CanvasNode): readonly string[] {
 		default:
 			return [];
 	}
+}
+
+/**
+ * Does this node carry layout intent that a reader must understand
+ * `layout.auto.v1` to honour?
+ *
+ * A `layoutItem` whose every field is absent or at its default (`flow` /
+ * `fixed`) is semantically identical to no `layoutItem` at all, so it does
+ * NOT make the capability required — otherwise a normalizer that writes an
+ * empty record would silently make a plain document layout-bearing.
+ */
+function nodeCarriesLayoutIntent(node: CanvasNode): boolean {
+	if (node.type === "frame" && node.autoLayout !== undefined) return true;
+	const item = node.layoutItem;
+	if (!item) return false;
+	return (
+		(item.positioning !== undefined && item.positioning !== "flow") ||
+		(item.widthSizing !== undefined && item.widthSizing !== "fixed") ||
+		(item.heightSizing !== undefined && item.heightSizing !== "fixed")
+	);
 }
 
 /**
@@ -97,6 +129,11 @@ export function validateCanvasIRInvariants(
 	// asset-reference collection.
 	const nodeIdPages = new Map<string, string[]>();
 	const referencedAssetIds = new Set<string>();
+	// Capability completeness rides along on the SAME walk rather than adding a
+	// second O(document) pass. `walk` is pre-order, so `firstLayoutNode` is a
+	// deterministic, document-derived choice of exemplar.
+	let layoutIntentCount = 0;
+	let firstLayoutNode: { nodeId: string; pageId: string } | undefined;
 	try {
 		walk(ir, ({ node, page }) => {
 			const pages = nodeIdPages.get(node.id);
@@ -104,6 +141,10 @@ export function validateCanvasIRInvariants(
 			else nodeIdPages.set(node.id, [page.id]);
 			for (const assetId of assetIdsReferencedByNode(node)) {
 				referencedAssetIds.add(assetId);
+			}
+			if (nodeCarriesLayoutIntent(node)) {
+				layoutIntentCount += 1;
+				firstLayoutNode ??= { nodeId: node.id, pageId: page.id };
 			}
 		});
 	} catch (err) {
@@ -138,6 +179,31 @@ export function validateCanvasIRInvariants(
 				message: `Asset id "${assetId}" is referenced by a node but is not present in ir.assets.`,
 			});
 		}
+	}
+
+	// Capability COMPLETENESS (TD §5.1, level 2): content that needs
+	// `layout.auto.v1` must say so. Without this, a layout-bearing document
+	// written by a partial writer — or hand-edited, or round-tripped through a
+	// clipboard — parses cleanly and is then edited destructively by every
+	// reader, which is the exact data-loss the capability mechanism exists to
+	// prevent.
+	//
+	// One issue per document, not per node: whether the declaration is present
+	// is a single document-level fact, and emitting it per offender would turn
+	// a one-line omission into O(nodes) of noise. The exemplar node is the
+	// pre-order-first one, so the output stays deterministic.
+	if (
+		firstLayoutNode &&
+		!ir.compatibility?.requiredCapabilities.includes(
+			CANVAS_LAYOUT_AUTO_CAPABILITY,
+		)
+	) {
+		issues.push({
+			code: "missing-required-capability",
+			message: `Document carries Auto Layout intent on ${layoutIntentCount} node(s) (first: "${firstLayoutNode.nodeId}") but does not declare "${CANVAS_LAYOUT_AUTO_CAPABILITY}" in compatibility.requiredCapabilities.`,
+			pageId: firstLayoutNode.pageId,
+			nodeId: firstLayoutNode.nodeId,
+		});
 	}
 
 	return issues;

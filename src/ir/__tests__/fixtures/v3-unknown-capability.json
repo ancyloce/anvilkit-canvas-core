@@ -1,0 +1,36 @@
+{
+	"version": "3",
+	"id": "fixture-unknown-capability",
+	"title": "AC-010 — declares a capability this build does not implement",
+	"compatibility": {
+		"schemaVersion": "3",
+		"minReaderSchemaVersion": "3",
+		"requiredCapabilities": ["test.future.v9"]
+	},
+	"pages": [
+		{
+			"id": "page-1",
+			"size": { "width": 800, "height": 600, "unit": "px" },
+			"background": { "kind": "solid", "value": "#ffffff" },
+			"root": {
+				"id": "root-1",
+				"type": "group",
+				"transform": { "x": 0, "y": 0, "rotation": 0, "scaleX": 1, "scaleY": 1 },
+				"bounds": { "width": 800, "height": 600 },
+				"zIndex": 0,
+				"children": [
+					{
+						"id": "rect-1",
+						"type": "rect",
+						"transform": { "x": 0, "y": 0, "rotation": 0, "scaleX": 1, "scaleY": 1 },
+						"bounds": { "width": 100, "height": 100 },
+						"zIndex": 0,
+						"fill": "#00ff00"
+					}
+				]
+			}
+		}
+	],
+	"assets": {},
+	"metadata": { "createdAt": "2026-01-01T00:00:00.000Z", "updatedAt": "2026-01-01T00:00:00.000Z" }
+}

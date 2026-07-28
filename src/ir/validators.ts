@@ -1,10 +1,13 @@
 import { z } from "zod";
+import { MAX_FINITE_LAYOUT_MAGNITUDE } from "../limits.js";
 import { createMigrationRegistry } from "./migrations.js";
 import type {
 	BrandTokenRef,
 	CanvasAnimation,
 	CanvasAssetRef,
+	CanvasAutoLayout,
 	CanvasBounds,
+	CanvasDocumentCompatibility,
 	CanvasDocumentKind,
 	CanvasEffect,
 	CanvasFill,
@@ -17,6 +20,8 @@ import type {
 	CanvasInsets,
 	CanvasIR,
 	CanvasIRMetadata,
+	CanvasLayoutItem,
+	CanvasLayoutMaterialization,
 	CanvasMediaTrim,
 	CanvasNode,
 	CanvasNodeBase,
@@ -313,6 +318,57 @@ const CanvasEffectStyleShape = {
 	effects: z.array(CanvasEffectSchema).optional(),
 } as const;
 
+/**
+ * A non-negative layout distance (padding edge or gap), bounded by
+ * `MAX_FINITE_LAYOUT_MAGNITUDE`.
+ *
+ * The upper bound is what makes that limit load-bearing rather than merely
+ * documented: past it, a value no longer round-trips through the resolver's
+ * 1e-4 quantisation without precision loss, so it is rejected here as
+ * non-finite-equivalent rather than allowed to produce silently drifting
+ * geometry downstream.
+ */
+const LayoutDistance = NonNegativeFiniteNumber.refine(
+	(v) => v <= MAX_FINITE_LAYOUT_MAGNITUDE,
+	{
+		message: `Layout distance must be <= ${MAX_FINITE_LAYOUT_MAGNITUDE} (MAX_FINITE_LAYOUT_MAGNITUDE)`,
+	},
+);
+
+/**
+ * Auto Layout padding. Deliberately NOT `CanvasInsetsSchema`: that schema
+ * backs page-level layout aids, where a negative inset is meaningful (a bleed
+ * extends outward past the trim). Layout padding must be non-negative on every
+ * edge (TD §6.1), so it validates the same `CanvasInsets` *type* under a
+ * stricter *schema* — one inset type, two validation rules.
+ */
+const CanvasLayoutPaddingSchema: z.ZodType<CanvasInsets> = z.looseObject({
+	top: LayoutDistance,
+	right: LayoutDistance,
+	bottom: LayoutDistance,
+	left: LayoutDistance,
+});
+
+export const CanvasLayoutItemSchema: z.ZodType<CanvasLayoutItem> =
+	z.looseObject({
+		positioning: z.enum(["flow", "absolute"]).optional(),
+		widthSizing: z.enum(["fixed", "hug", "fill"]).optional(),
+		heightSizing: z.enum(["fixed", "hug", "fill"]).optional(),
+	});
+
+export const CanvasAutoLayoutSchema: z.ZodType<CanvasAutoLayout> =
+	z.looseObject({
+		version: z.literal(1),
+		direction: z.enum(["horizontal", "vertical"]),
+		padding: CanvasLayoutPaddingSchema,
+		// Gap never collapses (PRD 0014 §9.3) — an overfull frame overflows and
+		// reports `layout-insufficient-space`, so a negative gap is never a
+		// legitimate way to express "pull these together".
+		gap: LayoutDistance,
+		primaryAlign: z.enum(["start", "center", "end"]),
+		crossAlign: z.enum(["start", "center", "end"]),
+	});
+
 export const CanvasNodeBaseShape = {
 	id: z.string().min(1),
 	name: z.string().optional(),
@@ -325,6 +381,7 @@ export const CanvasNodeBaseShape = {
 	// Reserved/unused — see CanvasNodeBase.zIndex (C-9).
 	zIndex: FiniteNumber.optional(),
 	meta: CanvasNodeMetaSchema.optional(),
+	layoutItem: CanvasLayoutItemSchema.optional(),
 } as const;
 
 export const CanvasNodeBaseSchema: z.ZodType<CanvasNodeBase> =
@@ -559,6 +616,7 @@ export const CanvasFrameNodeShape = {
 	placeholder: FramePlaceholderSchema.optional(),
 	radius: NonNegativeFiniteNumber.optional(),
 	cornerRadii: CanvasCornerRadiiSchema.optional(),
+	autoLayout: CanvasAutoLayoutSchema.optional(),
 } as const;
 
 export const CanvasFrameNodeSchema = z.looseObject({
@@ -634,7 +692,7 @@ export const CanvasIRMetadataSchema: z.ZodType<CanvasIRMetadata> =
  * static schema below and `buildExtendedSchemas` both derive from it, so the
  * two can never drift.
  */
-export const CANVAS_IR_VERSION = "2" satisfies CanvasIR["version"];
+export const CANVAS_IR_VERSION = "3" satisfies CanvasIR["version"];
 
 export const CanvasDocumentKindSchema: z.ZodType<CanvasDocumentKind> = z.enum([
 	"design",
@@ -648,6 +706,42 @@ export const CanvasDocumentKindSchema: z.ZodType<CanvasDocumentKind> = z.enum([
  * being assembled (static vs. extension-aware), while every other top-level
  * field must validate identically either way (P0-3).
  */
+/**
+ * What a reader needs in order to open the document (TD §5.1).
+ *
+ * `requiredCapabilities` is `z.array(z.string())` and **must never become a
+ * `z.enum`**. This reader rejects unknown enum values while tolerating unknown
+ * object keys, so a closed capability enum would make any document declaring a
+ * *future* capability fail schema parse outright — before the compatibility
+ * check, before `layout-capability-unsupported`, and before the read-only
+ * materialized preview that AC-010's graceful degradation depends on. The
+ * openness has to live here, at the schema, because every later stage is
+ * downstream of a successful parse.
+ *
+ * `schemaVersion` is pinned to `CANVAS_IR_VERSION` (the same literal the
+ * document's own `version` uses), so a compatibility record claiming a
+ * different version than the document it sits on is a parse error rather
+ * than a silently inconsistent document.
+ */
+const CanvasDocumentCompatibilitySchema: z.ZodType<CanvasDocumentCompatibility> =
+	z.looseObject({
+		schemaVersion: z.literal(CANVAS_IR_VERSION),
+		minReaderSchemaVersion: z.string().min(1),
+		requiredCapabilities: z.array(z.string()),
+	});
+
+/**
+ * Freshness stamp for the materialized layout cache (TD §5.3). Purely
+ * derived data — absence is always valid and always safe.
+ */
+const CanvasLayoutMaterializationSchema: z.ZodType<CanvasLayoutMaterialization> =
+	z.looseObject({
+		engineVersion: z.literal(1),
+		inputHash: z.string().min(1),
+		resolvedAtRevision: FiniteNumber,
+		measurementManifestHash: z.string().min(1).optional(),
+	});
+
 export const CanvasIRShape = {
 	version: z.literal(CANVAS_IR_VERSION),
 	documentKind: CanvasDocumentKindSchema.optional(),
@@ -655,6 +749,8 @@ export const CanvasIRShape = {
 	title: z.string(),
 	assets: z.record(z.string(), CanvasAssetRefSchema),
 	metadata: CanvasIRMetadataSchema,
+	compatibility: CanvasDocumentCompatibilitySchema.optional(),
+	layoutMaterialization: CanvasLayoutMaterializationSchema.optional(),
 } as const;
 
 export const CanvasIRSchema: z.ZodType<CanvasIR> = z.looseObject({

@@ -1,0 +1,46 @@
+{
+	"version": "2",
+	"id": "fixture-v2",
+	"title": "v2 document with unknown keys",
+	"vendorExtension": { "kept": true, "note": "must survive the v2 to v3 upgrade" },
+	"pages": [
+		{
+			"id": "page-1",
+			"name": "Page 1",
+			"size": { "width": 1080, "height": 1080, "unit": "px" },
+			"background": { "kind": "solid", "value": "#ffffff" },
+			"pageLevelUnknown": 42,
+			"root": {
+				"id": "root-1",
+				"type": "group",
+				"transform": { "x": 0, "y": 0, "rotation": 0, "scaleX": 1, "scaleY": 1 },
+				"bounds": { "width": 1080, "height": 1080 },
+				"zIndex": 0,
+				"children": [
+					{
+						"id": "rect-1",
+						"type": "rect",
+						"transform": { "x": 120.5, "y": 64.25, "rotation": 15, "scaleX": 1, "scaleY": 1 },
+						"bounds": { "width": 300.75, "height": 150.125 },
+						"zIndex": 0,
+						"fill": "#ff0000",
+						"nodeLevelUnknown": ["a", "b"]
+					},
+					{
+						"id": "text-1",
+						"type": "text",
+						"transform": { "x": 10, "y": 20, "rotation": 0, "scaleX": 1, "scaleY": 1 },
+						"bounds": { "width": 400, "height": 48 },
+						"zIndex": 1,
+						"text": "Hello",
+						"fontFamily": "Inter",
+						"fontSize": 32,
+						"fill": "#000000"
+					}
+				]
+			}
+		}
+	],
+	"assets": {},
+	"metadata": { "createdAt": "2026-01-01T00:00:00.000Z", "updatedAt": "2026-01-01T00:00:00.000Z" }
+}

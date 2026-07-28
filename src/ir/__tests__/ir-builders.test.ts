@@ -35,7 +35,7 @@ describe("createCanvasIR", () => {
 	it("returns a schema-valid IR with no args", () => {
 		const ir = createCanvasIR();
 		expect(CanvasIRSchema.safeParse(ir).success).toBe(true);
-		expect(ir.version).toBe("2");
+		expect(ir.version).toBe("3");
 		expect(ir.pages).toHaveLength(1);
 		expect(ir.title).toBe("Untitled");
 	});

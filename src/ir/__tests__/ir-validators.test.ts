@@ -130,7 +130,7 @@ const makePage = (id: string, children: CanvasNode[]): CanvasPage => ({
 });
 
 const makeIR = (pages: CanvasPage[]): CanvasIR => ({
-	version: "2",
+	version: "3",
 	id: "ir-1",
 	title: "Test IR",
 	pages,
@@ -158,7 +158,7 @@ describe("CanvasIRSchema", () => {
 
 	it("rejects a non-current version (bare schema does not migrate)", () => {
 		const ir = makeIR([makePage("p1", [])]);
-		const broken = { ...ir, version: "1" as unknown as "2" };
+		const broken = { ...ir, version: "1" as unknown as "3" };
 		expect(CanvasIRSchema.safeParse(broken).success).toBe(false);
 	});
 
@@ -535,14 +535,22 @@ describe("migrateCanvasIR (migration seam)", () => {
 		const ir = makeIR([makePage("p1", [makeRect("r1")])]);
 		const out = migrateCanvasIR(ir);
 		expect(out.id).toBe("ir-1");
-		expect(CANVAS_IR_VERSION).toBe("2");
+		expect(CANVAS_IR_VERSION).toBe("3");
 	});
 
-	it("migrates a v1 document to v2", () => {
+	it("migrates a v1 document through the full chain to v3", () => {
 		const v1 = { ...makeIR([makePage("p1", [makeRect("r1")])]), version: "1" };
 		const out = migrateCanvasIR(v1);
-		expect(out.version).toBe("2");
+		expect(out.version).toBe("3");
 		expect(out.pages[0]?.root.children).toHaveLength(1);
+	});
+
+	it("migrates a v2 document to v3 without touching geometry", () => {
+		const v2 = { ...makeIR([makePage("p1", [makeRect("r1")])]), version: "2" };
+		const out = migrateCanvasIR(v2);
+		expect(out.version).toBe("3");
+		// The v2→v3 step is a pure tag rewrite: every other byte survives.
+		expect({ ...out, version: "2" }).toEqual(v2);
 	});
 
 	it("preserves unknown keys (loose) through migration", () => {
@@ -551,7 +559,7 @@ describe("migrateCanvasIR (migration seam)", () => {
 		expect(out.experimental).toBe(1);
 	});
 
-	it("preserves unknown keys across the v1→v2 upgrade", () => {
+	it("preserves unknown keys across the v1→v3 upgrade", () => {
 		const v1 = {
 			...makeIR([makePage("p1", [])]),
 			version: "1",
@@ -561,7 +569,7 @@ describe("migrateCanvasIR (migration seam)", () => {
 			version: string;
 			experimental?: number;
 		};
-		expect(out.version).toBe("2");
+		expect(out.version).toBe("3");
 		expect(out.experimental).toBe(1);
 	});
 

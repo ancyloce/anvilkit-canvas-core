@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	createCanvasIR,
+	createFrame,
 	createGroup,
 	createImage,
 	createPage,
@@ -8,11 +9,13 @@ import {
 } from "../builders.js";
 import {
 	assertCanvasIRInvariants,
+	CANVAS_LAYOUT_AUTO_CAPABILITY,
 	CanvasIRInvariantError,
 	validateCanvasIRInvariants,
 } from "../invariants.js";
 import { insertNode } from "../mutations.js";
 import type { CanvasIR } from "../types.js";
+import { CANVAS_IR_VERSION, migrateCanvasIR } from "../validators.js";
 
 function baseIR(): CanvasIR {
 	const page = createPage({ id: "p1" });
@@ -205,5 +208,151 @@ describe("assertCanvasIRInvariants", () => {
 				"duplicate-page-id",
 			);
 		}
+	});
+});
+
+describe("missing-required-capability (capability completeness, AC-013)", () => {
+	const declared = {
+		schemaVersion: CANVAS_IR_VERSION,
+		minReaderSchemaVersion: "3",
+		requiredCapabilities: [CANVAS_LAYOUT_AUTO_CAPABILITY],
+	} as const;
+
+	const autoLayout = {
+		version: 1,
+		direction: "horizontal",
+		padding: { top: 0, right: 0, bottom: 0, left: 0 },
+		gap: 0,
+		primaryAlign: "start",
+		crossAlign: "start",
+	} as const;
+
+	/** A document whose frame carries Auto Layout intent. */
+	function layoutIR(compatibility?: CanvasIR["compatibility"]): CanvasIR {
+		const page = createPage({ id: "p1" });
+		let ir = createCanvasIR({ id: "doc", title: "t", pages: [page] });
+		ir = insertNode(ir, {
+			parentId: page.root.id,
+			node: {
+				...createFrame({ id: "f1", bounds: { width: 40, height: 40 } }),
+				autoLayout,
+			},
+		});
+		return compatibility ? { ...ir, compatibility } : ir;
+	}
+
+	it("flags a frame carrying autoLayout when the capability is not declared", () => {
+		const issues = validateCanvasIRInvariants(layoutIR());
+		expect(issues).toContainEqual(
+			expect.objectContaining({
+				code: "missing-required-capability",
+				nodeId: "f1",
+				pageId: "p1",
+			}),
+		);
+	});
+
+	it("does NOT flag when the capability is declared", () => {
+		expect(validateCanvasIRInvariants(layoutIR(declared))).toEqual([]);
+	});
+
+	it("flags when compatibility exists but lists only OTHER capabilities", () => {
+		const issues = validateCanvasIRInvariants(
+			layoutIR({
+				schemaVersion: CANVAS_IR_VERSION,
+				minReaderSchemaVersion: "3",
+				requiredCapabilities: ["test.future.v9"],
+			}),
+		);
+		expect(issues.map((i) => i.code)).toContain("missing-required-capability");
+	});
+
+	it("flags a non-default layoutItem on an ordinary node", () => {
+		const page = createPage({ id: "p1" });
+		let ir = createCanvasIR({ id: "doc", title: "t", pages: [page] });
+		ir = insertNode(ir, {
+			parentId: page.root.id,
+			node: {
+				...createRect({ id: "r1", bounds: { width: 10, height: 10 } }),
+				layoutItem: { widthSizing: "fill" },
+			},
+		});
+		expect(validateCanvasIRInvariants(ir).map((i) => i.code)).toContain(
+			"missing-required-capability",
+		);
+	});
+
+	it("does NOT flag a layoutItem whose every field is at its default", () => {
+		// An all-default record is semantically identical to no record at all, so
+		// a normalizer emitting `{}` must not silently make a plain document
+		// layout-bearing.
+		const page = createPage({ id: "p1" });
+		let ir = createCanvasIR({ id: "doc", title: "t", pages: [page] });
+		ir = insertNode(ir, {
+			parentId: page.root.id,
+			node: {
+				...createRect({ id: "r1", bounds: { width: 10, height: 10 } }),
+				layoutItem: {
+					positioning: "flow",
+					widthSizing: "fixed",
+					heightSizing: "fixed",
+				},
+			},
+		});
+		expect(validateCanvasIRInvariants(ir)).toEqual([]);
+
+		const page2 = createPage({ id: "p9" });
+		const withEmpty = insertNode(
+			createCanvasIR({ id: "doc2", title: "t", pages: [page2] }),
+			{
+				parentId: page2.root.id,
+				node: {
+					...createRect({ id: "r9", bounds: { width: 10, height: 10 } }),
+					layoutItem: {},
+				},
+			},
+		);
+		expect(validateCanvasIRInvariants(withEmpty)).toEqual([]);
+	});
+
+	it("leaves a document with no layout intent completely untouched", () => {
+		expect(validateCanvasIRInvariants(baseIR())).toEqual([]);
+	});
+
+	it("reports one document-level issue naming the pre-order-first offender", () => {
+		const page = createPage({ id: "p1" });
+		let ir = createCanvasIR({ id: "doc", title: "t", pages: [page] });
+		ir = insertNode(ir, {
+			parentId: page.root.id,
+			node: {
+				...createFrame({ id: "outer", bounds: { width: 80, height: 80 } }),
+				autoLayout,
+			},
+		});
+		ir = insertNode(ir, {
+			parentId: "outer",
+			node: {
+				...createFrame({ id: "inner", bounds: { width: 40, height: 40 } }),
+				autoLayout,
+				layoutItem: { widthSizing: "fill" },
+			},
+		});
+		const found = validateCanvasIRInvariants(ir).filter(
+			(i) => i.code === "missing-required-capability",
+		);
+		expect(found).toHaveLength(1);
+		expect(found[0]?.nodeId).toBe("outer");
+		expect(found[0]?.message).toContain("2 node(s)");
+	});
+
+	it("migration never ADDS a capability to a layout-free document (the converse)", () => {
+		// A v2 document has no layout intent by construction, so migrating it
+		// forward must not synthesize a compatibility record — a document that
+		// falsely claims to need `layout.auto.v1` would be rejected by readers
+		// that could in fact open it perfectly well.
+		const v2 = { ...baseIR(), version: "2" };
+		const migrated = migrateCanvasIR(v2);
+		expect(migrated.compatibility).toBeUndefined();
+		expect(validateCanvasIRInvariants(migrated)).toEqual([]);
 	});
 });

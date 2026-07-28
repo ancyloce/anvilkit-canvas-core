@@ -46,9 +46,19 @@ export interface CanvasPageSize {
 }
 
 /**
- * Per-edge inset distances, in the owning page's `size.unit`. The single
- * shared insets shape (PRD 0012 §9.3) — `CanvasSafeArea` (templates) aliases
- * it, and page layout aids (margin/bleed/safeArea) reuse it.
+ * Per-edge inset distances. The single shared insets shape (PRD 0012 §9.3):
+ * there is deliberately no second inset type in this package.
+ *
+ * **The unit depends on the owner, not on this type.** Two usages exist:
+ *
+ * - *Page-level layout aids* (margin/bleed/safeArea) and the `CanvasSafeArea`
+ *   alias in `templates/` — in the owning page's `size.unit`.
+ * - *Node-local Auto Layout padding* (`CanvasAutoLayout.padding`) — in the
+ *   owning frame's local units, matching `CanvasFrameNode.radius` and the
+ *   frame's own `bounds`, NOT the page unit.
+ *
+ * Consumers must therefore read the unit from the owner rather than assuming
+ * a page unit for every `CanvasInsets` they encounter.
  */
 export interface CanvasInsets {
 	top: number;
@@ -311,6 +321,77 @@ export interface CanvasNodeMeta {
 	animation?: CanvasAnimation;
 }
 
+/**
+ * Auto Layout main-axis direction (`layout.auto.v1`). Exactly two members —
+ * wrapping, grid, rows and columns are out of scope for v1 and must not
+ * appear here (PRD 0014 §7).
+ */
+export type CanvasLayoutDirection = "horizontal" | "vertical";
+
+/**
+ * Alignment along either Auto Layout axis. Space-between, stretch, baseline
+ * and per-child `alignSelf` are deliberately excluded from v1 (PRD 0014 §7);
+ * adding a member here is a `layout.auto.v2` change, because an older reader
+ * rejects unknown enum values (see `CanvasDocumentCompatibility`).
+ */
+export type CanvasLayoutAlign = "start" | "center" | "end";
+
+/** Per-axis sizing mode for a node inside an Auto Layout frame. */
+export type CanvasLayoutSizing = "fixed" | "hug" | "fill";
+
+/**
+ * Whether a child participates in its parent frame's flow. `absolute`
+ * children are excluded from flow order, gap and Hug measurement, and
+ * position from the frame's **border-box** origin (PRD 0014 §9.4).
+ */
+export type CanvasLayoutPositioning = "flow" | "absolute";
+
+/**
+ * Persisted Auto Layout intent on a frame (`layout.auto.v1`).
+ *
+ * This is the **authoritative** description of the frame's arrangement; the
+ * `x/y/width/height` stored on its children are a discardable materialized
+ * cache of a resolution, not the source of truth (PRD 0014 §9.4). Resolution
+ * itself lives in `layout/` (rank 4) — only the persisted shape lives here,
+ * because `ir/validators.ts` (rank 1) must be able to type it.
+ */
+export interface CanvasAutoLayout {
+	/**
+	 * Shape version of the layout intent itself, independent of the document's
+	 * `CanvasIR["version"]`. A numeric literal (not the IR's string
+	 * discriminator) so the two can never be confused at a call site.
+	 */
+	version: 1;
+	direction: CanvasLayoutDirection;
+	/** Four-sided padding in the frame's **local** units — see {@link CanvasInsets}. */
+	padding: CanvasInsets;
+	/**
+	 * Space between adjacent flow children, in the frame's local units.
+	 * Non-negative and finite. Gap never collapses: an overfull frame
+	 * overflows and reports `layout-insufficient-space` instead (PRD 0014 §9.3).
+	 */
+	gap: number;
+	/** Alignment along `direction`. */
+	primaryAlign: CanvasLayoutAlign;
+	/** Alignment along the axis perpendicular to `direction`. */
+	crossAlign: CanvasLayoutAlign;
+}
+
+/**
+ * Per-node participation in an ancestor frame's Auto Layout
+ * (`layout.auto.v1`). Every field is optional and every omission is the
+ * default (`flow` / `fixed`), so a node with no layout relationship carries
+ * no `layoutItem` at all.
+ */
+export interface CanvasLayoutItem {
+	/** Default `"flow"` when absent. */
+	positioning?: CanvasLayoutPositioning;
+	/** Default `"fixed"` when absent. */
+	widthSizing?: CanvasLayoutSizing;
+	/** Default `"fixed"` when absent. */
+	heightSizing?: CanvasLayoutSizing;
+}
+
 export interface CanvasNodeBase {
 	id: string;
 	name?: string;
@@ -320,6 +401,16 @@ export interface CanvasNodeBase {
 	visible?: boolean;
 	locked?: boolean;
 	blendMode?: string;
+	/**
+	 * How this node participates in its parent frame's Auto Layout, when that
+	 * parent has `autoLayout`. Absent — or present but all-default — means the
+	 * node is an ordinary Flow child at its stored Fixed size.
+	 *
+	 * A **non-default** value anywhere in a document makes `layout.auto.v1` a
+	 * required capability (see `CanvasDocumentCompatibility`), enforced by the
+	 * `missing-required-capability` invariant.
+	 */
+	layoutItem?: CanvasLayoutItem;
 	/**
 	 * Reserved for future explicit paint-order control — currently unused (C-9).
 	 * Paint order is entirely determined by each container's `children` array
@@ -372,6 +463,16 @@ export interface CanvasFrameNode extends CanvasNodeBase {
 	/** Corner radius, in local units. Matches `CanvasRectNode["radius"]`. */
 	radius?: number;
 	cornerRadii?: CanvasCornerRadii;
+	/**
+	 * Auto Layout intent (`layout.auto.v1`). Frame is the ONLY node type that
+	 * may carry it — a page root is always a `group` (the `invalid-page-root`
+	 * invariant), so an Auto Layout container is always at least one level
+	 * below the page root (PRD 0014 §9.2).
+	 *
+	 * Presence anywhere in a document makes `layout.auto.v1` a required
+	 * capability; see `CanvasDocumentCompatibility`.
+	 */
+	autoLayout?: CanvasAutoLayout;
 }
 
 /**
@@ -738,7 +839,94 @@ export interface CanvasPage {
  * `CanvasIR["version"]` — the version this build writes — is always the
  * newest member.
  */
-export type CanvasIRVersion = "1" | "2";
+export type CanvasIRVersion = "1" | "2" | "3";
+
+/**
+ * Capabilities THIS build knows how to honour.
+ *
+ * A TypeScript convenience for local call sites ONLY — it is deliberately
+ * **never** the type of a schema field and never the type of a persisted
+ * value. `CanvasDocumentCompatibility.requiredCapabilities` is an open
+ * `readonly string[]` for the reason spelled out there; typing it against
+ * this union would make every document declaring a future capability fail
+ * schema parse before the graceful-degradation path could ever run.
+ */
+export type CanvasKnownCapability = "layout.auto.v1";
+
+/**
+ * What a reader needs in order to open this document correctly.
+ *
+ * Optional in both directions: a v2 document migrated forward has none, and a
+ * document with no capability-bearing content needs none. But a document that
+ * *does* carry layout intent and omits `layout.auto.v1` here is malformed —
+ * that is the `missing-required-capability` document invariant (level 2),
+ * and it exists because such a document otherwise parses cleanly and is then
+ * edited destructively by every reader, which is precisely the data loss the
+ * capability mechanism is for.
+ *
+ * Note the deliberate asymmetry with the unsupportedness check:
+ * **completeness** (a writer omitted a capability its own content requires)
+ * rejects the write, because the local build can prove the document is
+ * malformed; **unsupportedness** (this reader does not implement a capability
+ * the document declares) never rejects, because the document may be perfectly
+ * well-formed and merely newer — the correct response there is a read-only
+ * materialized preview (`layout-capability-unsupported`, a level-4
+ * diagnostic).
+ */
+export interface CanvasDocumentCompatibility {
+	/**
+	 * Always equal to the document's own `version`. Typed as the narrow
+	 * written-version literal rather than the readable `CanvasIRVersion` union
+	 * so the compiler enforces that equality instead of leaving it as prose.
+	 */
+	schemaVersion: CanvasIR["version"];
+	/**
+	 * The oldest reader that can open this document. A bare `string`, NOT
+	 * `CanvasIRVersion`: the whole point of the field is to name a version the
+	 * current reader may not know, and a closed union of already-known
+	 * versions cannot express that — a v3 writer typed against
+	 * `CanvasIRVersion` could only ever write `"3"`, which is exactly
+	 * `schemaVersion` and carries no information.
+	 */
+	minReaderSchemaVersion: string;
+	/**
+	 * Capability strings this document's content depends on, sorted and
+	 * deduplicated during normalization.
+	 *
+	 * **Open by construction** — validated as `z.array(z.string())`, never a
+	 * `z.enum`, and no code path may narrow it to a closed union before the
+	 * compatibility check runs. See {@link CanvasKnownCapability}.
+	 */
+	requiredCapabilities: readonly string[];
+}
+
+/**
+ * Freshness stamp for the resolved geometry written back into the document.
+ *
+ * Lives at the top level of `CanvasIR` alongside `compatibility` rather than
+ * inside `CanvasIRMetadata`, because `applyCommand` bumps that record's
+ * `updatedAt` on every single command — a stamp living there could never
+ * distinguish "the layout was re-resolved" from "anything at all happened".
+ *
+ * The stamp describes a **discardable cache**. Any operation that copies
+ * content into a new context must write the copy with this field ABSENT
+ * (`page.duplicate`, `resizeToVariants`): a stamp that claims a freshness it
+ * does not have is strictly worse than no stamp, because
+ * `layout-materialization-stale` would then never fire.
+ */
+export interface CanvasLayoutMaterialization {
+	/** Resolver engine that produced the cached geometry. */
+	engineVersion: 1;
+	/** Hash of the resolver inputs the cache was produced from. */
+	inputHash: string;
+	/** History state id — the same revision number `CanvasSaveInput.revision` carries. */
+	resolvedAtRevision: number;
+	/**
+	 * Hash of the text-measurement manifest in force at resolution time.
+	 * Absent when the document needed no measurement.
+	 */
+	measurementManifestHash?: string;
+}
 
 /**
  * What a document is: an editable design (the default when absent), an
@@ -750,11 +938,22 @@ export type CanvasDocumentKind =
 	| "export-variant";
 
 export interface CanvasIR {
-	version: "2";
+	version: "3";
 	documentKind?: CanvasDocumentKind;
 	id: string;
 	title: string;
 	pages: CanvasPage[];
 	assets: Record<string, CanvasAssetRef>;
 	metadata: CanvasIRMetadata;
+	/**
+	 * What a reader needs to open this document correctly. Optional: absent on
+	 * every migrated-forward v2 document and on any document whose content
+	 * requires nothing beyond the base schema.
+	 */
+	compatibility?: CanvasDocumentCompatibility;
+	/**
+	 * Freshness stamp for the materialized layout cache. A discardable
+	 * derived value — see {@link CanvasLayoutMaterialization}.
+	 */
+	layoutMaterialization?: CanvasLayoutMaterialization;
 }

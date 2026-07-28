@@ -28,15 +28,31 @@ function readVersion(raw: unknown): string | undefined {
  * Production migrations for the core CanvasIR version chain, seeded into
  * every registry so a zero-extension runtime still reads old documents.
  *
- * v1 → v2 is a pure structural version bump — every valid v1 document is a
- * valid v2 document — so `up` only rewrites the version tag; all other
- * fields (including unknown ones) ride along via the spread.
+ * Every step so far is a pure structural version bump — each version's valid
+ * documents are all valid at the next version — so `up` only rewrites the
+ * version tag; all other fields (including unknown ones) ride along via the
+ * spread.
+ *
+ * v2 → v3 (`layout.auto.v1`) is additive in exactly that sense: every field
+ * IR v3 introduces (`CanvasFrameNode.autoLayout`, `CanvasNodeBase.layoutItem`,
+ * `CanvasIR.compatibility`, `CanvasIR.layoutMaterialization`) is optional, so
+ * a v2 document is a v3 document with those fields absent and **no geometry
+ * changes**. The step must NOT synthesize a `compatibility` record: a
+ * migrated v2 document carries no layout intent, so declaring
+ * `layout.auto.v1` on it would be false, and the
+ * `missing-required-capability` invariant only fires for documents that
+ * actually carry intent.
  */
 export const CANVAS_IR_MIGRATIONS: readonly CanvasMigration[] = [
 	{
 		from: "1",
 		to: "2",
 		up: (raw) => ({ ...(raw as object), version: "2" }),
+	},
+	{
+		from: "2",
+		to: "3",
+		up: (raw) => ({ ...(raw as object), version: "3" }),
 	},
 ];
 
