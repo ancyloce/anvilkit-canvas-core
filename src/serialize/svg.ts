@@ -16,6 +16,7 @@ import {
 	isIdentityAdjustments,
 	toSvgColorMatrix,
 } from "../ir/image-adjustments.js";
+import { pageCarriesLayoutIntent } from "../ir/invariants.js";
 import type {
 	BrandTokenRef,
 	CanvasAssetRef,
@@ -52,6 +53,8 @@ import type {
 } from "../ir/types.js";
 import { CanvasIRSchema } from "../ir/validators.js";
 import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir/walkers.js";
+import type { CanvasResolvedDocument } from "../layout/types.js";
+import { toResolvedNodeId } from "../layout/types.js";
 import {
 	type CanvasTextMeasurer,
 	DEFAULT_RICH_TEXT_STYLE as DEFAULT_RICH_TEXT_STYLE_DEFAULTS,
@@ -381,7 +384,17 @@ export type SvgWarningCode =
 	// `poster` asset as a static `<image>` fallback when one is set (nothing
 	// otherwise); audio has no visual representation at all, ever.
 	| "VIDEO_UNSUPPORTED"
-	| "AUDIO_UNSUPPORTED";
+	| "AUDIO_UNSUPPORTED"
+	// Added for Auto Layout (T-M3-02, TD §12.4). Same grow-only rule. Fires when
+	// the serialized page carries layout intent (`autoLayout`/`layoutItem`) but
+	// no resolved document covering it was supplied via
+	// `SvgSerializeOptions.resolvedDocument` — the output falls back to the
+	// nodes' STORED geometry (the materialized cache, when the document carries
+	// a fresh stamp), which may not reflect the layout intent. The serializer
+	// deliberately never calls the resolver itself: caller-supplied resolution
+	// is what guarantees the editor, the SVG, and the raster/PDF paths share
+	// one resolved tree.
+	| "LAYOUT_UNRESOLVED";
 
 export interface SvgSerializeWarning {
 	code: SvgWarningCode;
@@ -419,6 +432,7 @@ export interface ResolvedSvgOptions {
 	nodeKinds?: CanvasNodeKindRegistry;
 	textMeasurer?: CanvasTextMeasurer;
 	resolveBrandToken?: SvgResolveBrandToken;
+	resolvedDocument?: CanvasResolvedDocument;
 }
 
 /**
@@ -453,6 +467,9 @@ export function createEmitContext(
 	if (options.textMeasurer) resolved.textMeasurer = options.textMeasurer;
 	if (options.resolveBrandToken) {
 		resolved.resolveBrandToken = options.resolveBrandToken;
+	}
+	if (options.resolvedDocument) {
+		resolved.resolvedDocument = options.resolvedDocument;
 	}
 	return {
 		warnings: [],
@@ -1498,6 +1515,18 @@ export interface SvgSerializeOptions {
 	richTextDefaults?: Partial<RichTextStyleDefaults>;
 	/** Resolve `BrandTokenRef` fills/fonts to concrete values. See {@link SvgResolveBrandToken}. */
 	resolveBrandToken?: SvgResolveBrandToken;
+	/**
+	 * A resolution of `ir` produced by `resolveCanvasLayout` (T-M3-02). When
+	 * present, every node with a resolved record emits the RESOLVED
+	 * `localTransform`/`bounds` instead of its stored geometry; style and
+	 * content always come from the source node. When omitted (or when it does
+	 * not cover the serialized page) and the page carries Auto Layout intent,
+	 * the output uses stored geometry and warns `LAYOUT_UNRESOLVED`.
+	 *
+	 * The serializer never calls the resolver itself, even though its layer
+	 * rank would permit it — the caller supplies the one shared resolved tree.
+	 */
+	resolvedDocument?: CanvasResolvedDocument;
 }
 
 export interface SvgSerializeResult {
@@ -1507,15 +1536,39 @@ export interface SvgSerializeResult {
 
 // --- node dispatch + group recursion -----------------------------------------
 
+/**
+ * Swap a node's stored geometry for its resolved-layout geometry when a
+ * resolved document was supplied (T-M3-02). Only `transform`/`bounds` move —
+ * style and content always read from the source node. This is a substitution,
+ * not a second algorithm: the serializer never resolves anything itself.
+ */
+function withResolvedGeometry<T extends CanvasNode>(
+	node: T,
+	ctx: SvgEmitContext,
+): T {
+	const record = ctx.options.resolvedDocument?.records.get(
+		toResolvedNodeId(node.id),
+	);
+	if (!record) return node;
+	return {
+		...node,
+		transform: record.geometry.localTransform,
+		bounds: record.geometry.bounds,
+	};
+}
+
 async function emitNode(
-	node: CanvasNode,
+	sourceNode: CanvasNode,
 	ctx: SvgEmitContext,
 	depth: number,
 ): Promise<string> {
 	if (depth > MAX_TREE_DEPTH) {
-		throw new CanvasIRDepthError([node.id]);
+		throw new CanvasIRDepthError([sourceNode.id]);
 	}
-	if (shouldSkipNode(node, ctx.options.skipInvisible)) return "";
+	if (shouldSkipNode(sourceNode, ctx.options.skipInvisible)) return "";
+	// Geometry substitution happens once per node at dispatch; children recurse
+	// back through emitNode and substitute themselves.
+	const node = withResolvedGeometry(sourceNode, ctx);
 	if (node.meta?.animation) {
 		warn(
 			ctx,
@@ -2152,6 +2205,19 @@ export async function serializePageToSvg(
 			"ANIMATION_IGNORED",
 			`Page has animation metadata ("${page.animation.kind}") that is not represented in this static export.`,
 		);
+	}
+	// TD §12.4: a resolved document restricted to other pages (`pageIds`) is as
+	// unusable for THIS page as no resolved document at all, so coverage is
+	// checked per page, not per option presence.
+	const layoutResolved = options.resolvedDocument?.pageRoots.has(page.id);
+	if (!layoutResolved && pageCarriesLayoutIntent(page)) {
+		ctx.warnings.push({
+			code: "LAYOUT_UNRESOLVED",
+			message: `Page "${page.id}" carries Auto Layout intent but no resolved document covering it was supplied; stored geometry was emitted.`,
+			fallback: ir.layoutMaterialization
+				? "Stored geometry came from the document's materialized layout cache."
+				: "Stored geometry carries no materialization stamp and may not reflect the Auto Layout intent — resolve the document and pass `resolvedDocument`.",
+		});
 	}
 	const pretty = ctx.options.pretty;
 	const childPad = pretty ? "\t" : "";
