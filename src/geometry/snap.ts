@@ -7,11 +7,27 @@
  * re-expressed without tuple indexing to satisfy `noUncheckedIndexedAccess`.
  */
 
+import type { BoundsExtent } from "./affine.js";
+
 export interface SnapRect {
 	x: number;
 	y: number;
 	width: number;
 	height: number;
+}
+
+/**
+ * View a world-space extent (e.g. a resolved layout record's `worldAabb`) as a
+ * {@link SnapRect}, so snap/align/distribute can consume resolved geometry
+ * without every call site hand-rolling the conversion.
+ */
+export function snapRectFromExtent(extent: BoundsExtent): SnapRect {
+	return {
+		x: extent.minX,
+		y: extent.minY,
+		width: extent.maxX - extent.minX,
+		height: extent.maxY - extent.minY,
+	};
 }
 
 export type SnapAxis = "x" | "y";

@@ -1,4 +1,4 @@
-import type { CanvasTransform } from "../ir/types.js";
+import type { CanvasBounds, CanvasTransform } from "../ir/types.js";
 
 /**
  * Affine-transform geometry for `@anvilkit/canvas-core`.
@@ -129,6 +129,33 @@ export function transformedBoundsExtent(
 	height: number,
 ): BoundsExtent {
 	return matrixBoundsExtent(toAffineMatrix(transform), width, height);
+}
+
+/**
+ * Width/height of the box covering every extent AND the local origin (0,0) —
+ * the shared children-bounds math for container creation (`node.group`, the
+ * editor's wrap flows). Anchoring to the origin keeps positive-coordinate
+ * content measuring from 0 while rotated/scaled content that spills into
+ * negative coordinates is still fully covered.
+ *
+ * Callers feed it stored geometry (`transformedBoundsExtent` per child) or a
+ * resolved record's `layoutFootprint` — one merge loop for both paths, so raw
+ * and resolved container bounds cannot drift apart.
+ */
+export function childrenBoundsFromExtents(
+	extents: Iterable<BoundsExtent>,
+): CanvasBounds {
+	let minX = 0;
+	let minY = 0;
+	let maxX = 0;
+	let maxY = 0;
+	for (const ext of extents) {
+		if (ext.minX < minX) minX = ext.minX;
+		if (ext.minY < minY) minY = ext.minY;
+		if (ext.maxX > maxX) maxX = ext.maxX;
+		if (ext.maxY > maxY) maxY = ext.maxY;
+	}
+	return { width: maxX - minX, height: maxY - minY };
 }
 
 /**

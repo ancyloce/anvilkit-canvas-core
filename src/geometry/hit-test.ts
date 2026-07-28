@@ -1,4 +1,4 @@
-import type { CanvasNode } from "../ir/types.js";
+import type { CanvasBounds, CanvasNode } from "../ir/types.js";
 import {
 	type AffineMatrix,
 	applyMatrix,
@@ -54,6 +54,16 @@ export function pointInNode(
 	parentMatrix: AffineMatrix = IDENTITY,
 ): boolean {
 	const m = multiplyMatrix(parentMatrix, toAffineMatrix(node.transform));
+	return pointInBox(m, node.bounds.width, node.bounds.height, world);
+}
+
+/** Shared inverse-transform containment check for the raw and resolved paths. */
+function pointInBox(
+	m: AffineMatrix,
+	width: number,
+	height: number,
+	world: Point,
+): boolean {
 	let inv: AffineMatrix;
 	try {
 		inv = invertMatrix(m);
@@ -61,7 +71,6 @@ export function pointInNode(
 		return false;
 	}
 	const [lx, ly] = applyMatrix(inv, world.x, world.y);
-	const { width, height } = node.bounds;
 	return lx >= 0 && lx <= width && ly >= 0 && ly <= height;
 }
 
@@ -133,6 +142,83 @@ export function marqueeHits(
 			? aabbContains(marquee, box)
 			: aabbIntersect(marquee, box);
 		if (match) hits.push(node);
+	}
+	return hits;
+}
+
+/**
+ * Minimal structural view of a resolved-layout record, for the resolved
+ * variants below.
+ *
+ * `geometry/` is rank 2 and `layout/` is rank 4, so the real
+ * `CanvasResolvedNodeRecord` cannot be imported here; it is structurally
+ * assignable to this shape instead. The variants consume the WORLD transform
+ * and AABB the resolver already computed — they compose no ancestor chain and
+ * re-derive no geometry, which is the whole point of the resolved tree.
+ */
+export interface ResolvedHitTarget {
+	/** The source node — style/skip flags are read from here, geometry never is. */
+	readonly node: CanvasNode;
+	readonly geometry: {
+		/** `parentWorld × local`, as produced by the layout resolver. */
+		readonly worldTransform: AffineMatrix;
+		/** Resolved local box size. */
+		readonly bounds: CanvasBounds;
+		/** Resolved world-space AABB. */
+		readonly worldAabb: Aabb;
+	};
+}
+
+/**
+ * Resolved-record variant of {@link pointInNode}: containment against the
+ * record's world transform. Takes no parent matrix — `worldTransform` is
+ * already fully composed.
+ */
+export function pointInResolvedNode(
+	target: ResolvedHitTarget,
+	world: Point,
+): boolean {
+	const { worldTransform, bounds } = target.geometry;
+	return pointInBox(worldTransform, bounds.width, bounds.height, world);
+}
+
+/**
+ * Resolved-record variant of {@link hitTest}: same paint-order semantics (last
+ * match wins) and the same skip flags, read from each record's source node.
+ */
+export function hitTestResolved<T extends ResolvedHitTarget>(
+	targets: readonly T[],
+	world: Point,
+	opts: HitTestOptions = {},
+): T | null {
+	let hit: T | null = null;
+	for (const target of targets) {
+		if (opts.skipInvisible && target.node.visible === false) continue;
+		if (opts.skipLocked && target.node.locked) continue;
+		if (pointInResolvedNode(target, world)) hit = target;
+	}
+	return hit;
+}
+
+/**
+ * Resolved-record variant of {@link marqueeHits}: reads the resolver's world
+ * AABB instead of recomputing one, so nested/transformed ancestors are
+ * accounted for by construction. Returns matches in input order.
+ */
+export function marqueeHitsResolved<T extends ResolvedHitTarget>(
+	targets: readonly T[],
+	marquee: Aabb,
+	opts: MarqueeHitsOptions = {},
+): T[] {
+	const hits: T[] = [];
+	for (const target of targets) {
+		if (opts.skipInvisible && target.node.visible === false) continue;
+		if (opts.skipLocked && target.node.locked) continue;
+		const box = target.geometry.worldAabb;
+		const match = opts.contained
+			? aabbContains(marquee, box)
+			: aabbIntersect(marquee, box);
+		if (match) hits.push(target);
 	}
 	return hits;
 }
