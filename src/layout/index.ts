@@ -17,6 +17,11 @@
  * a piece of the solver, which is exactly what "one layout algorithm" forbids.
  */
 
+// --- diagnostics -------------------------------------------------------------
+export {
+	type LayoutIssuesToExportWarningsOptions,
+	layoutIssuesToExportWarnings,
+} from "./export-warnings.js";
 // --- the five public entry points (plan §4.5) --------------------------------
 export {
 	type CanvasLayoutFlattenOptions,
@@ -36,7 +41,6 @@ export type {
 	CanvasResolvedView,
 } from "./types.js";
 export { createResolvedView, toResolvedNodeId } from "./types.js";
-// --- diagnostics -------------------------------------------------------------
 export type {
 	CanvasLayoutIssue,
 	CanvasLayoutIssueCode,
