@@ -35,7 +35,7 @@ function ir(
 	assets: Record<string, CanvasAssetRef> = {},
 ): CanvasIR {
 	return {
-		version: "2",
+		version: "3",
 		id: "doc-media",
 		title: "Media fixture",
 		pages: [

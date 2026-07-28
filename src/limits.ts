@@ -84,6 +84,27 @@ export const MAX_MEASUREMENT_REQUESTS = 5_000;
 export const MAX_MEASUREMENT_TEXT_LENGTH = 100_000;
 
 /**
+ * Ceiling on the number of descendants one composite layout command may carry.
+ *
+ * Applies to `frame.remove-layout` and `selection.wrap-in-layout-frame`, whose
+ * payloads are O(descendants): they pass caller-computed resolved geometry for
+ * every node they touch. Their inverses carry the prior values for the same
+ * set, so a single history entry holds roughly **2× this many geometry
+ * records** — value plus inverse. Exceeding the ceiling is a typed
+ * `invariant-violated` rejection rather than a silent large allocation.
+ *
+ * Anchored to `MAX_CLIPBOARD_NODES` (also 1,000), which is this package's
+ * existing answer to "how many nodes may one user-initiated bulk operation
+ * move at once". A composite layout command is the same kind of operation, so
+ * it gets the same budget rather than a second, unrelated number.
+ *
+ * **Provisional pending OQ-3 sign-off** (PLAN 0022 §2.5, owner: Core
+ * maintainer). The enforcement mechanism is what M1 owes; the exact figure is
+ * a tuning decision that can move without any code change beyond this line.
+ */
+export const MAX_COMPOSITE_COMMAND_DESCENDANTS = 1_000;
+
+/**
  * Number of layout diagnostics retained before truncation.
  *
  * Diagnostics are emitted per offending node, so a systematically broken

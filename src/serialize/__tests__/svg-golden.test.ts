@@ -48,7 +48,7 @@ function t(x = 0, y = 0): CanvasTransform {
 }
 
 const fixture: CanvasIR = {
-	version: "2",
+	version: "3",
 	id: "doc-golden",
 	title: "Golden",
 	pages: [
@@ -176,7 +176,7 @@ const PIXEL_PNG =
  * these snapshots pin the exact bytes so serializer drift fails loudly.
  */
 const fillsFixture: CanvasIR = {
-	version: "2",
+	version: "3",
 	id: "doc-golden-fills",
 	title: "Golden fills",
 	pages: [
@@ -334,7 +334,7 @@ describe("serializePageToSvg golden — gradients, shadows, image modes", () => 
  *                    "never flatten content" guarantee.
  */
 const framesFixture: CanvasIR = {
-	version: "2",
+	version: "3",
 	id: "doc-golden-frames",
 	title: "Golden frames",
 	pages: [
@@ -588,7 +588,7 @@ describe("serializePageToSvg golden — frames (clip, radius, background, placeh
  * `<star>`/`<polygon>`-per-kind element pair.
  */
 const polygonStarFixture: CanvasIR = {
-	version: "2",
+	version: "3",
 	id: "doc-golden-polygon-star",
 	title: "Golden polygon/star",
 	pages: [
@@ -770,7 +770,7 @@ const goldenMeasurer: CanvasTextMeasurer = ({
  *                 has no text-overflow.
  */
 const richTextFixture: CanvasIR = {
-	version: "2",
+	version: "3",
 	id: "doc-golden-rich-text",
 	title: "Golden rich text",
 	pages: [
@@ -987,7 +987,7 @@ describe("serializePageToSvg golden — rich text (no measurer)", () => {
 // `svg.test.ts`). Combines a resolving color token, a resolving font token,
 // and a dangling (unresolvable) color token in one fixture.
 const brandTokensFixture: CanvasIR = {
-	version: "2",
+	version: "3",
 	id: "doc-brand-tokens",
 	title: "Brand tokens",
 	pages: [
@@ -1117,7 +1117,7 @@ describe("serializePageToSvg golden — brand token resolution", () => {
  *                      span (`text-decoration="line-through"`).
  */
 const styleEffectsFixture: CanvasIR = {
-	version: "2",
+	version: "3",
 	id: "doc-golden-style-effects",
 	title: "Golden style/effects",
 	pages: [

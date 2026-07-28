@@ -48,7 +48,7 @@ function ir(
 		children: [node],
 	};
 	return {
-		version: "2",
+		version: "3",
 		id: "doc-fit",
 		title: "Fit fixture",
 		pages: [

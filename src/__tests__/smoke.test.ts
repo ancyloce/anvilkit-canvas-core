@@ -6,7 +6,7 @@ import { CANVAS_CORE_VERSION, CanvasIRSchema } from "../index.js";
 const FIXED_TS = "2026-05-20T00:00:00.000Z";
 
 const minimalIR: CanvasIR = {
-	version: "2",
+	version: "3",
 	id: "ir-1",
 	title: "Smoke",
 	pages: [

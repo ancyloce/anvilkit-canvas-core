@@ -10,6 +10,9 @@ export * from "./export/index.js";
 export * from "./extensions/index.js";
 export * from "./geometry/index.js";
 export * from "./ir/index.js";
+// Curated at `layout/index.ts` — solver/cache internals are deliberately NOT
+// re-exported here (T-M1-13). See that file's comment before adding a name.
+export * from "./layout/index.js";
 export * from "./limits.js";
 export * from "./serialize/index.js";
 export * from "./templates/index.js";

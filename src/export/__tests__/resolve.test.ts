@@ -12,7 +12,7 @@ describe("resolveInlineExportDocument", () => {
 		const source: CanvasExportJobSource = { document };
 		const resolved = resolveInlineExportDocument(source);
 		expect(resolved.id).toBe("doc1");
-		expect(resolved.version).toBe("2");
+		expect(resolved.version).toBe("3");
 	});
 
 	it("migrates a v1 document supplied inline", () => {
@@ -24,7 +24,7 @@ describe("resolveInlineExportDocument", () => {
 			document: v1Document as never,
 		};
 		const resolved = resolveInlineExportDocument(source);
-		expect(resolved.version).toBe("2");
+		expect(resolved.version).toBe("3");
 	});
 
 	it("throws for a documentRef source (host/worker resolution only)", () => {

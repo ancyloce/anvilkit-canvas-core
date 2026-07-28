@@ -33,7 +33,7 @@ function ir(
 	pageOver: Record<string, unknown> = {},
 ): CanvasIR {
 	return {
-		version: "2",
+		version: "3",
 		id: "doc-anim",
 		title: "Animation fixture",
 		pages: [

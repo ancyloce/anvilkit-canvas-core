@@ -5,7 +5,7 @@ import type {
 } from "../commands/types.js";
 import { regenerateNodeIds } from "../ir/regenerate-ids.js";
 import type { CanvasIR, CanvasNode } from "../ir/types.js";
-import { CanvasIRSchema } from "../ir/validators.js";
+import { migrateCanvasIR } from "../ir/validators.js";
 import { walk } from "../ir/walkers.js";
 import { resolveTemplateVariables } from "./resolvers.js";
 import type { CanvasTemplateDefinition, TemplateSlot } from "./types.js";
@@ -266,7 +266,14 @@ export function instantiateTemplate(
 		}
 	}
 
-	const document = CanvasIRSchema.parse(cloned);
+	// The shared migrate seam, NOT a bare `CanvasIRSchema.parse`. A template's
+	// stored `document` is persisted content like any other: it can have been
+	// authored against an older IR version, and parsing it directly would
+	// reject it with a cryptic schema error instead of upgrading it. Routing
+	// through `migrateCanvasIR` means template instantiation follows the same
+	// read version -> migrate -> validate path as loading, collab decode, and
+	// export resolution, so no document-entry path bypasses migration.
+	const document = migrateCanvasIR(cloned);
 	const command: CanvasBatchCommand = {
 		type: "batch",
 		label: `template:${definition.id}`,

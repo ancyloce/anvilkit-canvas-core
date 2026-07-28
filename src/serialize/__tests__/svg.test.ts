@@ -774,7 +774,7 @@ function makeIR(
 	} = {},
 ): CanvasIR {
 	return {
-		version: "2",
+		version: "3",
 		id: "ir-1",
 		title: "Fixture",
 		pages: [

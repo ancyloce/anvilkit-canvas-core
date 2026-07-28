@@ -33,7 +33,7 @@ function ir(children: CanvasNode[]): CanvasIR {
 		children,
 	};
 	return {
-		version: "2",
+		version: "3",
 		id: "doc-style",
 		title: "Style fixture",
 		pages: [

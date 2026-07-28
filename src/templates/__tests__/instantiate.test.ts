@@ -126,7 +126,7 @@ describe("instantiateTemplate — determinism and identity", () => {
 			makeDeterministicFactories(),
 		);
 		expect(result.document.documentKind).toBe("template-instance");
-		expect(result.document.version).toBe("2");
+		expect(result.document.version).toBe("3");
 	});
 
 	it("gives every page and node a fresh id (no collision with the template's own ids)", () => {
@@ -363,5 +363,50 @@ describe("instantiateTemplate — variable substitution", () => {
 		const result = instantiateTemplate(template, makeDeterministicFactories());
 		expect(result.warnings).toHaveLength(1);
 		expect(result.warnings[0]?.code).toBe("unsupported-slot-mutation");
+	});
+});
+
+describe("migrate seam (T-M1-10, TS-05)", () => {
+	it("instantiates a template whose stored document is an OLDER IR version", () => {
+		// Before T-M1-10 this ended in a bare `CanvasIRSchema.parse`, so a
+		// template authored against v1/v2 was rejected outright instead of being
+		// forward-migrated like every other persisted document.
+		const legacy = makeTemplate({
+			document: {
+				...makeDocument(),
+				version: "1",
+			} as never,
+		});
+		const result = instantiateTemplate(legacy, makeDeterministicFactories());
+		expect(result.document.version).toBe("3");
+		expect(result.document.documentKind).toBe("template-instance");
+		expect(result.document.pages).toHaveLength(1);
+	});
+
+	it("preserves unknown keys through template instantiation", () => {
+		const withUnknown = makeTemplate({
+			document: {
+				...makeDocument(),
+				version: "2",
+				experimental: 7,
+			} as never,
+		});
+		const result = instantiateTemplate(
+			withUnknown,
+			makeDeterministicFactories(),
+		);
+		expect(result.document.version).toBe("3");
+		expect(
+			(result.document as unknown as { experimental?: number }).experimental,
+		).toBe(7);
+	});
+
+	it("still rejects a template document at an unsupported version", () => {
+		const bad = makeTemplate({
+			document: { ...makeDocument(), version: "0" } as never,
+		});
+		expect(() =>
+			instantiateTemplate(bad, makeDeterministicFactories()),
+		).toThrow(/Unsupported CanvasIR version/);
 	});
 });

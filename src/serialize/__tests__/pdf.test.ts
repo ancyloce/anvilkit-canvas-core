@@ -36,7 +36,7 @@ function makePage(id: string, size: CanvasPageSize): CanvasPage {
 
 function makeIr(pages: CanvasPage[]): CanvasIR {
 	return {
-		version: "2",
+		version: "3",
 		id: "doc-pdf",
 		title: "PDF Doc",
 		pages,
