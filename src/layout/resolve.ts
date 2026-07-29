@@ -332,7 +332,7 @@ function resolveNode(
 	// previous resolution cannot have moved, so it is returned wholesale
 	// without recursing — this is the compute saving the ≤16 ms warm target
 	// needs, and it is what `reuseRecord` then turns into reference identity.
-	const cacheKey = `${node.id} ${subtreeSignature(node, state.cache)} ${allocation.width ?? "-"} ${allocation.height ?? "-"} ${depth}`;
+	const cacheKey = `${node.id}\u0000${subtreeSignature(node, state.cache)}\u0000${allocation.width ?? "-"}\u0000${allocation.height ?? "-"}\u0000${depth}`;
 	const hit = state.cache.placed.get(cacheKey) as PlacedNode | undefined;
 	if (hit) {
 		state.reusedSubtrees.add(node.id);
