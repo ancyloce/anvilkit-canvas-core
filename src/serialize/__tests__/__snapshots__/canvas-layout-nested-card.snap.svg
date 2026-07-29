@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080" role="img">
+	<title>contract</title>
+	<rect x="0" y="0" width="1080" height="1080" fill="#ffffff" />
+	<g>
+		<g transform="translate(12 12)">
+			<rect width="32" height="32" fill="#334455" />
+			<rect transform="translate(40 8)" width="120" height="16" fill="#334455" />
+		</g>
+		<rect transform="translate(12 56)" width="236" height="120" fill="#334455" />
+		<g transform="translate(12 188)">
+			<rect transform="translate(86 4)" width="60" height="20" fill="#334455" />
+			<rect transform="translate(156 0)" width="80" height="28" fill="#334455" />
+		</g>
+	</g>
+</svg>
