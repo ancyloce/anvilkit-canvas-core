@@ -151,3 +151,48 @@ describe("regenerateNodeIds", () => {
 		);
 	});
 });
+
+describe("INV-9 — `id` is the ONLY field regenerateNodeIds rewrites (plan 0023 M0-06)", () => {
+	it("keeps every non-id key byte-identical, including reference-like fields", () => {
+		// A node deliberately carrying every reference-like shape a future
+		// feature could add: IR schemas are looseObject, so unknown keys are
+		// legal document content and MUST survive a remap untouched. Clipboard
+		// paste, page.duplicate, template instantiation, and detach all funnel
+		// through this primitive — if it ever widens beyond `id`, they all
+		// corrupt data at once, which is why this pin exists.
+		const rect = createRect({ id: "r1", transform: { x: 5 } }) as CanvasNode &
+			Record<string, unknown>;
+		rect.componentId = "cmp-hero";
+		rect.overrides = { "prop-title": { kind: "text", value: "Hi" } };
+		rect.assetRef = "asset://a1";
+		// The same string as the node's OLD id: a remap that chased
+		// reference-shaped values would rewrite it. It must not — idMap is the
+		// caller's translation table, never applied to values.
+		rect.linkedNodeId = "r1";
+		const group = createGroup({ id: "root", children: [rect as CanvasNode] });
+
+		const { node, idMap } = regenerateNodeIds(group, {
+			idFactory: seqFactory(),
+		});
+
+		expect(node.id).toBe("n1");
+		const child = (node as { children: CanvasNode[] })
+			.children[0] as CanvasNode & Record<string, unknown>;
+		expect(child.id).toBe("n2");
+		expect(idMap.get("r1")).toBe("n2");
+
+		// Strip `id` on both sides and byte-compare everything else.
+		const { id: _oldId, ...before } = rect;
+		const { id: _newId, ...after } = child;
+		expect(JSON.stringify(after)).toBe(JSON.stringify(before));
+
+		// The forward-looking component contract, stated directly: a
+		// `componentId`-bearing node keeps it, override-map keys are never
+		// touched, and an old-id-shaped string VALUE survives verbatim.
+		expect(child.componentId).toBe("cmp-hero");
+		expect(Object.keys(child.overrides as Record<string, unknown>)).toEqual([
+			"prop-title",
+		]);
+		expect(child.linkedNodeId).toBe("r1");
+	});
+});
