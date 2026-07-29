@@ -486,6 +486,18 @@ describe("Auto Layout resolver benchmark (T-M0-07)", () => {
 		}
 
 		if (!gatingEnabled) {
+			// T-M5-04: with ANVILKIT_CANVAS_BENCH_REQUIRE_GATING=1 a run that
+			// cannot gate is a FAILURE, not a report — the vacuous-green mode
+			// (fingerprint mismatch → early return → "passed") is exactly the
+			// silent-gap REVIEW-0019 §2 P1 documented for editor-perf. Set the
+			// flag wherever this bench is meant to ENFORCE (the reference host;
+			// a CI runner once a CI hardware class is nominated in
+			// REFERENCE_ENVIRONMENT — see REFERENCE-ENVIRONMENT.md).
+			if (process.env.ANVILKIT_CANVAS_BENCH_REQUIRE_GATING === "1") {
+				throw new Error(
+					`gating required but DISABLED — ${gatingBlockers.join("; ")}`,
+				);
+			}
 			// A run that cannot gate must always say why — otherwise "no failure"
 			// reads as "passed".
 			expect(

@@ -199,3 +199,30 @@ Edit `REFERENCE_ENVIRONMENT` in `bench/layout-resolve.bench.ts` **and** the
 table at the top of this file in the same change, then re-measure the baseline
 above. The figures do not transfer between hosts; a machine change invalidates
 every recorded number, not just the fingerprint.
+
+## CI wiring and the require-gating flag (plan 0022 T-M5-04)
+
+CI runs this harness in the `canvas-bench` job (`.github/workflows/ci.yml`),
+scoped by the `canvas` path filter and uploading the printed table as the
+`canvas-bench-report` artifact. On that runner the fingerprint does not match,
+so the job REPORTS ("gating: DISABLED", with the reason) — visible, never a
+silent green.
+
+`ANVILKIT_CANVAS_BENCH_REQUIRE_GATING=1` inverts the failure mode: a run that
+cannot gate throws instead of reporting. Set it wherever this bench is meant
+to ENFORCE — the reference host does; the CI job will, once a CI hardware
+class is nominated per "Changing the reference machine" below. Until then the
+enforced gate lives on the recorded environment, per BL-2's accepted tradeoff.
+
+Enforcement confirmation on the reference host, 2026-07-28
+(`ANVILKIT_CANVAS_BENCH_REQUIRE_GATING=1 pnpm bench:layout`, gating ENABLED,
+2/2 passed):
+
+| Workload | Phase | Median (ms) | p95 (ms) | Spread | Target |
+|---|---|---|---|---|---|
+| 1k-nodes-30pct-frames | cold | 4.983 | 10.923 | 2.19 | 50 ms |
+| 1k-nodes-30pct-frames | warm | 3.034 | 4.970 | 1.64 | 16 ms |
+| 100-text-20-keys | cold | 0.515 | 0.700 | 1.36 | 50 ms |
+| 100-text-20-keys | warm | 0.314 | 0.584 | n/a | 16 ms |
+| hug-chain-depth-3 | cold | 0.060 | 0.111 | n/a | 50 ms |
+| hug-chain-depth-3 | warm | 0.037 | 0.093 | n/a | 16 ms |
