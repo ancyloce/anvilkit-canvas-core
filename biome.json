@@ -7,7 +7,9 @@
 			"tsconfig.json",
 			"rslib.config.ts",
 			"vitest.config.ts",
+			"vitest.bench.config.ts",
 			"src/**/*.ts",
+			"bench/**/*.ts",
 			"!dist/**"
 		]
 	},
