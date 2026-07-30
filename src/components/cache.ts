@@ -247,6 +247,24 @@ export interface ComponentCacheKeyParts {
 	readonly layoutEngineVersion: number;
 	readonly measurementManifestHash?: string;
 	readonly assetIntrinsicManifestHash?: string;
+	/**
+	 * The instance whose expansion this entry holds (plan 0023 M6-03).
+	 *
+	 * REQUIRED for correctness, not an optimisation knob. A cached
+	 * `CanvasResolvedComponentInstance` is instance-SPECIFIC: its `root` carries
+	 * the instance's own id and every descendant carries a virtual id whose path
+	 * starts with that id. Keying only on (component, revision, overrides, …)
+	 * therefore made two identical instances share ONE entry, so the second
+	 * instance was handed the FIRST one's subtree — same ids top to bottom —
+	 * and the resolved-records map (keyed by id) silently collapsed them into a
+	 * single node. A page of 100 identical instances resolved to 3 records and
+	 * exported one component.
+	 *
+	 * Including it costs nothing that was ever valid: reuse across DIFFERENT
+	 * instances could never have been correct, while the reuse that matters —
+	 * the same instance re-resolved on every pointer move — is preserved exactly.
+	 */
+	readonly instanceId: string;
 }
 
 /** The §12.1 composite key. Length-prefixed head so `componentIdOfKey` never misparses an id containing the separator. */
@@ -259,6 +277,9 @@ export function composeCacheKey(parts: ComponentCacheKeyParts): string {
 		parts.layoutEngineVersion,
 		parts.measurementManifestHash ?? "none",
 		parts.assetIntrinsicManifestHash ?? "none",
+		// Length-prefixed like the component id: an instance id is an arbitrary
+		// document string and must not be able to collide with the separator.
+		`${parts.instanceId.length}:${parts.instanceId}`,
 	].join("|");
 }
 

@@ -266,6 +266,10 @@ export function resolveComponentInstance(
 	const cacheKey = definition
 		? composeCacheKey({
 				componentId: instance.componentId,
+				// The expansion this key guards is instance-SPECIFIC (its root and
+				// every virtual id start from this id), so the id belongs in the key
+				// — see `ComponentCacheKeyParts.instanceId`.
+				instanceId: instance.id,
 				sourceRevision: definition.revision,
 				overrideHash: computeOverrideHash(instance.overrides),
 				nestedDependencyRevisionHash: computeDependencyRevisionHash(

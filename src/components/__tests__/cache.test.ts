@@ -167,6 +167,7 @@ describe("hashes and keys", () => {
 	it("composite key embeds every §12.1 part and survives hostile ids", () => {
 		const key = composeCacheKey({
 			componentId: "cmp|weird:id",
+			instanceId: "inst-1",
 			sourceRevision: 3,
 			overrideHash: "abc",
 			nestedDependencyRevisionHash: "def",
@@ -174,6 +175,56 @@ describe("hashes and keys", () => {
 		});
 		expect(key).toContain("cmp|weird:id");
 		expect(key).toContain("|3|abc|def|1|none|none");
+		expect(key).toContain("6:inst-1");
+	});
+
+	/**
+	 * M6-03 regression. A cached expansion is instance-SPECIFIC — its root carries
+	 * the instance's id and every descendant a virtual id derived from it — so two
+	 * identical instances sharing one entry handed the second instance the FIRST
+	 * one's ids, and the resolved-records map collapsed them into a single node. A
+	 * page of 100 identical instances resolved to 3 records.
+	 */
+	it("distinguishes two identical instances of the same component", () => {
+		const parts = {
+			componentId: "cmp-a",
+			sourceRevision: 1,
+			overrideHash: "none",
+			nestedDependencyRevisionHash: "none",
+			layoutEngineVersion: 1,
+		} as const;
+		expect(composeCacheKey({ ...parts, instanceId: "inst-1" })).not.toBe(
+			composeCacheKey({ ...parts, instanceId: "inst-2" }),
+		);
+		// And the SAME instance still hits — which is the reuse that actually
+		// matters (one instance re-resolved on every pointer move).
+		expect(composeCacheKey({ ...parts, instanceId: "inst-1" })).toBe(
+			composeCacheKey({ ...parts, instanceId: "inst-1" }),
+		);
+	});
+
+	it("length-prefixes the instance id so a hostile id cannot forge a key", () => {
+		// Without the length prefix, `("a", "b|c")` and `("a|b", "c")` could compose
+		// to the same string and one instance would read another's expansion.
+		expect(
+			composeCacheKey({
+				componentId: "cmp-a",
+				instanceId: "b|1|none|none|1|none|none",
+				sourceRevision: 1,
+				overrideHash: "none",
+				nestedDependencyRevisionHash: "none",
+				layoutEngineVersion: 1,
+			}),
+		).not.toBe(
+			composeCacheKey({
+				componentId: "cmp-a",
+				instanceId: "b",
+				sourceRevision: 1,
+				overrideHash: "none",
+				nestedDependencyRevisionHash: "none",
+				layoutEngineVersion: 1,
+			}),
+		);
 	});
 });
 
@@ -194,6 +245,7 @@ describe("invalidation (T-PERF-1 core)", () => {
 		cache.layers.base.set(
 			composeCacheKey({
 				componentId: "cmp-a",
+				instanceId: "inst-a",
 				sourceRevision: 1,
 				overrideHash: "none",
 				nestedDependencyRevisionHash: "x",
