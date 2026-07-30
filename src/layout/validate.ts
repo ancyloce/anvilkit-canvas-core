@@ -1,4 +1,8 @@
-import { CANVAS_LAYOUT_AUTO_CAPABILITY } from "../ir/invariants.js";
+import {
+	CANVAS_COMPONENTS_LOCAL_CAPABILITY,
+	CANVAS_COMPONENTS_OVERRIDES_CAPABILITY,
+	CANVAS_LAYOUT_AUTO_CAPABILITY,
+} from "../ir/invariants.js";
 import type {
 	CanvasFrameNode,
 	CanvasIR,
@@ -154,6 +158,12 @@ const issue = createLayoutIssue;
  */
 const KNOWN_CAPABILITIES: ReadonlySet<string> = new Set([
 	CANVAS_LAYOUT_AUTO_CAPABILITY,
+	// Plan 0023 M6-06 — the flip M3-12 deliberately deferred to this phase. From
+	// here on this build IMPLEMENTS Local Components, so a component-bearing
+	// document is fully editable rather than routed to read-only preview. Flipping
+	// it earlier would have declared support the resolver/editor did not yet have.
+	CANVAS_COMPONENTS_LOCAL_CAPABILITY,
+	CANVAS_COMPONENTS_OVERRIDES_CAPABILITY,
 ]);
 
 /**
