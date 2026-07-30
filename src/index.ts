@@ -6,6 +6,9 @@ export * from "./brand/index.js";
 export * from "./clipboard/index.js";
 export * from "./commands/index.js";
 export * from "./comment-contracts.js";
+// Curated at `component-ops/index.ts` (plan 0023 M3) — document-operation
+// builders that compose the resolver with the command layer.
+export * from "./component-ops/index.js";
 // Curated at `components/index.ts` (plan 0023 M1-11) — persisted shapes are
 // re-exports of ir/ declarations; resolver internals stay private.
 export * from "./components/index.js";

@@ -157,6 +157,7 @@ const BUILTIN_COMMAND_TYPE_FLAGS: Readonly<
 	"component-instance.set-override": true,
 	"component-instance.reset-override": true,
 	"component-instance.reset-all-overrides": true,
+	"component-instance.detach": true,
 	batch: true,
 };
 

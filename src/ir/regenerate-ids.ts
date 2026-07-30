@@ -22,7 +22,13 @@ export interface RegenerateNodeIdsResult<T extends CanvasNode = CanvasNode> {
 	idMap: ReadonlyMap<string, string>;
 }
 
-function defaultIdFactory(): string {
+/**
+ * The canonical fresh-node-id source (`crypto.randomUUID` with a
+ * non-crypto fallback). Exported so id-allocating callers (detach
+ * materialization, the `component-ops` builders) share ONE factory instead
+ * of growing copies.
+ */
+export function defaultIdFactory(): string {
 	const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
 	if (c && typeof c.randomUUID === "function") return c.randomUUID();
 	return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
