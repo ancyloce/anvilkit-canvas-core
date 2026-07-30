@@ -43,9 +43,9 @@ a conscious decision rather than an accident.
 | --- | --- | --- |
 | 0 | `clock.ts`, `limits.ts` | nothing |
 | 1 | `ir/` | rank 0 (+ `zod`) |
-| 2 | `ai-contracts.ts`, `text-contracts.ts`, `geometry/`, `clipboard/`, `export/`, `comment-contracts.ts` | ranks 0–1 |
+| 2 | `ai-contracts.ts`, `text-contracts.ts`, `geometry/`, `clipboard/`, `export/`, `comment-contracts.ts`, **`components/`** | ranks 0–1 |
 | 3 | `commands/` | ranks 0–2 |
-| 4 | `extensions/`, `templates/`, `brand/`, **`layout/`** | ranks 0–3 |
+| 4 | `extensions/`, `templates/` (incl. **`component-ops/`**, folded in per plan 0023 D-1), `brand/`, **`layout/`** | ranks 0–3 |
 | 5 | `serialize/`, `ai-design-contracts.ts` | ranks 0–4 |
 | 6 | `index.ts` (root barrel) | domain barrels only |
 
