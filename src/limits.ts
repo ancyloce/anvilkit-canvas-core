@@ -104,6 +104,67 @@ export const MAX_MEASUREMENT_TEXT_LENGTH = 100_000;
  */
 export const MAX_COMPOSITE_COMMAND_DESCENDANTS = 1_000;
 
+// --- Local Components caps (plan 0023 M1-07, decision D-3) ------------------
+// Derived from the M0-03 pre-component baseline
+// (`bench/baselines/pre-component.json`: 3,000 plain nodes resolve at
+// ~16.6 ms median / 25 ms p95 on the reference host), not from intuition.
+// Enforcement: schema caps are checked by `ir/validators.ts`; graph/expansion
+// caps by the M2 resolver + `validateComponentGraph` (M2-02/M2-09).
+
+/**
+ * Ceiling on Component Sources in one document's `ir.components` Registry.
+ * A document-local library; generous against real marketing documents while
+ * keeping a hostile Registry parse bounded. Enforced by `ir/validators.ts`.
+ */
+export const MAX_COMPONENT_DEFINITIONS_PER_DOCUMENT = 256;
+
+/**
+ * Ceiling on nodes in one definition's Source tree — ~1/6 of the measured
+ * 3,000-node baseline document, so even a page of maximum-size instances
+ * stays inside the profiled envelope. Enforced by `ir/validators.ts`.
+ */
+export const MAX_COMPONENT_SOURCE_NODES_PER_DEFINITION = 512;
+
+/** Ceiling on exposed properties per definition. Enforced by `ir/validators.ts`. */
+export const MAX_COMPONENT_PROPERTIES_PER_COMPONENT = 64;
+
+/**
+ * Ceiling on override-map entries per instance — 2× the properties cap,
+ * because orphaned overrides are retained rather than dropped (TD §10.3).
+ * Enforced by `ir/validators.ts`.
+ */
+export const MAX_COMPONENT_OVERRIDES_PER_INSTANCE = 128;
+
+/**
+ * Ceiling on nested component depth (instance → Source → instance …).
+ * Well under `MAX_TREE_DEPTH` (64) so an expanded virtual tree can never
+ * approach the walker guard even atop a deep page subtree. Enforced by the
+ * M2 dependency graph (`validateComponentGraph`) and again at read time.
+ */
+export const MAX_COMPONENT_NESTED_DEPTH = 16;
+
+/**
+ * Ceiling on virtual nodes one resolution pass may expand. Anchored to
+ * `MAX_DOCUMENT_NODES` — expansion output IS a document-scale node set, and
+ * beyond that figure the measured budgets no longer apply. Enforced by the
+ * M2 resolver (placeholder + diagnostic past the cap, never a throw).
+ */
+export const MAX_COMPONENT_EXPANDED_NODES_PER_RESOLUTION = MAX_DOCUMENT_NODES;
+
+/**
+ * Ceiling on characters carried by ONE text override — plain string length,
+ * or the summed span text of a rich value. Bounds a hostile override without
+ * constraining real copy (the measurement port itself accepts
+ * `MAX_MEASUREMENT_TEXT_LENGTH` = 100k). Enforced by `ir/validators.ts`.
+ */
+export const MAX_COMPONENT_TEXT_OVERRIDE_CHARS = 10_000;
+
+/** Ceiling on paragraphs in one rich text override. Enforced by `ir/validators.ts`. */
+export const MAX_COMPONENT_RICH_PARAGRAPHS_PER_OVERRIDE = 200;
+
+/** Ceiling on spans per paragraph in a rich text override. Enforced by `ir/validators.ts`. */
+export const MAX_COMPONENT_RICH_SPANS_PER_PARAGRAPH = 100;
+
 /**
  * Number of layout diagnostics retained before truncation.
  *

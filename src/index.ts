@@ -6,6 +6,9 @@ export * from "./brand/index.js";
 export * from "./clipboard/index.js";
 export * from "./commands/index.js";
 export * from "./comment-contracts.js";
+// Curated at `components/index.ts` (plan 0023 M1-11) — persisted shapes are
+// re-exports of ir/ declarations; resolver internals stay private.
+export * from "./components/index.js";
 export * from "./export/index.js";
 export * from "./extensions/index.js";
 export * from "./geometry/index.js";

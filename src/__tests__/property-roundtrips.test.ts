@@ -558,3 +558,142 @@ describe("frame/polygon/star kind-field round-trips (property)", () => {
 		);
 	});
 });
+
+// --- Local Components round-trips (plan 0023 M1-13, INV-8) -----------------
+
+const idArb = fc
+	.string({ minLength: 1, maxLength: 12 })
+	.filter((s) => s.trim().length > 0);
+
+const overrideArb = fc.oneof(
+	fc.record({
+		kind: fc.constant("text" as const),
+		value: fc.oneof(
+			fc.record({
+				kind: fc.constant("plain" as const),
+				text: fc.string({ maxLength: 40 }),
+			}),
+			fc.record({
+				kind: fc.constant("rich" as const),
+				paragraphs: fc.array(
+					fc.record({
+						spans: fc.array(fc.record({ text: fc.string({ maxLength: 20 }) }), {
+							minLength: 1,
+							maxLength: 3,
+						}),
+					}),
+					{ maxLength: 3 },
+				),
+			}),
+		),
+	}),
+	fc.record({ kind: fc.constant("image" as const), assetId: idArb }),
+	fc.record({
+		kind: fc.constant("color" as const),
+		value: fc.constantFrom("#ff0000", "#00ff00", "rgba(1,2,3,0.5)"),
+	}),
+	fc.record({
+		kind: fc.constant("visibility" as const),
+		visible: fc.boolean(),
+	}),
+);
+
+const componentDocArb = fc
+	.record({
+		definitionCount: fc.integer({ min: 1, max: 3 }),
+		overrides: fc.dictionary(idArb, overrideArb, { maxKeys: 4 }),
+		vendorPayload: fc.jsonValue({ maxDepth: 2 }),
+		nestInstance: fc.boolean(),
+	})
+	.map(({ definitionCount, overrides, vendorPayload, nestInstance }) => {
+		const components: Record<string, unknown> = {};
+		for (let i = 0; i < definitionCount; i += 1) {
+			const id = `cmp-${i}`;
+			const children: unknown[] = [
+				{
+					id: `${id}-rect`,
+					type: "rect",
+					transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+					bounds: { width: 10, height: 10 },
+					zIndex: 0,
+					vendorNodeKey: vendorPayload,
+				},
+			];
+			// A NESTED instance inside the Source tree — the reference shape
+			// M2 resolution recurses over; the schema must round-trip it.
+			if (nestInstance && i > 0) {
+				children.push({
+					id: `${id}-nested`,
+					type: "component-instance",
+					transform: { x: 1, y: 1, rotation: 0, scaleX: 1, scaleY: 1 },
+					bounds: { width: 5, height: 5 },
+					zIndex: 0,
+					componentId: `cmp-${i - 1}`,
+				});
+			}
+			components[id] = {
+				id,
+				name: `Component ${i}`,
+				revision: i,
+				root: {
+					id: `${id}-root`,
+					type: "group",
+					transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+					bounds: { width: 20, height: 20 },
+					zIndex: 0,
+					children,
+				},
+				properties: [
+					{
+						id: "prop-shared",
+						name: "Shared",
+						nodeId: `${id}-rect`,
+						kind: "color",
+						targetField: "fill",
+						vendorPropKey: vendorPayload,
+					},
+				],
+				vendorDefKey: vendorPayload,
+			};
+		}
+		const instance = {
+			id: "inst-main",
+			type: "component-instance",
+			transform: { x: 3, y: 4, rotation: 0, scaleX: 1, scaleY: 1 },
+			bounds: { width: 30, height: 30 },
+			zIndex: 0,
+			componentId: "cmp-0",
+			overrides,
+			vendorInstanceKey: vendorPayload,
+		};
+		const ir = createCanvasIR({
+			id: "prop-doc",
+			now: () => "2026-07-29T00:00:00.000Z",
+		});
+		const pageRoot = ir.pages[0]?.root;
+		if (!pageRoot || pageRoot.type !== "group") {
+			throw new Error("fixture page root missing");
+		}
+		pageRoot.children.push(instance as never);
+		return { ...ir, components } as CanvasIR;
+	});
+
+describe("component document round-trips (property, M1-13)", () => {
+	it("parse(JSON round-trip) preserves Registry, references, properties, overrides, and unknown keys", () => {
+		fc.assert(
+			fc.property(componentDocArb, (doc) => {
+				// Compare against the PERSISTED (wire) form: JSON itself cannot
+				// carry -0/undefined, and INV-8 is a claim about documents as
+				// they persist, not in-memory object identity.
+				const persisted = JSON.parse(JSON.stringify(doc));
+				const parsed = CanvasIRSchema.parse(persisted);
+				expect(parsed).toEqual(persisted);
+				// Parsing is idempotent: a second pass changes nothing.
+				expect(
+					CanvasIRSchema.parse(JSON.parse(JSON.stringify(parsed))),
+				).toEqual(parsed);
+			}),
+			{ numRuns: 100 },
+		);
+	});
+});
