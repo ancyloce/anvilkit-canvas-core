@@ -5,8 +5,10 @@ import {
 	CANVAS_LAYOUT_AUTO_CAPABILITY,
 	validateCanvasIRInvariants,
 } from "../invariants.js";
+import { CANVAS_IR_MIGRATIONS } from "../migrations.js";
 import type { CanvasFrameNode, CanvasIR, CanvasNode } from "../types.js";
 import { CANVAS_IR_VERSION, migrateCanvasIR } from "../validators.js";
+
 const readFixture = (name: string): unknown =>
 	JSON.parse(
 		readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8"),
@@ -184,5 +186,48 @@ describe("AC-013 — layout intent without its capability is rejected", () => {
 		expect(
 			collectNodes(doc).find((n) => n.id === "rect-1")?.layoutItem,
 		).toEqual({ widthSizing: "fill" });
+	});
+});
+
+describe("v2 → v3 and `components` (plan 0023 M1-06)", () => {
+	it("the v2→v3 step is a pure spread: never fabricates a Registry", () => {
+		const step = CANVAS_IR_MIGRATIONS.find(
+			(m) => m.from === "2" && m.to === "3",
+		);
+		expect(step).toBeDefined();
+		const out = step?.up({ version: "2", vendorMarker: 7 }) as Record<
+			string,
+			unknown
+		>;
+		expect(out.version).toBe("3");
+		expect(out.vendorMarker).toBe(7);
+		expect("components" in out).toBe(false);
+	});
+
+	it("a migrated v2 document gains no components key end-to-end", () => {
+		const migrated = migrateCanvasIR(load(v2WithUnknownKeys));
+		expect("components" in migrated).toBe(false);
+	});
+
+	it("a v2 document already carrying a valid components object rides through untouched", () => {
+		const raw = load(v2WithUnknownKeys) as Record<string, unknown>;
+		raw.components = {
+			"cmp-x": {
+				id: "cmp-x",
+				name: "X",
+				revision: 4,
+				root: {
+					id: "cmp-x-root",
+					type: "rect",
+					transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+					bounds: { width: 10, height: 10 },
+					zIndex: 0,
+				},
+				properties: [],
+			},
+		};
+		const migrated = migrateCanvasIR(raw);
+		expect(migrated.components?.["cmp-x"]?.revision).toBe(4);
+		expect(migrated.components?.["cmp-x"]?.root.id).toBe("cmp-x-root");
 	});
 });

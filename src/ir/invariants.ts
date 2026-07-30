@@ -1,5 +1,10 @@
 import type { CanvasIR, CanvasNode, CanvasPage } from "./types.js";
-import { CanvasIRDepthError, walk, walkPage } from "./walkers.js";
+import {
+	type CanvasDocumentLocation,
+	CanvasIRDepthError,
+	walkDocument,
+	walkPage,
+} from "./walkers.js";
 
 /**
  * Semantic invariant validation (P0-6) — deliberately separate from
@@ -44,6 +49,12 @@ export interface CanvasInvariantIssue {
 	readonly pageId?: string;
 	/** The node the issue was found on, when the issue is node-scoped. */
 	readonly nodeId?: string;
+	/**
+	 * Where the offending node lives when a Component Source tree is involved
+	 * (plan 0023 TD-001). Absent for purely page-scoped issues, whose
+	 * `pageId` already says everything.
+	 */
+	readonly location?: CanvasDocumentLocation;
 }
 
 /** Asset ids a single node references, by kind. Never includes `assetToken` — that resolves against an external brand kit, not `ir.assets`. */
@@ -61,6 +72,17 @@ function assetIdsReferencedByNode(node: CanvasNode): readonly string[] {
 			return [node.assetId];
 		case "frame":
 			return node.placeholder?.assetId ? [node.placeholder.assetId] : [];
+		case "component-instance": {
+			// Image OVERRIDES reference assets exactly like image nodes do — an
+			// asset referenced only from an override map must not be reported
+			// dangling-in-reverse (garbage-collectable) by any consumer of this
+			// collection (plan 0023 M1-08, T-DOC-4).
+			const ids: string[] = [];
+			for (const override of Object.values(node.overrides ?? {})) {
+				if (override.kind === "image") ids.push(override.assetId);
+			}
+			return ids;
+		}
 		default:
 			return [];
 	}
@@ -141,28 +163,33 @@ export function validateCanvasIRInvariants(
 		}
 	}
 
-	// One walk covers both whole-document node-id uniqueness — `findNode`/
+	// One walk covers whole-document node-id uniqueness — `findNode`/
 	// `parentOf` return the FIRST match across pages, so a duplicate id
-	// anywhere makes every walker silently resolve to the wrong node — and
-	// asset-reference collection.
-	const nodeIdPages = new Map<string, string[]>();
+	// anywhere makes every walker silently resolve to the wrong node — plus
+	// asset-reference collection. `walkDocument` (plan 0023 M1-08) extends
+	// the pass over Component Source trees, which is what makes INV-2 ("node
+	// ids unique across Pages AND definitions") enforceable at all.
+	const nodeIdLocations = new Map<string, CanvasDocumentLocation[]>();
 	const referencedAssetIds = new Set<string>();
 	// Capability completeness rides along on the SAME walk rather than adding a
-	// second O(document) pass. `walk` is pre-order, so `firstLayoutNode` is a
-	// deterministic, document-derived choice of exemplar.
+	// second O(document) pass. `walkDocument` is pre-order (pages in document
+	// order, then definitions in sorted component-id order), so
+	// `firstLayoutNode` is a deterministic, document-derived exemplar.
 	let layoutIntentCount = 0;
-	let firstLayoutNode: { nodeId: string; pageId: string } | undefined;
+	let firstLayoutNode:
+		| { nodeId: string; location: CanvasDocumentLocation }
+		| undefined;
 	try {
-		walk(ir, ({ node, page }) => {
-			const pages = nodeIdPages.get(node.id);
-			if (pages) pages.push(page.id);
-			else nodeIdPages.set(node.id, [page.id]);
+		walkDocument(ir, ({ node, location }) => {
+			const seen = nodeIdLocations.get(node.id);
+			if (seen) seen.push(location);
+			else nodeIdLocations.set(node.id, [location]);
 			for (const assetId of assetIdsReferencedByNode(node)) {
 				referencedAssetIds.add(assetId);
 			}
 			if (nodeCarriesLayoutIntent(node)) {
 				layoutIntentCount += 1;
-				firstLayoutNode ??= { nodeId: node.id, pageId: page.id };
+				firstLayoutNode ??= { nodeId: node.id, location };
 			}
 		});
 	} catch (err) {
@@ -172,12 +199,19 @@ export function validateCanvasIRInvariants(
 			throw err;
 		}
 	}
-	for (const [id, pages] of nodeIdPages) {
-		if (pages.length > 1) {
+	for (const [id, locations] of nodeIdLocations) {
+		if (locations.length > 1) {
+			const componentLocation = locations.find((l) => l.kind === "component");
+			// Page-only duplicates keep the pre-M1-08 message byte-for-byte;
+			// the INV-2 wording (and the `location` field) appears only when a
+			// Source tree is involved.
 			issues.push({
 				code: "duplicate-node-id",
-				message: `Node id "${id}" appears ${pages.length} times (page(s): ${pages.join(", ")}) — node ids must be unique across the whole document.`,
+				message: componentLocation
+					? `Node id "${id}" appears ${locations.length} times (${locations.map((l) => `${l.kind} ${l.id}`).join(", ")}) — node ids must be unique across pages AND component definitions (INV-2).`
+					: `Node id "${id}" appears ${locations.length} times (page(s): ${locations.map((l) => l.id).join(", ")}) — node ids must be unique across the whole document.`,
 				nodeId: id,
+				...(componentLocation ? { location: componentLocation } : {}),
 			});
 		}
 	}
@@ -219,7 +253,13 @@ export function validateCanvasIRInvariants(
 		issues.push({
 			code: "missing-required-capability",
 			message: `Document carries Auto Layout intent on ${layoutIntentCount} node(s) (first: "${firstLayoutNode.nodeId}") but does not declare "${CANVAS_LAYOUT_AUTO_CAPABILITY}" in compatibility.requiredCapabilities.`,
-			pageId: firstLayoutNode.pageId,
+			// A page exemplar keeps the pre-M1-08 `pageId` shape; intent found
+			// only inside a Source tree carries its component `location`
+			// instead — layout intent in a definition makes the capability
+			// required exactly like intent on a page (it WILL be expanded).
+			...(firstLayoutNode.location.kind === "page"
+				? { pageId: firstLayoutNode.location.id }
+				: { location: firstLayoutNode.location }),
 			nodeId: firstLayoutNode.nodeId,
 		});
 	}

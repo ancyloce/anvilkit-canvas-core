@@ -1,5 +1,6 @@
 import { resolveNow } from "../clock.js";
 import type {
+	CanvasComponentDefinition,
 	CanvasContainerNode,
 	CanvasGroupNode,
 	CanvasIR,
@@ -8,9 +9,10 @@ import type {
 	CanvasNodeKind,
 	CanvasPage,
 } from "./types.js";
+import type { CanvasDocumentLocation } from "./walkers.js";
 import {
 	CanvasIRDepthError,
-	findNode,
+	findNodeInSubtree,
 	isContainerNode,
 	MAX_TREE_DEPTH,
 } from "./walkers.js";
@@ -22,6 +24,10 @@ export type CanvasIRMutationCode =
 	| "index-out-of-range"
 	| "cannot-remove-page-root"
 	| "cannot-move-page-root"
+	| "cannot-remove-source-root"
+	| "cannot-move-source-root"
+	| "invalid-root-replacement"
+	| "location-not-found"
 	| "cycle-detected";
 
 export class CanvasIRMutationError extends Error {
@@ -66,12 +72,151 @@ function mutatedDocument(
 	return { ...rest, pages, metadata: bumpUpdatedAt(ir, options) };
 }
 
-function isPageRoot(ir: CanvasIR, id: string): boolean {
-	return ir.pages.some((p) => p.root.id === id);
+/**
+ * Replace ONE page by reference identity, never by id: a hostile/corrupt
+ * document can carry duplicate page ids (the invariant layer flags them, it
+ * does not prevent them), and an id-keyed replacement would clobber every
+ * same-id page with one tree — silently duplicating node ids. Matches the
+ * positional semantics the pre-scope mutation loops had.
+ */
+function replacePageByIdentity(
+	ir: CanvasIR,
+	page: CanvasPage,
+	next: CanvasPage,
+): CanvasPage[] {
+	return ir.pages.map((p) => (p === page ? next : p));
 }
 
-function replacePage(ir: CanvasIR, page: CanvasPage): CanvasPage[] {
-	return ir.pages.map((p) => (p.id === page.id ? page : p));
+/**
+ * Restricts a mutation to one tree — a page's, or a Component Source's
+ * (plan 0023 M3-01, LC-CMD). Absent = every page, the pre-component
+ * behavior, so every existing call site keeps its exact semantics.
+ */
+export interface ScopedMutationOptions extends NowOption {
+	location?: CanvasDocumentLocation;
+}
+
+/**
+ * One candidate tree a mutation may rewrite, plus how to write it back.
+ * Pages and Component Sources flow through the SAME tree rewriters — this
+ * seam is what keeps the mutation engine single (M3-01: no fork).
+ */
+interface MutationScope {
+	kind: CanvasDocumentLocation["kind"];
+	/** Page id or component id — for error messages. */
+	id: string;
+	root: CanvasNode;
+	rootId: string;
+	commit(nextRoot: CanvasNode, options: NowOption): CanvasIR;
+}
+
+function pageScope(ir: CanvasIR, page: CanvasPage): MutationScope {
+	return {
+		kind: "page",
+		id: page.id,
+		root: page.root,
+		rootId: page.root.id,
+		commit: (nextRoot, options) =>
+			mutatedDocument(
+				ir,
+				// A page root stays a group by contract: every rewriter here
+				// preserves the root's discriminant (or is guarded before commit).
+				replacePageByIdentity(ir, page, {
+					...page,
+					root: nextRoot as CanvasGroupNode,
+				}),
+				options,
+			),
+	};
+}
+
+/**
+ * Write-back for a Source tree. Bumps `updatedAt` and drops the
+ * materialized-layout stamp exactly like a page mutation (a Source edit
+ * changes what every dependent instance resolves to). Deliberately does NOT
+ * bump `definition.revision`: the command layer owns the
+ * exactly-once-per-command/batch revision contract (M3-02), and bumping in
+ * the primitive would double-count multi-step batches.
+ */
+function componentScope(
+	ir: CanvasIR,
+	componentId: string,
+	definition: CanvasComponentDefinition,
+): MutationScope {
+	return {
+		kind: "component",
+		id: componentId,
+		root: definition.root,
+		rootId: definition.root.id,
+		commit: (nextRoot, options) => {
+			const { layoutMaterialization: _invalidated, ...rest } = ir;
+			return {
+				...rest,
+				components: {
+					...ir.components,
+					[componentId]: { ...definition, root: nextRoot },
+				},
+				metadata: bumpUpdatedAt(ir, options),
+			};
+		},
+	};
+}
+
+function resolveScopes(
+	ir: CanvasIR,
+	location: CanvasDocumentLocation | undefined,
+): MutationScope[] {
+	if (!location) {
+		return ir.pages.map((page) => pageScope(ir, page));
+	}
+	if (location.kind === "page") {
+		const page = ir.pages.find((p) => p.id === location.id);
+		if (!page) {
+			throw new CanvasIRMutationError(
+				"location-not-found",
+				`Page "${location.id}" not found`,
+			);
+		}
+		return [pageScope(ir, page)];
+	}
+	const definition = ir.components?.[location.id];
+	if (!definition) {
+		throw new CanvasIRMutationError(
+			"location-not-found",
+			`Component definition "${location.id}" not found`,
+		);
+	}
+	return [componentScope(ir, location.id, definition)];
+}
+
+function rootRemoveError(
+	scope: MutationScope,
+	id: string,
+): CanvasIRMutationError {
+	return scope.kind === "page"
+		? new CanvasIRMutationError(
+				"cannot-remove-page-root",
+				`Cannot remove page-root group "${id}"`,
+			)
+		: new CanvasIRMutationError(
+				"cannot-remove-source-root",
+				`Cannot remove Component Source root "${id}"`,
+			);
+}
+
+function rootMoveError(
+	scope: MutationScope,
+	id: string,
+): CanvasIRMutationError {
+	return scope.kind === "page"
+		? new CanvasIRMutationError(
+				"cannot-move-page-root",
+				`Cannot move page-root group "${id}"`,
+			)
+		: new CanvasIRMutationError(
+				"cannot-move-source-root",
+				`Cannot move Component Source root "${id}"`,
+			);
 }
 
 /**
@@ -321,71 +466,69 @@ function findContainerInTree(
 	return null;
 }
 
-export interface InsertNodeOptions extends NowOption {
+export interface InsertNodeOptions extends ScopedMutationOptions {
 	parentId: string;
 	node: CanvasNode;
 	index?: number;
 }
 
 export function insertNode(ir: CanvasIR, options: InsertNodeOptions): CanvasIR {
-	let inserted = false;
-	const newPages = ir.pages.map((page) => {
-		if (inserted) return page;
+	for (const scope of resolveScopes(ir, options.location)) {
+		if (!isContainerNode(scope.root)) {
+			// A leaf Source root cannot take children; any other id is absent here.
+			if (scope.rootId === options.parentId) {
+				throw new CanvasIRMutationError(
+					"parent-not-group",
+					`Parent id "${options.parentId}" is not a container (type=${scope.root.type})`,
+				);
+			}
+			continue;
+		}
 		// `insertIntoTree` throws (parent-not-group / index-out-of-range) when the
 		// parent is found but invalid, and returns the same root reference when the
-		// parent is absent from this page.
+		// parent is absent from this tree.
 		const newRoot = insertIntoTree(
-			page.root,
+			scope.root,
 			options.parentId,
 			options.node,
 			options.index,
 		);
-		if (newRoot !== page.root) {
-			inserted = true;
-			return { ...page, root: newRoot };
+		if (newRoot !== scope.root) {
+			return scope.commit(newRoot, options);
 		}
-		return page;
-	});
-	if (!inserted) {
-		throw new CanvasIRMutationError(
-			"parent-not-found",
-			`Parent id "${options.parentId}" not found`,
-		);
 	}
-	return mutatedDocument(ir, newPages, options);
+	throw new CanvasIRMutationError(
+		"parent-not-found",
+		`Parent id "${options.parentId}" not found`,
+	);
 }
 
-export interface RemoveNodeOptions extends NowOption {
+export interface RemoveNodeOptions extends ScopedMutationOptions {
 	id: string;
 }
 
 export function removeNode(ir: CanvasIR, options: RemoveNodeOptions): CanvasIR {
-	if (isPageRoot(ir, options.id)) {
-		throw new CanvasIRMutationError(
-			"cannot-remove-page-root",
-			`Cannot remove page-root group "${options.id}"`,
-		);
-	}
-	let removedAny = false;
-	const newPages = ir.pages.map((page) => {
-		if (removedAny) return page;
-		const { root: newRoot, removed } = removeIdFromTree(page.root, options.id);
-		if (removed) {
-			removedAny = true;
-			return { ...page, root: newRoot };
+	const scopes = resolveScopes(ir, options.location);
+	for (const scope of scopes) {
+		if (scope.rootId === options.id) {
+			throw rootRemoveError(scope, options.id);
 		}
-		return page;
-	});
-	if (!removedAny) {
-		throw new CanvasIRMutationError(
-			"node-not-found",
-			`Node id "${options.id}" not found`,
-		);
 	}
-	return mutatedDocument(ir, newPages, options);
+	for (const scope of scopes) {
+		if (!isContainerNode(scope.root)) continue;
+		const { root: newRoot, removed } = removeIdFromTree(scope.root, options.id);
+		if (removed) {
+			return scope.commit(newRoot, options);
+		}
+	}
+	throw new CanvasIRMutationError(
+		"node-not-found",
+		`Node id "${options.id}" not found`,
+	);
 }
 
-export interface UpdateNodeOptions<K extends CanvasNodeKind> extends NowOption {
+export interface UpdateNodeOptions<K extends CanvasNodeKind>
+	extends ScopedMutationOptions {
 	id: string;
 	patch: Partial<Omit<CanvasNodeByKind<K>, "id" | "type">>;
 }
@@ -394,88 +537,102 @@ export function updateNode<K extends CanvasNodeKind>(
 	ir: CanvasIR,
 	options: UpdateNodeOptions<K>,
 ): CanvasIR {
-	// A page-root update keeps priority over a same-id descendant (matching the
-	// prior `isPageRoot`-first ordering) and preserves the id + type=group invariant.
-	const rootPage = ir.pages.find((p) => p.root.id === options.id);
-	if (rootPage) {
-		const newRoot = mergeNodePatch(
-			rootPage.root,
-			options.patch,
-		) as CanvasGroupNode;
-		const newPages = ir.pages.map((p) =>
-			p.id === rootPage.id ? { ...p, root: newRoot } : p,
-		);
-		return mutatedDocument(ir, newPages, options);
-	}
-	let updated = false;
-	const newPages = ir.pages.map((page) => {
-		if (updated) return page;
-		const newRoot = updateNodeInTree(page.root, options.id, options.patch);
-		if (newRoot !== page.root) {
-			updated = true;
-			return { ...page, root: newRoot };
+	const scopes = resolveScopes(ir, options.location);
+	// A scope-root update keeps priority over a same-id descendant (matching
+	// the prior page-root-first ordering); `mergeNodePatch` preserves the id +
+	// discriminant, so a page root stays a group and a Source root keeps its kind.
+	for (const scope of scopes) {
+		if (scope.rootId === options.id) {
+			return scope.commit(mergeNodePatch(scope.root, options.patch), options);
 		}
-		return page;
-	});
-	if (!updated) {
-		throw new CanvasIRMutationError(
-			"node-not-found",
-			`Node id "${options.id}" not found`,
-		);
 	}
-	return mutatedDocument(ir, newPages, options);
+	for (const scope of scopes) {
+		if (!isContainerNode(scope.root)) continue;
+		const newRoot = updateNodeInTree(scope.root, options.id, options.patch);
+		if (newRoot !== scope.root) {
+			return scope.commit(newRoot, options);
+		}
+	}
+	throw new CanvasIRMutationError(
+		"node-not-found",
+		`Node id "${options.id}" not found`,
+	);
 }
 
-export interface MoveNodeOptions extends NowOption {
+export interface MoveNodeOptions extends ScopedMutationOptions {
 	id: string;
 	newParentId: string;
 	index?: number;
 }
 
 export function moveNode(ir: CanvasIR, options: MoveNodeOptions): CanvasIR {
-	if (isPageRoot(ir, options.id)) {
-		throw new CanvasIRMutationError(
-			"cannot-move-page-root",
-			`Cannot move page-root group "${options.id}"`,
-		);
+	const scopes = resolveScopes(ir, options.location);
+	for (const scope of scopes) {
+		if (scope.rootId === options.id) {
+			throw rootMoveError(scope, options.id);
+		}
 	}
-	const sourceFound = findNode(ir, options.id);
-	if (!sourceFound) {
+	let sourceScope: MutationScope | null = null;
+	let sourceNode: CanvasNode | null = null;
+	let parentScope: MutationScope | null = null;
+	let parentNode: CanvasNode | null = null;
+	for (const scope of scopes) {
+		if (!sourceNode) {
+			const found = findNodeInSubtree(scope.root, options.id);
+			if (found) {
+				sourceScope = scope;
+				sourceNode = found.node;
+			}
+		}
+		if (!parentNode) {
+			const found = findNodeInSubtree(scope.root, options.newParentId);
+			if (found) {
+				parentScope = scope;
+				parentNode = found.node;
+			}
+		}
+	}
+	if (!sourceNode || !sourceScope) {
 		throw new CanvasIRMutationError(
 			"node-not-found",
 			`Node id "${options.id}" not found`,
 		);
 	}
-	const newParentFound = findNode(ir, options.newParentId);
-	if (!newParentFound) {
+	if (!parentNode || !parentScope) {
 		throw new CanvasIRMutationError(
 			"parent-not-found",
 			`New parent id "${options.newParentId}" not found`,
 		);
 	}
-	if (!isContainerNode(newParentFound.node)) {
+	if (!isContainerNode(parentNode)) {
 		throw new CanvasIRMutationError(
 			"parent-not-group",
-			`New parent "${options.newParentId}" is not a container (type=${newParentFound.node.type})`,
+			`New parent "${options.newParentId}" is not a container (type=${parentNode.type})`,
 		);
 	}
 	// Cycle check: the new parent must not be the moved node or any of its descendants.
-	const subtreeIds = descendantIds(sourceFound.node);
+	const subtreeIds = descendantIds(sourceNode);
 	if (subtreeIds.has(options.newParentId)) {
 		throw new CanvasIRMutationError(
 			"cycle-detected",
 			`Moving "${options.id}" into "${options.newParentId}" would create a cycle`,
 		);
 	}
-	// moveNode currently only supports moves within the same page; sourceFound.page must equal newParentFound.page.
-	if (sourceFound.page.id !== newParentFound.page.id) {
+	// Moves never cross trees: same-page only (the legacy contract), and a node
+	// can never move between a page and a Component Source in one command.
+	if (sourceScope !== parentScope) {
 		throw new CanvasIRMutationError(
 			"parent-not-found",
-			`Cross-page moves are not supported (source page=${sourceFound.page.id}, target page=${newParentFound.page.id})`,
+			`Cross-page moves are not supported (source page=${sourceScope.id}, target page=${parentScope.id})`,
 		);
 	}
-	const page = sourceFound.page;
-	const { root: rootMinusSource } = removeIdFromTree(page.root, options.id);
+	// The scope root is a container here: a leaf-rooted scope could only have
+	// matched `id`/`newParentId` at its root, and both root cases threw above
+	// (root move guard; parent-not-group for a leaf parent).
+	const { root: rootMinusSource } = removeIdFromTree(
+		sourceScope.root as CanvasContainerNode,
+		options.id,
+	);
 	// Re-find the new parent in the source-removed tree (reference may have changed).
 	const newParent = findContainerInTree(rootMinusSource, options.newParentId);
 	if (!newParent) {
@@ -493,17 +650,16 @@ export function moveNode(ir: CanvasIR, options: MoveNodeOptions): CanvasIR {
 			`Insert index ${insertIndex} out of range for parent with ${newParentChildrenLength} children`,
 		);
 	}
-	const newParentId = newParent.id;
-	const newRoot = replaceContainerInTree(rootMinusSource, newParentId, (c) => {
+	const movedNode = sourceNode;
+	const newRoot = replaceContainerInTree(rootMinusSource, newParent.id, (c) => {
 		const newChildren = [...c.children];
-		newChildren.splice(insertIndex, 0, sourceFound.node);
+		newChildren.splice(insertIndex, 0, movedNode);
 		return { ...c, children: newChildren };
 	});
-	const newPage: CanvasPage = { ...page, root: newRoot };
-	return mutatedDocument(ir, replacePage(ir, newPage), options);
+	return sourceScope.commit(newRoot, options);
 }
 
-export interface ReorderChildrenOptions extends NowOption {
+export interface ReorderChildrenOptions extends ScopedMutationOptions {
 	parentId: string;
 	fromIndex: number;
 	toIndex: number;
@@ -513,51 +669,55 @@ export function reorderChildren(
 	ir: CanvasIR,
 	options: ReorderChildrenOptions,
 ): CanvasIR {
-	const parentInfo = findNode(ir, options.parentId);
-	if (!parentInfo) {
-		throw new CanvasIRMutationError(
-			"parent-not-found",
-			`Parent id "${options.parentId}" not found`,
+	for (const scope of resolveScopes(ir, options.location)) {
+		const found = findNodeInSubtree(scope.root, options.parentId);
+		if (!found) continue;
+		if (!isContainerNode(found.node)) {
+			throw new CanvasIRMutationError(
+				"parent-not-group",
+				`Parent id "${options.parentId}" is not a container (type=${found.node.type})`,
+			);
+		}
+		const parent = found.node;
+		const length = parent.children.length;
+		if (
+			options.fromIndex < 0 ||
+			options.fromIndex >= length ||
+			options.toIndex < 0 ||
+			options.toIndex >= length
+		) {
+			throw new CanvasIRMutationError(
+				"index-out-of-range",
+				`Reorder indices (${options.fromIndex} → ${options.toIndex}) out of range for parent with ${length} children`,
+			);
+		}
+		// A validated true no-op (parent exists, indices in range, nothing to
+		// move) returns the input as-is — no bumped `updatedAt`, no cloned pages
+		// — instead of dirtying an otherwise-untouched document (C-6).
+		if (options.fromIndex === options.toIndex) {
+			return ir;
+		}
+		// The parent is a container inside this scope, so the scope root is one too.
+		const newRoot = replaceContainerInTree(
+			scope.root as CanvasContainerNode,
+			parent.id,
+			(c) => {
+				const newChildren = [...c.children];
+				const [moved] = newChildren.splice(options.fromIndex, 1);
+				if (!moved) return c;
+				newChildren.splice(options.toIndex, 0, moved);
+				return { ...c, children: newChildren };
+			},
 		);
+		return scope.commit(newRoot, options);
 	}
-	if (!isContainerNode(parentInfo.node)) {
-		throw new CanvasIRMutationError(
-			"parent-not-group",
-			`Parent id "${options.parentId}" is not a container (type=${parentInfo.node.type})`,
-		);
-	}
-	const parent = parentInfo.node;
-	const length = parent.children.length;
-	if (
-		options.fromIndex < 0 ||
-		options.fromIndex >= length ||
-		options.toIndex < 0 ||
-		options.toIndex >= length
-	) {
-		throw new CanvasIRMutationError(
-			"index-out-of-range",
-			`Reorder indices (${options.fromIndex} → ${options.toIndex}) out of range for parent with ${length} children`,
-		);
-	}
-	// A validated true no-op (parent exists, indices in range, nothing to
-	// move) returns the input as-is — no bumped `updatedAt`, no cloned pages
-	// — instead of dirtying an otherwise-untouched document (C-6).
-	if (options.fromIndex === options.toIndex) {
-		return ir;
-	}
-	const page = parentInfo.page;
-	const newRoot = replaceContainerInTree(page.root, parent.id, (c) => {
-		const newChildren = [...c.children];
-		const [moved] = newChildren.splice(options.fromIndex, 1);
-		if (!moved) return c;
-		newChildren.splice(options.toIndex, 0, moved);
-		return { ...c, children: newChildren };
-	});
-	const newPage: CanvasPage = { ...page, root: newRoot };
-	return mutatedDocument(ir, replacePage(ir, newPage), options);
+	throw new CanvasIRMutationError(
+		"parent-not-found",
+		`Parent id "${options.parentId}" not found`,
+	);
 }
 
-export interface ReplaceChildrenInParentOptions extends NowOption {
+export interface ReplaceChildrenInParentOptions extends ScopedMutationOptions {
 	parentId: string;
 	/**
 	 * Receives the parent container's current children and returns the replacement
@@ -578,24 +738,109 @@ export function replaceChildrenInParent(
 	ir: CanvasIR,
 	options: ReplaceChildrenInParentOptions,
 ): CanvasIR {
-	const parentInfo = findNode(ir, options.parentId);
-	if (!parentInfo) {
-		throw new CanvasIRMutationError(
-			"parent-not-found",
-			`Parent id "${options.parentId}" not found`,
+	for (const scope of resolveScopes(ir, options.location)) {
+		const found = findNodeInSubtree(scope.root, options.parentId);
+		if (!found) continue;
+		if (!isContainerNode(found.node)) {
+			throw new CanvasIRMutationError(
+				"parent-not-group",
+				`Parent id "${options.parentId}" is not a container (type=${found.node.type})`,
+			);
+		}
+		// The parent is a container inside this scope, so the scope root is one too.
+		const newRoot = replaceContainerInTree(
+			scope.root as CanvasContainerNode,
+			options.parentId,
+			(c) => ({
+				...c,
+				children: options.replace(c.children),
+			}),
 		);
+		return scope.commit(newRoot, options);
 	}
-	if (!isContainerNode(parentInfo.node)) {
-		throw new CanvasIRMutationError(
-			"parent-not-group",
-			`Parent id "${options.parentId}" is not a container (type=${parentInfo.node.type})`,
-		);
+	throw new CanvasIRMutationError(
+		"parent-not-found",
+		`Parent id "${options.parentId}" not found`,
+	);
+}
+
+export interface ReplaceNodeOptions extends ScopedMutationOptions {
+	id: string;
+	node: CanvasNode;
+}
+
+/**
+ * Replace the subtree rooted at `id` with `node` — id and kind may BOTH
+ * change, unlike `updateNode`, which pins them. The building block for
+ * detach-style materialization (plan 0023 M3-07): swap one node for another
+ * at the exact same tree position. A page root may only be replaced by
+ * another group (a page root is a group by contract); a Component Source
+ * root may be replaced by any node.
+ */
+export function replaceNode(
+	ir: CanvasIR,
+	options: ReplaceNodeOptions,
+): CanvasIR {
+	const scopes = resolveScopes(ir, options.location);
+	for (const scope of scopes) {
+		if (scope.rootId === options.id) {
+			if (scope.kind === "page" && options.node.type !== "group") {
+				throw new CanvasIRMutationError(
+					"invalid-root-replacement",
+					`Page root "${options.id}" can only be replaced by a group (got type=${options.node.type})`,
+				);
+			}
+			if (subtreeDepth(options.node) > MAX_TREE_DEPTH) {
+				throw new CanvasIRDepthError([options.node.id]);
+			}
+			return scope.commit(options.node, options);
+		}
 	}
-	const page = parentInfo.page;
-	const newRoot = replaceContainerInTree(page.root, options.parentId, (c) => ({
-		...c,
-		children: options.replace(c.children),
-	}));
-	const newPage: CanvasPage = { ...page, root: newRoot };
-	return mutatedDocument(ir, replacePage(ir, newPage), options);
+	for (const scope of scopes) {
+		if (!isContainerNode(scope.root)) continue;
+		const newRoot = replaceChildInTree(scope.root, options.id, options.node);
+		if (newRoot !== scope.root) {
+			return scope.commit(newRoot, options);
+		}
+	}
+	throw new CanvasIRMutationError(
+		"node-not-found",
+		`Node id "${options.id}" not found`,
+	);
+}
+
+/**
+ * Single-pass immutable whole-node replacement (id/kind free to change,
+ * unlike `updateNodeInTree`). Returns the same `root` reference when `id` is
+ * absent. Depth-bounds the REPLACEMENT subtree at its insertion depth, so a
+ * swap can never smuggle in a tree deeper than an insert could (C-16).
+ */
+function replaceChildInTree<T extends CanvasContainerNode>(
+	container: T,
+	id: string,
+	replacement: CanvasNode,
+	depth = 0,
+): T {
+	assertTreeDepth(depth, container.id);
+	let changed = false;
+	const newChildren: CanvasNode[] = container.children.map((child) => {
+		if (changed) return child;
+		if (child.id === id) {
+			const deepestReplacedDepth = depth + 1 + subtreeDepth(replacement);
+			if (deepestReplacedDepth > MAX_TREE_DEPTH) {
+				throw new CanvasIRDepthError([container.id, replacement.id]);
+			}
+			changed = true;
+			return replacement;
+		}
+		if (isContainerNode(child)) {
+			const replaced = replaceChildInTree(child, id, replacement, depth + 1);
+			if (replaced !== child) {
+				changed = true;
+				return replaced;
+			}
+		}
+		return child;
+	});
+	return changed ? { ...container, children: newChildren } : container;
 }

@@ -1,5 +1,14 @@
 import { z } from "zod";
-import { MAX_FINITE_LAYOUT_MAGNITUDE } from "../limits.js";
+import {
+	MAX_COMPONENT_DEFINITIONS_PER_DOCUMENT,
+	MAX_COMPONENT_OVERRIDES_PER_INSTANCE,
+	MAX_COMPONENT_PROPERTIES_PER_COMPONENT,
+	MAX_COMPONENT_RICH_PARAGRAPHS_PER_OVERRIDE,
+	MAX_COMPONENT_RICH_SPANS_PER_PARAGRAPH,
+	MAX_COMPONENT_SOURCE_NODES_PER_DEFINITION,
+	MAX_COMPONENT_TEXT_OVERRIDE_CHARS,
+	MAX_FINITE_LAYOUT_MAGNITUDE,
+} from "../limits.js";
 import { createMigrationRegistry } from "./migrations.js";
 import type {
 	BrandTokenRef,
@@ -7,6 +16,9 @@ import type {
 	CanvasAssetRef,
 	CanvasAutoLayout,
 	CanvasBounds,
+	CanvasComponentOverride,
+	CanvasComponentProperty,
+	CanvasComponentRegistry,
 	CanvasDocumentCompatibility,
 	CanvasDocumentKind,
 	CanvasEffect,
@@ -33,6 +45,7 @@ import type {
 	CanvasPageSize,
 	CanvasPageVariantSource,
 	CanvasShadow,
+	CanvasTextOverrideValue,
 	CanvasTransform,
 	FramePlaceholder,
 	ImageFilter,
@@ -624,6 +637,115 @@ export const CanvasFrameNodeSchema = z.looseObject({
 	children: z.array(z.lazy((): z.ZodType<CanvasNode> => CanvasNodeSchema)),
 });
 
+// --- Local Components (plan 0023 M1-05) ------------------------------------
+
+const CanvasComponentPropertyBaseShape = {
+	id: z.string().min(1),
+	name: z.string(),
+	nodeId: z.string().min(1),
+} as const;
+
+export const CanvasComponentPropertySchema: z.ZodType<CanvasComponentProperty> =
+	z.discriminatedUnion("kind", [
+		z.looseObject({
+			...CanvasComponentPropertyBaseShape,
+			kind: z.literal("text"),
+			targetKind: z.enum(["text", "rich-text"]),
+		}),
+		z.looseObject({
+			...CanvasComponentPropertyBaseShape,
+			kind: z.literal("image"),
+			targetKind: z.enum(["image", "frame"]),
+		}),
+		// `stroke` is deliberately not a valid targetField: stroke is
+		// string-typed in the IR, so a CanvasFill-valued override has no legal
+		// stroke target (C-17). The enum is the enforcement.
+		z.looseObject({
+			...CanvasComponentPropertyBaseShape,
+			kind: z.literal("color"),
+			targetField: z.enum(["fill", "background"]),
+		}),
+		z.looseObject({
+			...CanvasComponentPropertyBaseShape,
+			kind: z.literal("visibility"),
+		}),
+	]);
+
+export const CanvasTextOverrideValueSchema: z.ZodType<CanvasTextOverrideValue> =
+	z
+		.discriminatedUnion("kind", [
+			z.looseObject({
+				kind: z.literal("plain"),
+				text: z.string().max(MAX_COMPONENT_TEXT_OVERRIDE_CHARS),
+			}),
+			z.looseObject({
+				kind: z.literal("rich"),
+				paragraphs: z
+					.array(RichTextParagraphSchema)
+					.max(MAX_COMPONENT_RICH_PARAGRAPHS_PER_OVERRIDE),
+			}),
+		])
+		.superRefine((value, ctx) => {
+			// The rich-value caps that need cross-field arithmetic (D-3): spans
+			// per paragraph, and total characters summed across every span —
+			// the same ceiling one plain override gets.
+			if (value.kind !== "rich") return;
+			let chars = 0;
+			for (const [index, paragraph] of value.paragraphs.entries()) {
+				if (paragraph.spans.length > MAX_COMPONENT_RICH_SPANS_PER_PARAGRAPH) {
+					ctx.addIssue({
+						code: "custom",
+						path: ["paragraphs", index, "spans"],
+						message: `Paragraph carries ${paragraph.spans.length} spans (max ${MAX_COMPONENT_RICH_SPANS_PER_PARAGRAPH}).`,
+					});
+				}
+				for (const span of paragraph.spans) {
+					chars += span.text.length;
+				}
+			}
+			if (chars > MAX_COMPONENT_TEXT_OVERRIDE_CHARS) {
+				ctx.addIssue({
+					code: "custom",
+					path: ["paragraphs"],
+					message: `Rich override carries ${chars} characters (max ${MAX_COMPONENT_TEXT_OVERRIDE_CHARS}).`,
+				});
+			}
+		});
+
+export const CanvasComponentOverrideSchema: z.ZodType<CanvasComponentOverride> =
+	z.discriminatedUnion("kind", [
+		z.looseObject({
+			kind: z.literal("text"),
+			value: CanvasTextOverrideValueSchema,
+		}),
+		z.looseObject({ kind: z.literal("image"), assetId: z.string().min(1) }),
+		z.looseObject({ kind: z.literal("color"), value: CanvasFillSchema }),
+		z.looseObject({ kind: z.literal("visibility"), visible: z.boolean() }),
+	]);
+
+/**
+ * The `component-instance` member of BOTH node unions (static below, extended
+ * in `buildExtendedSchemas`) — a non-recursive leaf, so one schema object
+ * serves both paths and cannot drift.
+ */
+export const CanvasComponentInstanceNodeSchema = z.looseObject({
+	...CanvasNodeBaseShape,
+	type: z.literal("component-instance"),
+	componentId: z.string().min(1),
+	overrides: z
+		.record(z.string(), CanvasComponentOverrideSchema)
+		.superRefine((map, ctx) => {
+			const size = Object.keys(map).length;
+			if (size > MAX_COMPONENT_OVERRIDES_PER_INSTANCE) {
+				ctx.addIssue({
+					code: "custom",
+					message: `Instance carries ${size} overrides (max ${MAX_COMPONENT_OVERRIDES_PER_INSTANCE}).`,
+				});
+			}
+		})
+		.optional(),
+});
+
 export const CanvasNodeSchema: z.ZodType<CanvasNode> = z.discriminatedUnion(
 	"type",
 	[
@@ -642,6 +764,7 @@ export const CanvasNodeSchema: z.ZodType<CanvasNode> = z.discriminatedUnion(
 		CanvasAiPlaceholderNodeSchema,
 		CanvasVideoNodeSchema,
 		CanvasAudioNodeSchema,
+		CanvasComponentInstanceNodeSchema,
 	],
 );
 
@@ -742,6 +865,105 @@ const CanvasLayoutMaterializationSchema: z.ZodType<CanvasLayoutMaterialization> 
 		measurementManifestHash: z.string().min(1).optional(),
 	});
 
+/**
+ * Iterative node count over an already-parsed Source tree — the D-3
+ * per-definition cap needs the total, and the parse itself has just walked
+ * the same structure, so this is a second cheap O(n) pass, not a schema
+ * recursion.
+ */
+function countSubtreeNodes(root: unknown): number {
+	let count = 0;
+	const stack: unknown[] = [root];
+	while (stack.length > 0) {
+		const node = stack.pop();
+		count += 1;
+		const children = (node as { children?: unknown }).children;
+		if (Array.isArray(children)) {
+			for (const child of children) stack.push(child);
+		}
+	}
+	return count;
+}
+
+/**
+ * `CanvasComponentDefinition`'s non-recursive fields, split out for the same
+ * reason as `CanvasFrameNodeShape`: `root` must bind to whichever node union
+ * is being assembled — static or extension-aware — and every other field must
+ * not drift between the two paths.
+ */
+export const CanvasComponentDefinitionShape = {
+	id: z.string().min(1),
+	name: z.string(),
+	revision: z.int().nonnegative(),
+	properties: z
+		.array(CanvasComponentPropertySchema)
+		.max(MAX_COMPONENT_PROPERTIES_PER_COMPONENT),
+	createdAt: z.string().min(1).optional(),
+	updatedAt: z.string().min(1).optional(),
+} as const;
+
+/**
+ * Build the `ir.components` Registry schema against a node union — the
+ * static `CanvasNodeSchema` below, or the extended union
+ * `buildExtendedSchemas` assembles, so a custom node kind nested inside a
+ * Source tree validates exactly like one nested inside a page (DEV-M1-B).
+ * Enforces Registry key === `definition.id` (INV-1).
+ */
+export function buildCanvasComponentRegistrySchema(
+	nodeSchema: z.ZodType<CanvasNode>,
+): z.ZodType<CanvasComponentRegistry> {
+	const definition = z.looseObject({
+		...CanvasComponentDefinitionShape,
+		root: z.lazy(() => nodeSchema),
+	});
+	return z
+		.record(z.string().min(1), definition)
+		.superRefine((registry, ctx) => {
+			const entries = Object.entries(registry);
+			if (entries.length > MAX_COMPONENT_DEFINITIONS_PER_DOCUMENT) {
+				ctx.addIssue({
+					code: "custom",
+					message: `Registry carries ${entries.length} definitions (max ${MAX_COMPONENT_DEFINITIONS_PER_DOCUMENT}).`,
+				});
+			}
+			for (const [key, def] of entries) {
+				if (key !== def.id) {
+					ctx.addIssue({
+						code: "custom",
+						path: [key],
+						message: `Registry key "${key}" must equal definition.id "${def.id}" (INV-1).`,
+					});
+				}
+				const nodeCount = countSubtreeNodes(def.root);
+				if (nodeCount > MAX_COMPONENT_SOURCE_NODES_PER_DEFINITION) {
+					ctx.addIssue({
+						code: "custom",
+						path: [key, "root"],
+						message: `Definition "${def.id}" carries ${nodeCount} Source nodes (max ${MAX_COMPONENT_SOURCE_NODES_PER_DEFINITION}).`,
+					});
+				}
+			}
+		}) as unknown as z.ZodType<CanvasComponentRegistry>;
+}
+
+export const CanvasComponentRegistrySchema: z.ZodType<CanvasComponentRegistry> =
+	buildCanvasComponentRegistrySchema(CanvasNodeSchema);
+
+/**
+ * Normalize an empty Registry to omission (INV-10): `components: {}` and an
+ * absent key must be indistinguishable downstream. Shared by BOTH IR schema
+ * paths so parity holds by construction.
+ */
+export function omitEmptyComponents<
+	T extends { components?: CanvasComponentRegistry },
+>(ir: T): T {
+	if (ir.components && Object.keys(ir.components).length === 0) {
+		const { components: _empty, ...rest } = ir;
+		return rest as unknown as T;
+	}
+	return ir;
+}
+
 export const CanvasIRShape = {
 	version: z.literal(CANVAS_IR_VERSION),
 	documentKind: CanvasDocumentKindSchema.optional(),
@@ -753,10 +975,15 @@ export const CanvasIRShape = {
 	layoutMaterialization: CanvasLayoutMaterializationSchema.optional(),
 } as const;
 
-export const CanvasIRSchema: z.ZodType<CanvasIR> = z.looseObject({
-	...CanvasIRShape,
-	pages: z.array(CanvasPageSchema).min(1),
-});
+export const CanvasIRSchema: z.ZodType<CanvasIR> = z
+	.looseObject({
+		...CanvasIRShape,
+		pages: z.array(CanvasPageSchema).min(1),
+		// Bound per-path, NOT in `CanvasIRShape`: the extended path must bind
+		// its own union or extension kinds inside Source trees get rejected.
+		components: CanvasComponentRegistrySchema.optional(),
+	})
+	.transform(omitEmptyComponents) as unknown as z.ZodType<CanvasIR>;
 
 const DEFAULT_MIGRATIONS = createMigrationRegistry();
 

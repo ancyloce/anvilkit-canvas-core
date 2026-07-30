@@ -3,6 +3,8 @@ import type {
 	BrandTokenRef,
 	CanvasAudioNode,
 	CanvasBounds,
+	CanvasComponentInstanceNode,
+	CanvasComponentOverrideMap,
 	CanvasEllipseNode,
 	CanvasFill,
 	CanvasFontFamily,
@@ -12,6 +14,7 @@ import type {
 	CanvasImageCrop,
 	CanvasImageNode,
 	CanvasIR,
+	CanvasLayoutItem,
 	CanvasLineNode,
 	CanvasMediaTrim,
 	CanvasNode,
@@ -563,5 +566,38 @@ export function createAudio(options: CreateAudioOptions): CanvasAudioNode {
 		...(options.trim !== undefined ? { trim: options.trim } : {}),
 		...(options.muted !== undefined ? { muted: options.muted } : {}),
 		...(options.volume !== undefined ? { volume: options.volume } : {}),
+	};
+}
+
+export interface CreateComponentInstanceOptions {
+	id?: string;
+	name?: string;
+	transform?: Partial<CanvasTransform>;
+	bounds: CanvasBounds;
+	zIndex?: number;
+	componentId: string;
+	overrides?: CanvasComponentOverrideMap;
+	/** The instance is ONE item in a parent Auto Layout (LC-INSTANCE-004). */
+	layoutItem?: CanvasLayoutItem;
+}
+
+/** Build a `component-instance` node (plan 0023 M1-09). */
+export function createComponentInstance(
+	options: CreateComponentInstanceOptions,
+): CanvasComponentInstanceNode {
+	return {
+		id: options.id ?? generateId(),
+		...(options.name !== undefined ? { name: options.name } : {}),
+		type: "component-instance",
+		transform: clonePartialTransform(options.transform),
+		bounds: options.bounds,
+		zIndex: options.zIndex ?? 0,
+		componentId: options.componentId,
+		...(options.overrides !== undefined
+			? { overrides: options.overrides }
+			: {}),
+		...(options.layoutItem !== undefined
+			? { layoutItem: options.layoutItem }
+			: {}),
 	};
 }

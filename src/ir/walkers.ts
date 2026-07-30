@@ -99,6 +99,92 @@ export function walk(ir: CanvasIR, visit: WalkVisitor): void {
 	}
 }
 
+/** Where a visited node lives: a page tree, or a Component Source tree. */
+export interface CanvasDocumentLocation {
+	kind: "page" | "component";
+	/** The page id (`kind: "page"`) or the component definition id (`kind: "component"`). */
+	id: string;
+}
+
+export interface WalkDocumentContext {
+	location: CanvasDocumentLocation;
+	/** Present for page-tree visits; absent inside a Source tree. */
+	page?: CanvasPage;
+	node: CanvasNode;
+	parent: CanvasNode | null;
+	depth: number;
+}
+
+export type WalkDocumentVisitor = (ctx: WalkDocumentContext) => void;
+
+/**
+ * Walk EVERY node tree a document owns: each page's tree (document order),
+ * then each Component Source tree in sorted component-id order (plan 0023
+ * TD-001 — deterministic, so issue ordering built on this walk is
+ * byte-stable). Each root gets its own `MAX_TREE_DEPTH` budget, the same
+ * hostile-depth guard `walk` applies.
+ *
+ * `walk`/`walkPage` remain pages-only BY CONTRACT and are untouched —
+ * page-scoped consumers (serializers, per-page intent checks) must not
+ * silently change meaning. A consumer that needs Registry coverage opts in
+ * by calling this instead.
+ */
+export function walkDocument(ir: CanvasIR, visit: WalkDocumentVisitor): void {
+	for (const page of ir.pages) {
+		const location: CanvasDocumentLocation = { kind: "page", id: page.id };
+		walkDocumentSubtree(page.root, location, page, null, 0, [], visit);
+	}
+	const registry = ir.components;
+	if (!registry) return;
+	for (const componentId of Object.keys(registry).sort()) {
+		const definition = registry[componentId];
+		if (!definition) continue;
+		const location: CanvasDocumentLocation = {
+			kind: "component",
+			id: componentId,
+		};
+		walkDocumentSubtree(
+			definition.root,
+			location,
+			undefined,
+			null,
+			0,
+			[],
+			visit,
+		);
+	}
+}
+
+function walkDocumentSubtree(
+	node: CanvasNode,
+	location: CanvasDocumentLocation,
+	page: CanvasPage | undefined,
+	parent: CanvasNode | null,
+	depth: number,
+	idChain: string[],
+	visit: WalkDocumentVisitor,
+): void {
+	if (depth > MAX_TREE_DEPTH) {
+		throw new CanvasIRDepthError([...idChain, node.id]);
+	}
+	visit({ location, page, node, parent, depth });
+	if (isContainerNode(node)) {
+		idChain.push(node.id);
+		for (const child of node.children) {
+			walkDocumentSubtree(
+				child,
+				location,
+				page,
+				node,
+				depth + 1,
+				idChain,
+				visit,
+			);
+		}
+		idChain.pop();
+	}
+}
+
 function walkSubtree(
 	node: CanvasNode,
 	page: CanvasPage,
@@ -118,6 +204,46 @@ function walkSubtree(
 		}
 		idChain.pop();
 	}
+}
+
+export interface FindNodeInSubtreeResult {
+	node: CanvasNode;
+	/** `null` when `node` is the subtree root itself. */
+	parent: CanvasContainerNode | null;
+}
+
+/**
+ * Find a node by id within ONE tree — a page's or a Component Source's —
+ * including the root itself. The scoped complement of `findNode`, which is
+ * pages-only by contract (plan 0023 M3-01). Depth-guarded like every walker.
+ */
+export function findNodeInSubtree(
+	root: CanvasNode,
+	id: string,
+): FindNodeInSubtreeResult | null {
+	return findInSubtree(root, null, id, 0, []);
+}
+
+function findInSubtree(
+	node: CanvasNode,
+	parent: CanvasContainerNode | null,
+	id: string,
+	depth: number,
+	idChain: string[],
+): FindNodeInSubtreeResult | null {
+	if (depth > MAX_TREE_DEPTH) {
+		throw new CanvasIRDepthError([...idChain, node.id]);
+	}
+	if (node.id === id) return { node, parent };
+	if (isContainerNode(node)) {
+		idChain.push(node.id);
+		for (const child of node.children) {
+			const found = findInSubtree(child, node, id, depth + 1, idChain);
+			if (found) return found;
+		}
+		idChain.pop();
+	}
+	return null;
 }
 
 export interface FindNodeResult {

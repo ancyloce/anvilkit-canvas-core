@@ -17,7 +17,8 @@ export type CanvasNodeKind =
 	| "svg"
 	| "ai-placeholder"
 	| "video"
-	| "audio";
+	| "audio"
+	| "component-instance";
 
 export type CanvasTextAlign = "left" | "center" | "right";
 
@@ -782,6 +783,30 @@ export interface CanvasAudioNode extends CanvasMediaNodeBase {
 	type: "audio";
 }
 
+/**
+ * A live reference to a Component Source in `ir.components` (plan 0023,
+ * PRD 0015 LC-MODEL-004).
+ *
+ * Never a tree copy and never revision-pinned: rendering expands the
+ * referenced definition at resolve time, so a Source edit propagates to
+ * every instance without touching instance nodes. Carries only
+ * `CanvasNodeBase` fields (incl. `layoutItem` — the instance is ONE item in
+ * a parent Auto Layout) — deliberately no `effects`, which is a per-kind
+ * field rather than part of the base contract, and no `children`: the
+ * expanded subtree is virtual and an instance is NOT a container.
+ */
+export interface CanvasComponentInstanceNode extends CanvasNodeBase {
+	type: "component-instance";
+	/** Registry key of the Source. A missing id degrades to a placeholder (INV-3), never a crash. */
+	componentId: string;
+	/**
+	 * Typed overrides keyed by Property ID — never by name or index (INV-6).
+	 * Orphaned entries (property removed/retyped on the Source) are retained
+	 * verbatim and never reassigned. Absent means "all defaults".
+	 */
+	overrides?: CanvasComponentOverrideMap;
+}
+
 export type CanvasNode =
 	| CanvasGroupNode
 	| CanvasFrameNode
@@ -797,7 +822,8 @@ export type CanvasNode =
 	| CanvasSvgNode
 	| CanvasAiPlaceholderNode
 	| CanvasVideoNode
-	| CanvasAudioNode;
+	| CanvasAudioNode
+	| CanvasComponentInstanceNode;
 
 export type CanvasLeafNode = Exclude<CanvasNode, CanvasContainerNode>;
 
@@ -851,7 +877,10 @@ export type CanvasIRVersion = "1" | "2" | "3";
  * this union would make every document declaring a future capability fail
  * schema parse before the graceful-degradation path could ever run.
  */
-export type CanvasKnownCapability = "layout.auto.v1";
+export type CanvasKnownCapability =
+	| "layout.auto.v1"
+	| "components.local.v1"
+	| "components.overrides.v1";
 
 /**
  * What a reader needs in order to open this document correctly.
@@ -937,6 +966,120 @@ export type CanvasDocumentKind =
 	| "template-instance"
 	| "export-variant";
 
+// ---------------------------------------------------------------------------
+// Local Components (plan 0023, PRD 0015). PERSISTED shapes live here in `ir/`
+// (rank 1) following the layout/ precedent: `CanvasIR.components` and the
+// validator spreads cannot import upward from `components/` (rank 2), which
+// owns only the resolver-side contracts. Re-exported through
+// `components/index.ts` for the public surface.
+// ---------------------------------------------------------------------------
+
+export interface CanvasComponentPropertyBase {
+	/**
+	 * Stable Property ID — the override-map key (INV-6). Unique within its
+	 * definition; the SAME id may appear on other definitions (cross-definition
+	 * reuse is explicitly permitted, TD §5.5) — never treat it as global.
+	 */
+	id: string;
+	name: string;
+	/** Id of the node inside THIS definition's tree the property binds to. */
+	nodeId: string;
+}
+
+/** Binds a text-bearing node's content. */
+export interface CanvasComponentTextProperty
+	extends CanvasComponentPropertyBase {
+	kind: "text";
+	/** Which text-bearing kind the target node is. */
+	targetKind: "text" | "rich-text";
+}
+
+/** Binds an image-bearing node — an image node, or a frame with an image placeholder (the `TemplateImageSlot` precedent). */
+export interface CanvasComponentImageProperty
+	extends CanvasComponentPropertyBase {
+	kind: "image";
+	targetKind: "image" | "frame";
+}
+
+/**
+ * Binds one declared fill-bearing field on the target node.
+ *
+ * `stroke` is deliberately NOT a valid target: in the shipped IR
+ * `stroke?: string` on every stroke-bearing kind, not `CanvasFill`, so a
+ * `CanvasFill`-valued override has no stroke field it could legally write —
+ * the same reason `applyBrandColors` skips strokes (C-17).
+ */
+export interface CanvasComponentColorProperty
+	extends CanvasComponentPropertyBase {
+	kind: "color";
+	targetField: "fill" | "background";
+}
+
+/** Binds the target node's `visible` flag. */
+export interface CanvasComponentVisibilityProperty
+	extends CanvasComponentPropertyBase {
+	kind: "visibility";
+}
+
+export type CanvasComponentProperty =
+	| CanvasComponentTextProperty
+	| CanvasComponentImageProperty
+	| CanvasComponentColorProperty
+	| CanvasComponentVisibilityProperty;
+
+/** Plain or rich replacement content for a text property (TD §5.4). */
+export type CanvasTextOverrideValue =
+	| { kind: "plain"; text: string }
+	| { kind: "rich"; paragraphs: RichTextParagraph[] };
+
+/**
+ * One typed per-instance override, discriminated to match its property kind.
+ * A value whose kind mismatches its property is an orphan: retained, never
+ * applied, never reassigned.
+ */
+export type CanvasComponentOverride =
+	| { kind: "text"; value: CanvasTextOverrideValue }
+	| { kind: "image"; assetId: string }
+	| { kind: "color"; value: CanvasFill }
+	| { kind: "visibility"; visible: boolean };
+
+/** Overrides keyed by Property ID — never by name or array index (INV-6). */
+export type CanvasComponentOverrideMap = Readonly<
+	Record<string, CanvasComponentOverride>
+>;
+
+/**
+ * One document-local Component Source (LC-MODEL-001).
+ *
+ * `root`'s node ids are unique across Pages AND all definitions (INV-2,
+ * enforced by `validateCanvasIRInvariants` via `walkDocument`).
+ */
+export interface CanvasComponentDefinition {
+	/** Globally unique within the document; the Registry key equals this id. */
+	id: string;
+	name: string;
+	/**
+	 * Monotonic edit revision — the propagation signal. A Source edit bumps
+	 * this and invalidates dependent resolutions; instance nodes are never
+	 * rewritten (LC-PROPAGATE).
+	 */
+	revision: number;
+	root: CanvasNode;
+	properties: readonly CanvasComponentProperty[];
+	createdAt?: string;
+	updatedAt?: string;
+}
+
+/**
+ * The document-local Source registry — a PLAIN persisted map keyed by
+ * component id, deliberately NOT an extension-style registry: there is no
+ * `register()` surface, no runtime behavior, just data. An empty registry is
+ * normalized to an absent `components` key (INV-10).
+ */
+export type CanvasComponentRegistry = Readonly<
+	Record<string, CanvasComponentDefinition>
+>;
+
 export interface CanvasIR {
 	version: "3";
 	documentKind?: CanvasDocumentKind;
@@ -956,4 +1099,11 @@ export interface CanvasIR {
 	 * derived value — see {@link CanvasLayoutMaterialization}.
 	 */
 	layoutMaterialization?: CanvasLayoutMaterialization;
+	/**
+	 * Document-local Component Sources (plan 0023, LC-MODEL-001). Optional in
+	 * both directions: absent on every pre-component document and on any
+	 * document that defines none — an empty map is normalized to omission
+	 * (INV-10). Frozen decision: Sources live HERE, never in a hidden page.
+	 */
+	components?: CanvasComponentRegistry;
 }
