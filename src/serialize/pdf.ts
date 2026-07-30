@@ -266,7 +266,13 @@ export type PdfWarningCode =
 	// applies its own poster/no-op fallback), so PDF's role is only to flag
 	// that this page contains media a static document can't play.
 	| "VIDEO_UNSUPPORTED"
-	| "AUDIO_UNSUPPORTED";
+	| "AUDIO_UNSUPPORTED"
+	// Added for Local Components (plan 0023 M1-09). Fires once per page that
+	// contains a `component-instance` node: the supplied raster is whatever
+	// the caller rendered, and until M6 wires resolved-document serialization
+	// this layer cannot know whether that render expanded the instance —
+	// grow-only rule (FR-041) applies.
+	| "COMPONENT_INSTANCE_UNRESOLVED";
 
 export interface PdfSerializeWarning {
 	code: PdfWarningCode;
@@ -286,6 +292,15 @@ export interface PdfSerializeResult {
  * most one `VIDEO_UNSUPPORTED`/`AUDIO_UNSUPPORTED` warning per page regardless
  * of how many media nodes it contains (FR-081, canvas-m6-002).
  */
+/** True when `page` holds at least one `component-instance` node (plan 0023 M1-09). */
+function pageHasComponentInstance(page: CanvasPage): boolean {
+	let found = false;
+	walkPage(page, ({ node }) => {
+		if (!found && node.type === "component-instance") found = true;
+	});
+	return found;
+}
+
 function findMediaKindsOnPage(
 	page: CanvasPage,
 ): ReadonlySet<"video" | "audio"> {
@@ -353,6 +368,13 @@ export async function serializeDocumentToPdf(
 			warnings.push({
 				code: kind === "video" ? "VIDEO_UNSUPPORTED" : "AUDIO_UNSUPPORTED",
 				message: `Page "${page.id}" contains a ${kind} node, which cannot be played in a static PDF.`,
+				pageId: page.id,
+			});
+		}
+		if (pageHasComponentInstance(page)) {
+			warnings.push({
+				code: "COMPONENT_INSTANCE_UNRESOLVED",
+				message: `Page "${page.id}" contains component instances; PDF draws the supplied raster and cannot verify they were expanded (resolved-document serialization lands in plan 0023 M6).`,
 				pageId: page.id,
 			});
 		}

@@ -380,6 +380,13 @@ export type SvgWarningCode =
 	// as it would without the metadata — this warning is purely informational,
 	// never a divergent render.
 	| "ANIMATION_IGNORED"
+	// Added for Local Components (plan 0023 M1-09). Fires when a raw
+	// `component-instance` node reaches the serializer: instances render via
+	// the RESOLVED document (M6 wires serializer expansion), so serializing
+	// the persisted node directly has nothing to paint. The node is skipped
+	// with this warning rather than falling through to the misleading
+	// extension-kind `UNKNOWN_KIND_SKIPPED` path.
+	| "COMPONENT_INSTANCE_UNRESOLVED"
 	// Added for video/audio nodes (FR-081, canvas-m6-002). A video renders its
 	// `poster` asset as a static `<image>` fallback when one is set (nothing
 	// otherwise); audio has no visual representation at all, ever.
@@ -1629,6 +1636,14 @@ async function emitNode(
 		}
 		case "audio":
 			emitAudio(node, ctx);
+			return "";
+		case "component-instance":
+			warn(
+				ctx,
+				"COMPONENT_INSTANCE_UNRESOLVED",
+				`Component instance "${node.id}" (component "${node.componentId}") serializes via the resolved document; the raw instance node has nothing to paint.`,
+				node.id,
+			);
 			return "";
 		default: {
 			// A custom (non-built-in) node kind: emit via its registered toSvg hook,
