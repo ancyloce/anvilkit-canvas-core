@@ -1,12 +1,19 @@
 import { nowIso } from "../clock.js";
 import type {
 	CanvasBatchCommand,
+	CanvasCommand,
+	CanvasComponentCreateCommand,
 	CanvasPageCreateCommand,
 } from "../commands/types.js";
+import { validateComponentGraph } from "../components/validate.js";
 import { regenerateNodeIds } from "../ir/regenerate-ids.js";
-import type { CanvasIR, CanvasNode } from "../ir/types.js";
+import type {
+	CanvasComponentDefinition,
+	CanvasIR,
+	CanvasNode,
+} from "../ir/types.js";
 import { migrateCanvasIR } from "../ir/validators.js";
-import { walk } from "../ir/walkers.js";
+import { isContainerNode, walk } from "../ir/walkers.js";
 import { resolveTemplateVariables } from "./resolvers.js";
 import type { CanvasTemplateDefinition, TemplateSlot } from "./types.js";
 
@@ -27,13 +34,16 @@ export type InstantiateTemplateWarningCode =
 	| "required-variable-missing"
 	| "variable-slot-not-found"
 	| "slot-node-not-found"
-	| "unsupported-slot-mutation";
+	| "unsupported-slot-mutation"
+	/** The imported component graph reported an error-severity issue (M3-11). */
+	| "component-graph-invalid";
 
 export interface InstantiateTemplateWarning {
 	code: InstantiateTemplateWarningCode;
 	variableId?: string;
 	slotId?: string;
 	nodeId?: string;
+	componentId?: string;
 }
 
 export interface InstantiateTemplateResult {
@@ -201,6 +211,63 @@ export function instantiateTemplate(
 			idMap.set(oldId, newId);
 		}
 	}
+
+	// plan 0023 M3-11 (LC-DOCFLOW): a template's `document` is a full CanvasIR,
+	// so Component Sources ride in `document.components` — no bundle format.
+	// Every import remaps ONCE through the same factory + shared id map:
+	// definition ids, Source node ids, property bindings, nested references,
+	// and page instances — so instantiating one template any number of times
+	// can never collide (collision policy: always-remap; identical-definition
+	// reuse is deliberately P1). The factory-call ORDER extends the existing
+	// deterministic sequence (pages, page subtrees, THEN the registry in
+	// sorted-id order), so component-free templates keep byte-identical output.
+	const sourceRegistry = cloned.components ?? {};
+	const sourceDefinitionIds = Object.keys(sourceRegistry).sort();
+	if (sourceDefinitionIds.length > 0) {
+		const componentIdMap = new Map<string, string>();
+		for (const id of sourceDefinitionIds) {
+			componentIdMap.set(id, idFactory());
+		}
+		const remappedRegistry: Record<string, CanvasComponentDefinition> = {};
+		for (const id of sourceDefinitionIds) {
+			const definition = sourceRegistry[id] as CanvasComponentDefinition;
+			const { node: newRoot, idMap: subtreeIdMap } = regenerateNodeIds(
+				definition.root,
+				{ idFactory },
+			);
+			for (const [oldId, newId] of subtreeIdMap) idMap.set(oldId, newId);
+			const newId = componentIdMap.get(id) as string;
+			remappedRegistry[newId] = {
+				...definition,
+				id: newId,
+				root: newRoot,
+				// Property IDs are stable (INV-6); bindings follow the remap.
+				properties: definition.properties.map((property) => ({
+					...property,
+					nodeId: subtreeIdMap.get(property.nodeId) ?? property.nodeId,
+				})),
+			};
+		}
+		// One shared map rewrites every reference — nested instances inside
+		// Source trees and instances on the template's pages alike.
+		const rewriteInstanceRefs = (node: CanvasNode): void => {
+			if (node.type === "component-instance") {
+				const mapped = componentIdMap.get(node.componentId);
+				if (mapped) node.componentId = mapped;
+			}
+			if (isContainerNode(node)) {
+				for (const child of node.children) rewriteInstanceRefs(child);
+			}
+		};
+		for (const definition of Object.values(remappedRegistry)) {
+			rewriteInstanceRefs(definition.root);
+		}
+		for (const page of cloned.pages) {
+			rewriteInstanceRefs(page.root);
+		}
+		cloned.components = remappedRegistry;
+	}
+
 	walk(cloned, ({ node }) => {
 		nodesByNewId.set(node.id, node);
 	});
@@ -274,12 +341,44 @@ export function instantiateTemplate(
 	// read version -> migrate -> validate path as loading, collab decode, and
 	// export resolution, so no document-entry path bypasses migration.
 	const document = migrateCanvasIR(cloned);
+
+	// Validate the imported component graph (M3-11): error-severity issues
+	// surface as warnings — the standalone document still opens (instances
+	// degrade to selectable placeholders, INV-3), while the COMMAND path stays
+	// hard-guarded by `component.create`'s own graph checks at apply time.
+	if (document.components) {
+		for (const issue of validateComponentGraph(document)) {
+			if (issue.severity !== "error") continue;
+			warnings.push({
+				code: "component-graph-invalid",
+				componentId: issue.componentId,
+			});
+		}
+	}
+
+	// Definitions land BEFORE the pages that reference them, so applying the
+	// batch into an existing document never has an instance pointing at a
+	// not-yet-imported Source, and `component.create`'s freshness/graph guards
+	// run against the target document.
+	const componentCommands = Object.keys(document.components ?? {})
+		.sort()
+		.map((id): CanvasComponentCreateCommand => {
+			const imported = document.components?.[id] as CanvasComponentDefinition;
+			return {
+				type: "component.create",
+				mode: "restore",
+				definition: imported,
+			};
+		});
 	const command: CanvasBatchCommand = {
 		type: "batch",
 		label: `template:${definition.id}`,
-		commands: document.pages.map(
-			(page): CanvasPageCreateCommand => ({ type: "page.create", page }),
-		),
+		commands: [
+			...(componentCommands as CanvasCommand[]),
+			...document.pages.map(
+				(page): CanvasPageCreateCommand => ({ type: "page.create", page }),
+			),
+		],
 	};
 
 	return { document, command, warnings };

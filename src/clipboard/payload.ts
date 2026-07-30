@@ -329,6 +329,25 @@ export function materializeClipboardNodes(
 					placeholder.assetId = assetIdRewrites.get(placeholderAssetId);
 				}
 			}
+			// Component-instance override maps can reference assets too (an
+			// image override is `{ kind: "image", assetId }`) — the invariant
+			// checker counts them as references (plan 0023 M1-08), so a re-keyed
+			// asset must be followed here as well or the pasted override dangles.
+			const overrides = record.overrides as
+				| Record<string, { kind?: unknown; assetId?: unknown }>
+				| undefined;
+			if (overrides) {
+				for (const entry of Object.values(overrides)) {
+					if (
+						entry &&
+						entry.kind === "image" &&
+						typeof entry.assetId === "string" &&
+						assetIdRewrites.has(entry.assetId)
+					) {
+						entry.assetId = assetIdRewrites.get(entry.assetId);
+					}
+				}
+			}
 			if (isContainerNode(node)) {
 				for (const child of node.children) rewrite(child);
 			}

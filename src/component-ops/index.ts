@@ -8,7 +8,20 @@
  * legal. Holds create/detach/clipboard/template document operations (M3).
  */
 export {
+	type CanvasForeignComponentRef,
+	findForeignComponentRefs,
+} from "./clipboard.js";
+export {
+	type BuildDetachAllAndDeleteOptions,
+	buildDetachAllAndDeleteCommand,
+	type CanvasDetachAllAndDeletePlan,
+} from "./delete.js";
+export {
 	type BuildDetachCommandOptions,
 	buildDetachCommand,
 	type CanvasDetachPlan,
 } from "./detach.js";
+export {
+	type MaterializeExportVariantOptions,
+	materializeExportVariant,
+} from "./export-variant.js";

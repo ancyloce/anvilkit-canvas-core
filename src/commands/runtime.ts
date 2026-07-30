@@ -1,5 +1,8 @@
 import { resolveNow } from "../clock.js";
-import { buildComponentGraph } from "../components/graph.js";
+import {
+	buildComponentGraph,
+	buildComponentReferenceIndex,
+} from "../components/graph.js";
 import { resolveComponentInstance } from "../components/resolve.js";
 import { propertyTargetsNode } from "../components/validate.js";
 import {
@@ -2300,15 +2303,15 @@ function findComponentReferences(
 	ir: CanvasIR,
 	componentId: string,
 ): { count: number; locations: string[] } {
-	const locations: string[] = [];
-	walkDocument(ir, ({ node, location }) => {
-		if (
-			node.type === "component-instance" &&
-			node.componentId === componentId
-		) {
-			locations.push(`${location.kind}:${location.id}`);
-		}
-	});
+	const index = buildComponentReferenceIndex(ir);
+	const locations = [
+		...(index.pageInstancesByComponent.get(componentId) ?? []).map(
+			(ref) => `page:${ref.pageId}`,
+		),
+		...(index.sourceDependenciesByComponent.get(componentId) ?? []).map(
+			(ref) => `component:${ref.componentId}`,
+		),
+	];
 	return { count: locations.length, locations };
 }
 

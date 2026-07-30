@@ -42,6 +42,10 @@ export type CanvasInvariantIssueCode =
  */
 export const CANVAS_LAYOUT_AUTO_CAPABILITY = "layout.auto.v1";
 
+/** Capability ids for document-local components (plan 0023, LC-COMPAT-001). */
+export const CANVAS_COMPONENTS_LOCAL_CAPABILITY = "components.local.v1";
+export const CANVAS_COMPONENTS_OVERRIDES_CAPABILITY = "components.overrides.v1";
+
 export interface CanvasInvariantIssue {
 	readonly code: CanvasInvariantIssueCode;
 	readonly message: string;
