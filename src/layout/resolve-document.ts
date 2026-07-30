@@ -33,7 +33,7 @@ import type {
 } from "../ir/types.js";
 import { isContainerNode } from "../ir/walkers.js";
 import { MAX_COMPONENT_EXPANDED_NODES_PER_RESOLUTION } from "../limits.js";
-import { resolveCanvasLayout } from "./resolve.js";
+import { adoptResolutionState, resolveCanvasLayout } from "./resolve.js";
 import type {
 	CanvasLayoutResolveOptions,
 	CanvasResolvedDocument,
@@ -94,7 +94,7 @@ export function resolveCanvasDocument(
 	// object modulo the (empty) componentIssues field.
 	if (!anyInstances) {
 		const resolved = resolveCanvasLayout(ir, options);
-		return { ...resolved, componentIssues: [] };
+		return withResolutionState(resolved, { ...resolved, componentIssues: [] });
 	}
 
 	const cache = options.componentCache ?? createComponentResolutionCache();
@@ -151,18 +151,89 @@ export function resolveCanvasDocument(
 	const resolved = resolveCanvasLayout(expandedIr, options);
 
 	if (origins.size === 0) {
-		return { ...resolved, componentIssues: issues };
+		return withResolutionState(resolved, {
+			...resolved,
+			componentIssues: issues,
+		});
 	}
 	const records = new Map(resolved.records);
 	for (const [id, origin] of origins) {
 		const key = toResolvedNodeId(id);
 		const record = records.get(key);
 		if (!record) continue;
-		const withOrigin: CanvasResolvedNodeRecord = {
-			...record,
-			component: origin,
-		};
-		records.set(key, withOrigin);
+		records.set(key, attachOrigin(record, origin));
 	}
-	return { ...resolved, records, componentIssues: issues };
+	return withResolutionState(resolved, {
+		...resolved,
+		records,
+		componentIssues: issues,
+	});
+}
+
+/**
+ * Carry the solver's private per-document state (warm cache, reuse count,
+ * manifest stamp) onto the additive copy this file returns, and hand the copy
+ * back.
+ *
+ * Every `return` here spreads the layout result to attach `componentIssues`,
+ * which breaks the object identity those lookups are keyed by — see
+ * {@link adoptResolutionState}. Threading it through one helper is what keeps a
+ * future extra return path from silently reintroducing a cold-resolve
+ * regression.
+ */
+function withResolutionState(
+	from: CanvasResolvedDocument,
+	to: CanvasResolvedComponentDocument,
+): CanvasResolvedComponentDocument {
+	adoptResolutionState(from, to);
+	return to;
+}
+
+/**
+ * Provenance-wrapped records, memoised on the PLAIN record they wrap.
+ *
+ * Attaching `component` means spreading the solver's record, which allocates a
+ * new object — so without this memo every virtual record's identity changed on
+ * every resolution even when nothing about it moved, and the incremental
+ * contract (TD §5.4: "untouched records are reference-identical between
+ * consecutive resolutions, which is also what lets renderers memoise on record
+ * identity") held for plain nodes but silently NOT for component ones. The
+ * visible consequence is every instance re-rendering on every pointer move,
+ * rather than only the instances a Source edit actually dirtied.
+ *
+ * Keyed on the solver's own record object, which is safe because the solver
+ * caches only plain records: its warm state is built from the map it emitted
+ * itself, never from this file's wrapped copies. So a warm pass hands back the
+ * identical plain record, which finds the identical wrapper here.
+ */
+const originWraps = new WeakMap<
+	CanvasResolvedNodeRecord,
+	CanvasResolvedNodeRecord
+>();
+
+function sameOrigin(
+	a: CanvasResolvedComponentOrigin | undefined,
+	b: CanvasResolvedComponentOrigin,
+): boolean {
+	return (
+		a !== undefined &&
+		a.instanceId === b.instanceId &&
+		a.componentId === b.componentId &&
+		a.definitionNodeId === b.definitionNodeId &&
+		a.depth === b.depth
+	);
+}
+
+function attachOrigin(
+	record: CanvasResolvedNodeRecord,
+	origin: CanvasResolvedComponentOrigin,
+): CanvasResolvedNodeRecord {
+	const cached = originWraps.get(record);
+	// Re-verify the provenance rather than trusting the memo: the same plain
+	// record could in principle be re-emitted under a different instance, and a
+	// wrapper carrying the wrong `component` would misattribute a virtual node.
+	if (cached && sameOrigin(cached.component, origin)) return cached;
+	const wrapped: CanvasResolvedNodeRecord = { ...record, component: origin };
+	originWraps.set(record, wrapped);
+	return wrapped;
 }

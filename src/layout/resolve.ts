@@ -912,6 +912,45 @@ export function resolveCanvasLayout(
 }
 
 /**
+ * Re-key one resolution's private per-document state onto an ADDITIVE COPY of
+ * it (plan 0023 M4-03).
+ *
+ * Everything below — warm cache, reuse count, manifest stamp — is hung off the
+ * exact object identity `resolveCanvasLayout` returned, deliberately, so it
+ * stays out of the public shape. `resolveCanvasDocument` (the composed
+ * component+layout entry point, and the ONLY path a component-bearing document
+ * may use) returns `{...resolved, componentIssues}`, which is a DIFFERENT
+ * object — so without this every one of those lookups misses:
+ *
+ * 1. a caller threading the composed document back as `previous` gets a COLD
+ *    resolve every pass, defeating the incremental contract (TD §5.4) for the
+ *    editor's per-pointer-move re-resolutions;
+ * 2. {@link reusedSubtreeCount} reports `undefined` instead of the real count;
+ * 3. {@link resolutionManifestHash} yields `""`, so `materializeCanvasLayout`
+ *    would stamp a materialization with an EMPTY measurement-manifest hash and
+ *    a later reader could not tell that a font load had invalidated it.
+ *
+ * Domain-internal on purpose: exported for `resolve-document.ts` (same `layout/`
+ * domain) and NOT re-exported from `layout/index.ts`, so cache internals stay
+ * out of `check:api-snapshot`.
+ *
+ * Adoption is safe rather than merely convenient: `createCacheState` re-checks
+ * `assets` identity and `manifestHash` before reusing anything, and signatures
+ * are keyed by node-object identity — so freshly expanded virtual nodes simply
+ * miss and recompute instead of reusing a foreign placement.
+ */
+export function adoptResolutionState(
+	from: CanvasResolvedDocument,
+	to: CanvasResolvedDocument,
+): void {
+	if (from === to) return;
+	const cache = documentCaches.get(from);
+	if (cache) documentCaches.set(to, cache);
+	const reuse = reuseCounts.get(from);
+	if (reuse !== undefined) reuseCounts.set(to, reuse);
+}
+
+/**
  * Warm state, hung off the resolved document that produced it.
  *
  * A `WeakMap` rather than a field on `CanvasResolvedDocument`, because

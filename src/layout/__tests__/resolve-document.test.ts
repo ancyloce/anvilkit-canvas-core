@@ -19,7 +19,11 @@ import type {
 	CanvasNode,
 } from "../../ir/types.js";
 import type { MeasuredText, TextMeasureRequest } from "../../text-contracts.js";
-import { resolveCanvasLayout } from "../resolve.js";
+import {
+	resolutionManifestHash,
+	resolveCanvasLayout,
+	reusedSubtreeCount,
+} from "../resolve.js";
 import { resolveCanvasDocument } from "../resolve-document.js";
 
 /**
@@ -187,5 +191,80 @@ describe("resolveCanvasDocument (M2-06)", () => {
 		// The placeholder instance node still produced a record.
 		const record = resolved.records.get(toResolvedNodeId("inst-1"));
 		expect(record?.node.type).toBe("component-instance");
+	});
+});
+
+/**
+ * Plan 0023 M4-03 regression: the composed resolver returns an ADDITIVE COPY of
+ * the layout result (`{...resolved, componentIssues}`), while the solver's warm
+ * cache, reuse count, and manifest stamp are keyed by the INNER object's
+ * identity. Before `adoptResolutionState` those three lookups all missed
+ * through this entry point — so a caller threading the composed document back
+ * as `previous` (exactly what the editor's resolved-document store does on
+ * every commit and every preview tick) resolved COLD every pass, and
+ * `materializeCanvasLayout` stamped an empty measurement-manifest hash.
+ */
+describe("resolveCanvasDocument warm-path identity (M4-03)", () => {
+	it("threading the composed document back as `previous` reuses records", () => {
+		const ir = docWithInstance();
+		const first = resolveCanvasDocument(ir, {
+			measurement: { measureText: charMeasurer },
+		});
+		// Same IR, previous threaded: every record is untouched, so the warm path
+		// must hand back reference-IDENTICAL record objects (TD §5.4) — which is
+		// what lets renderers memoise on record identity.
+		const second = resolveCanvasDocument(ir, {
+			measurement: { measureText: charMeasurer },
+			previous: first,
+		});
+
+		const id = toResolvedNodeId("inst-1");
+		expect(second.records.get(id)).toBe(first.records.get(id));
+		expect(reusedSubtreeCount(second)).toBeGreaterThan(0);
+	});
+
+	it("reports the reuse count and manifest hash through the composed document", () => {
+		const ir = docWithInstance();
+		const resolved = resolveCanvasDocument(ir, {
+			measurement: { measureText: charMeasurer, manifestHash: "fonts-v7" },
+		});
+		// `undefined` / "" here is the symptom of a broken identity hand-off: the
+		// second would make a materialization stamp unable to detect that a font
+		// load changed metrics.
+		expect(reusedSubtreeCount(resolved)).toBeDefined();
+		expect(resolutionManifestHash(resolved)).toBe("fonts-v7");
+	});
+
+	it("warms the component-free fast path too", () => {
+		let ir = createCanvasIR({ id: "plain", now: NOW });
+		ir = insertNode(ir, {
+			parentId: ir.pages[0]?.root.id as string,
+			node: createGroup({
+				id: "g1",
+				children: [createRect({ id: "r1", bounds: { width: 10, height: 10 } })],
+			}),
+			now: NOW,
+		});
+
+		const first = resolveCanvasDocument(ir, {});
+		const second = resolveCanvasDocument(ir, { previous: first });
+		const id = toResolvedNodeId("g1");
+		expect(second.records.get(id)).toBe(first.records.get(id));
+	});
+
+	it("does not reuse a placement across a changed asset map", () => {
+		const ir = docWithInstance();
+		const first = resolveCanvasDocument(ir, {
+			measurement: { measureText: charMeasurer },
+		});
+		// A new asset map can change an image's intrinsic size, so `createCacheState`
+		// drops every signature: adoption hands the state over, it never bypasses
+		// that guard.
+		const withAssets: CanvasIR = { ...ir, assets: { ...ir.assets } };
+		const second = resolveCanvasDocument(withAssets, {
+			measurement: { measureText: charMeasurer },
+			previous: first,
+		});
+		expect(reusedSubtreeCount(second)).toBe(0);
 	});
 });
