@@ -1,5 +1,5 @@
 import type { CanvasFill, CanvasFontFamily, CanvasIR } from "../ir/types.js";
-import { walk } from "../ir/walkers.js";
+import { walkDocument } from "../ir/walkers.js";
 import type { BrandKitDefinition } from "./types.js";
 
 export type BrandComplianceIssueCode =
@@ -131,7 +131,11 @@ export function generateBrandComplianceReport(
 ): BrandComplianceReport {
 	const issues: BrandComplianceIssue[] = [];
 
-	walk(document, ({ node }) => {
+	// `walkDocument`, not `walk` (plan 0023 M1-08): a Source tree can carry
+	// off-brand fills/fonts exactly like a page tree, and every instance
+	// renders them — a pages-only audit would certify a non-compliant
+	// document as clean.
+	walkDocument(document, ({ node }) => {
 		switch (node.type) {
 			case "rect":
 			case "ellipse":
