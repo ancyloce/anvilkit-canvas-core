@@ -7,4 +7,8 @@
  * are layering violations — same-domain membership is what keeps that edge
  * legal. Holds create/detach/clipboard/template document operations (M3).
  */
-export {};
+export {
+	type BuildDetachCommandOptions,
+	buildDetachCommand,
+	type CanvasDetachPlan,
+} from "./detach.js";
