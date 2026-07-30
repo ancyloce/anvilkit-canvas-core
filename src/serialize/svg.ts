@@ -21,6 +21,7 @@ import type {
 	BrandTokenRef,
 	CanvasAssetRef,
 	CanvasAudioNode,
+	CanvasComponentInstanceNode,
 	CanvasDropShadowEffect,
 	CanvasEffect,
 	CanvasEllipseNode,
@@ -52,7 +53,11 @@ import type {
 	RichTextSpan,
 } from "../ir/types.js";
 import { CanvasIRSchema } from "../ir/validators.js";
-import { CanvasIRDepthError, MAX_TREE_DEPTH } from "../ir/walkers.js";
+import { CanvasIRDepthError, MAX_TREE_DEPTH, walkPage } from "../ir/walkers.js";
+// Component expansion for export (plan 0023 M6-02). `serialize/` is rank 5 and
+// `layout/` rank 4, so this edge is legal — and it is the SAME composed resolver
+// the editor reads, which is what makes AC-012 parity achievable at all.
+import { resolveCanvasDocument } from "../layout/resolve-document.js";
 import type { CanvasResolvedDocument } from "../layout/types.js";
 import { toResolvedNodeId } from "../layout/types.js";
 import {
@@ -387,6 +392,13 @@ export type SvgWarningCode =
 	// with this warning rather than falling through to the misleading
 	// extension-kind `UNKNOWN_KIND_SKIPPED` path.
 	| "COMPONENT_INSTANCE_UNRESOLVED"
+	// Added for the Local Components export measurement contract (plan 0023
+	// M6-01, decision D-5, INV-13). Fires per instance when a page's components
+	// are expanded WITHOUT a text measurer: any Hug sizing inside the component
+	// then falls back to unmeasured intrinsic bounds, so the export can differ
+	// from what the editor showed. Never silent — INV-13 only holds when the
+	// export path is given the same measurer the editor rendered with.
+	| "COMPONENT_MEASUREMENT_MISSING"
 	// Added for video/audio nodes (FR-081, canvas-m6-002). A video renders its
 	// `poster` asset as a static `<image>` fallback when one is set (nothing
 	// otherwise); audio has no visual representation at all, ever.
@@ -1530,8 +1542,18 @@ export interface SvgSerializeOptions {
 	 * not cover the serialized page) and the page carries Auto Layout intent,
 	 * the output uses stored geometry and warns `LAYOUT_UNRESOLVED`.
 	 *
-	 * The serializer never calls the resolver itself, even though its layer
-	 * rank would permit it — the caller supplies the one shared resolved tree.
+	 * For LAYOUT the serializer never resolves on its own, even though its layer
+	 * rank would permit it — the caller supplies the one shared resolved tree,
+	 * and stored geometry is a legitimate (warned) fallback.
+	 *
+	 * COMPONENTS are the one exception, because there is no fallback: an
+	 * unexpanded instance has nothing to paint at all. When a page holds
+	 * instances and this option does not already carry their expansion, the
+	 * serializer resolves through the same composed resolver every other consumer
+	 * uses — `resolveCanvasDocument`, restricted to the serialized page
+	 * (plan 0023 M6-02). Named in prose rather than `{@link}`ed: the helper that
+	 * does it is module-private, and a link would put an internal symbol into the
+	 * API snapshot and raise an unresolved-reference warning.
 	 */
 	resolvedDocument?: CanvasResolvedDocument;
 }
@@ -1539,6 +1561,111 @@ export interface SvgSerializeOptions {
 export interface SvgSerializeResult {
 	svg: string;
 	warnings: SvgSerializeWarning[];
+}
+
+/**
+ * Expand a page's component instances for export (plan 0023 M6-01/M6-02,
+ * LC-EXPORT, AC-012).
+ *
+ * Component expansion is NOT optional the way geometry resolution is: a page
+ * with instances and no expansion has literally nothing to paint for them
+ * (M1-09 left `COMPONENT_INSTANCE_UNRESOLVED` for exactly that state). So unlike
+ * `resolvedDocument` — where stored geometry is a legitimate fallback — the
+ * serializer resolves here when it must, through the SAME composed resolver
+ * every other consumer uses (`resolveCanvasDocument`), never a second expansion
+ * algorithm.
+ *
+ * Three paths, cheapest first:
+ * 1. no instances on this page → returns the inputs untouched, so a
+ *    component-free document's output stays byte-identical and costs nothing;
+ * 2. the caller already supplied a resolution whose own `source` has this page
+ *    EXPANDED (i.e. it came from `resolveCanvasDocument`) → reuse it, honouring
+ *    the "caller supplies the one shared resolved tree" contract;
+ * 3. otherwise resolve now, restricted to this page.
+ *
+ * Returns the page to emit and the resolution to read geometry from. The
+ * expanded page comes from `resolved.source` — the composed resolver's
+ * post-expansion IR.
+ */
+function expandComponentsForExport(
+	ir: CanvasIR,
+	page: CanvasPage,
+	options: SvgSerializeOptions,
+): {
+	page: CanvasPage;
+	resolvedDocument: CanvasResolvedDocument | undefined;
+	warnings: SvgSerializeWarning[];
+} {
+	if (!pageHasComponentInstance(page)) {
+		return { page, resolvedDocument: options.resolvedDocument, warnings: [] };
+	}
+
+	const supplied = options.resolvedDocument;
+	const suppliedPage = supplied?.source.pages.find((p) => p.id === page.id);
+	if (
+		supplied?.pageRoots.has(page.id) &&
+		suppliedPage &&
+		!pageHasComponentInstance(suppliedPage)
+	) {
+		// The caller resolved through the composed resolver already — emit THEIR
+		// tree so editor and export cannot diverge by resolving twice.
+		return { page: suppliedPage, resolvedDocument: supplied, warnings: [] };
+	}
+
+	const measurement = options.textMeasurer
+		? { measureText: options.textMeasurer }
+		: undefined;
+	const resolved = resolveCanvasDocument(ir, {
+		pageIds: [page.id],
+		...(measurement ? { measurement } : {}),
+	});
+	const expandedPage =
+		resolved.source.pages.find((p) => p.id === page.id) ?? page;
+
+	const warnings: SvgSerializeWarning[] = [];
+	if (!measurement) {
+		// Warned AFTER resolving, and only for instances that actually EXPANDED:
+		// an instance that degraded to a placeholder has no content to measure, and
+		// already reports `COMPONENT_INSTANCE_UNRESOLVED` at dispatch — two warnings
+		// for one unrenderable node would just bury the real problem.
+		//
+		// One per instance rather than one per page, naming component + instance:
+		// the serializer's other per-node warnings (blend mode, unknown kind) set
+		// that precedent, and a page-level count would not tell the author WHICH
+		// instance to check.
+		for (const instance of componentInstancesOnPage(page)) {
+			const record = resolved.records.get(toResolvedNodeId(instance.id));
+			if (!record || record.node.type === "component-instance") continue;
+			warnings.push({
+				code: "COMPONENT_MEASUREMENT_MISSING",
+				message: `Instance "${instance.id}" of component "${instance.componentId}" was expanded without a text measurer; any Hug sizing inside it falls back to unmeasured intrinsic bounds and may differ from the editor.`,
+				nodeId: instance.id,
+				fallback:
+					"Pass `textMeasurer` (the same measurer the editor renders with) to make export geometry match the editor exactly.",
+			});
+		}
+	}
+	return { page: expandedPage, resolvedDocument: resolved, warnings };
+}
+
+/** True when `page` holds at least one `component-instance` node, at any depth. */
+function pageHasComponentInstance(page: CanvasPage): boolean {
+	let found = false;
+	walkPage(page, ({ node }) => {
+		if (node.type === "component-instance") found = true;
+	});
+	return found;
+}
+
+/** Every instance node on `page`, in document order. */
+function componentInstancesOnPage(
+	page: CanvasPage,
+): readonly CanvasComponentInstanceNode[] {
+	const out: CanvasComponentInstanceNode[] = [];
+	walkPage(page, ({ node }) => {
+		if (node.type === "component-instance") out.push(node);
+	});
+	return out;
 }
 
 // --- node dispatch + group recursion -----------------------------------------
@@ -2212,8 +2339,22 @@ export async function serializePageToSvg(
 	options: SvgSerializeOptions = {},
 ): Promise<SvgSerializeResult> {
 	if (options.validate) CanvasIRSchema.parse(ir);
-	const page = resolvePage(ir, pageSelector);
-	const ctx = createEmitContext(options, ir.assets);
+	// Plan 0023 M6-02: expand this page's component instances BEFORE anything
+	// reads the tree, so every downstream step (background, root attrs, node
+	// dispatch, geometry substitution) sees one already-expanded page and needs no
+	// component awareness of its own.
+	const expansion = expandComponentsForExport(
+		ir,
+		resolvePage(ir, pageSelector),
+		options,
+	);
+	const page = expansion.page;
+	const effectiveOptions: SvgSerializeOptions =
+		expansion.resolvedDocument === options.resolvedDocument
+			? options
+			: { ...options, resolvedDocument: expansion.resolvedDocument };
+	const ctx = createEmitContext(effectiveOptions, ir.assets);
+	ctx.warnings.push(...expansion.warnings);
 	if (page.animation) {
 		warn(
 			ctx,
@@ -2224,7 +2365,9 @@ export async function serializePageToSvg(
 	// TD §12.4: a resolved document restricted to other pages (`pageIds`) is as
 	// unusable for THIS page as no resolved document at all, so coverage is
 	// checked per page, not per option presence.
-	const layoutResolved = options.resolvedDocument?.pageRoots.has(page.id);
+	const layoutResolved = effectiveOptions.resolvedDocument?.pageRoots.has(
+		page.id,
+	);
 	if (!layoutResolved && pageCarriesLayoutIntent(page)) {
 		ctx.warnings.push({
 			code: "LAYOUT_UNRESOLVED",

@@ -193,18 +193,47 @@ describe("component schemas in both unions (M1-05)", () => {
 		).toThrow();
 	});
 
-	it("treats components.local.v1 as UNSUPPORTED until M6 flips the set (rollout safety)", () => {
+	/**
+	 * M6-06 FLIPPED THIS. Until M6 this build did not implement Local Components,
+	 * so declaring the capability correctly routed a document to read-only preview
+	 * (the M1 assertion this replaces). From M6 the resolver, editor and
+	 * serializers all implement it, so the same declaration must now be honoured —
+	 * a build that kept reporting "unsupported" would make every component
+	 * document it can fully edit read-only.
+	 */
+	it("honours the component capabilities now that M6 has flipped the set", () => {
 		const doc: CanvasIR = {
 			...componentDoc(),
 			compatibility: {
 				schemaVersion: "3",
 				minReaderSchemaVersion: "3",
-				requiredCapabilities: ["components.local.v1"],
+				requiredCapabilities: [
+					"components.local.v1",
+					"components.overrides.v1",
+				],
 			},
 		};
 		const issues = validateLayoutInvariants(doc);
 		expect(issues.some((i) => i.code === "layout-capability-unsupported")).toBe(
-			true,
+			false,
 		);
+	});
+
+	it("still reports a capability this build genuinely does not implement", () => {
+		// The flip must not blunt the gate — an unknown capability is still
+		// unsupported, which is what keeps AC-010/INV-14 meaningful.
+		const doc: CanvasIR = {
+			...componentDoc(),
+			compatibility: {
+				schemaVersion: "3",
+				minReaderSchemaVersion: "3",
+				requiredCapabilities: ["components.remote.v1"],
+			},
+		};
+		expect(
+			validateLayoutInvariants(doc).some(
+				(i) => i.code === "layout-capability-unsupported",
+			),
+		).toBe(true);
 	});
 });

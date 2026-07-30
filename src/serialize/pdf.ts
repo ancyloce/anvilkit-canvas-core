@@ -3,6 +3,7 @@ import type { CanvasPrintPdfMetadata } from "../export/types.js";
 import type { CanvasIR, CanvasPage, CanvasUnit } from "../ir/types.js";
 import { CanvasIRSchema } from "../ir/validators.js";
 import { walkPage } from "../ir/walkers.js";
+import type { CanvasResolvedDocument } from "../layout/types.js";
 import { DEFAULT_DPI } from "./svg.js";
 
 /** Fallback minimum DPI for the print-safety check when `print.dpi` is unset. */
@@ -244,6 +245,22 @@ export interface PdfSerializeOptions {
 	 * advisory only — see {@link CanvasPrintPdfMetadata.colorMode}.
 	 */
 	print?: CanvasPrintPdfMetadata;
+	/**
+	 * The resolution the supplied rasters were rendered from (plan 0023 M6-02).
+	 *
+	 * This layer never renders nodes — it embeds rasters the caller already
+	 * produced — so on its own it cannot know whether that render expanded the
+	 * page's component instances, and M1-09 therefore warned
+	 * `COMPONENT_INSTANCE_UNRESOLVED` for EVERY component-bearing page, including
+	 * correctly exported ones. Passing the composed resolution
+	 * (`resolveCanvasDocument`) is the evidence that the raster is expanded, and
+	 * suppresses the warning for the pages it covers.
+	 *
+	 * Deliberately evidence rather than a boolean flag: a `componentsExpanded:
+	 * true` the caller simply asserts would make the warning meaningless the
+	 * moment a caller got it wrong.
+	 */
+	resolvedDocument?: CanvasResolvedDocument;
 }
 
 export type PdfWarningCode =
@@ -293,6 +310,24 @@ export interface PdfSerializeResult {
  * of how many media nodes it contains (FR-081, canvas-m6-002).
  */
 /** True when `page` holds at least one `component-instance` node (plan 0023 M1-09). */
+/**
+ * True when `resolved` proves the raster for `pageId` came from a
+ * component-EXPANDED render (plan 0023 M6-02).
+ *
+ * The test is structural, not a flag: the resolution must cover the page AND its
+ * own `source` copy of that page must contain no `component-instance` node —
+ * which is exactly what `resolveCanvasDocument` produces and what
+ * `resolveCanvasLayout` does not.
+ */
+function rasterIsComponentResolved(
+	resolved: CanvasResolvedDocument | undefined,
+	pageId: string,
+): boolean {
+	if (!resolved?.pageRoots.has(pageId)) return false;
+	const sourcePage = resolved.source.pages.find((p) => p.id === pageId);
+	return sourcePage !== undefined && !pageHasComponentInstance(sourcePage);
+}
+
 function pageHasComponentInstance(page: CanvasPage): boolean {
 	let found = false;
 	walkPage(page, ({ node }) => {
@@ -371,10 +406,17 @@ export async function serializeDocumentToPdf(
 				pageId: page.id,
 			});
 		}
-		if (pageHasComponentInstance(page)) {
+		// Plan 0023 M6-02: only warn when the caller gave no EVIDENCE that the
+		// raster it supplied was rendered from an expanded document. A composed
+		// resolution covering this page — whose own `source` page therefore holds no
+		// unexpanded instances — is that evidence.
+		if (
+			pageHasComponentInstance(page) &&
+			!rasterIsComponentResolved(options.resolvedDocument, page.id)
+		) {
 			warnings.push({
 				code: "COMPONENT_INSTANCE_UNRESOLVED",
-				message: `Page "${page.id}" contains component instances; PDF draws the supplied raster and cannot verify they were expanded (resolved-document serialization lands in plan 0023 M6).`,
+				message: `Page "${page.id}" contains component instances; PDF draws the supplied raster and cannot verify they were expanded. Pass \`resolvedDocument\` (a \`resolveCanvasDocument\` result) to confirm the raster is expanded.`,
 				pageId: page.id,
 			});
 		}

@@ -5,6 +5,8 @@ import type {
 	CanvasIR,
 	CanvasTransform,
 } from "../../ir/types.js";
+import { resolveCanvasLayout } from "../../layout/resolve.js";
+import { resolveCanvasDocument } from "../../layout/resolve-document.js";
 import { serializeDocumentToPdf } from "../pdf.js";
 import { serializePageToSvg } from "../svg.js";
 
@@ -78,5 +80,70 @@ describe("raw component-instance serialization (M1-09)", () => {
 		expect(
 			warnings.find((w) => w.code === "COMPONENT_INSTANCE_UNRESOLVED")?.pageId,
 		).toBe("page-1");
+	});
+});
+
+/**
+ * M6-02: PDF embeds a raster the caller rendered, so it can only report
+ * "unverified" — unless the caller hands over the resolution that raster came
+ * from. That evidence is structural, never a self-asserted flag.
+ */
+describe("PDF component-resolution evidence (M6-02)", () => {
+	function resolvableDoc(): CanvasIR {
+		const doc = docWithInstance();
+		return {
+			...doc,
+			components: {
+				"cmp-cta": {
+					id: "cmp-cta",
+					name: "CTA",
+					revision: 1,
+					properties: [],
+					root: {
+						id: "cta-root",
+						type: "rect",
+						transform: identity,
+						bounds: { width: 20, height: 20 },
+						zIndex: 0,
+						fill: "#123456",
+					},
+				},
+			},
+		} as CanvasIR;
+	}
+
+	it("suppresses the warning when a composed resolution covers the page", async () => {
+		const ir = resolvableDoc();
+		const { warnings } = await serializeDocumentToPdf(ir, {
+			rasters: [],
+			resolvedDocument: resolveCanvasDocument(ir, {}),
+		});
+		expect(
+			warnings.some((w) => w.code === "COMPONENT_INSTANCE_UNRESOLVED"),
+		).toBe(false);
+	});
+
+	it("still warns for a LAYOUT-only resolution — it proves nothing about expansion", async () => {
+		const ir = resolvableDoc();
+		const { warnings } = await serializeDocumentToPdf(ir, {
+			rasters: [],
+			// `resolveCanvasLayout` leaves the instance node in `source`, so the
+			// raster it produced would have shown a placeholder, not the component.
+			resolvedDocument: resolveCanvasLayout(ir, {}),
+		});
+		expect(
+			warnings.some((w) => w.code === "COMPONENT_INSTANCE_UNRESOLVED"),
+		).toBe(true);
+	});
+
+	it("still warns when the resolution covers a DIFFERENT page", async () => {
+		const ir = resolvableDoc();
+		const { warnings } = await serializeDocumentToPdf(ir, {
+			rasters: [],
+			resolvedDocument: resolveCanvasDocument(ir, { pageIds: ["nope"] }),
+		});
+		expect(
+			warnings.some((w) => w.code === "COMPONENT_INSTANCE_UNRESOLVED"),
+		).toBe(true);
 	});
 });
