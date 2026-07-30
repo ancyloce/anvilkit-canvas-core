@@ -2,6 +2,10 @@ import type {
 	CanvasAssetRef,
 	CanvasAutoLayout,
 	CanvasBounds,
+	CanvasComponentDefinition,
+	CanvasComponentOverride,
+	CanvasComponentOverrideMap,
+	CanvasComponentProperty,
 	CanvasGroupNode,
 	CanvasIR,
 	CanvasLayoutItem,
@@ -13,6 +17,7 @@ import type {
 	CanvasPageLayoutAids,
 	CanvasTransform,
 } from "../ir/types.js";
+import type { CanvasDocumentLocation } from "../ir/walkers.js";
 import type { CanvasNodeStyle } from "./apply-style.js";
 
 export interface CanvasPoint {
@@ -27,36 +32,49 @@ export interface CanvasRect {
 	height: number;
 }
 
-export interface CanvasNodeCreateCommand {
+/**
+ * Targets a node command at one tree: a page's (the default when absent —
+ * every pre-component call site keeps its exact semantics) or a Component
+ * Source's (plan 0023 M3-02, LC-CMD/LC-CREATE-002). A command's inverse
+ * carries the same `location`, so undo edits the same tree. One successful
+ * command (or one `batch`/transaction) against a Source increments that
+ * definition's `revision` exactly once — see `applyCommand`.
+ */
+export interface CanvasCommandLocationOptions {
+	location?: CanvasDocumentLocation;
+}
+
+export interface CanvasNodeCreateCommand extends CanvasCommandLocationOptions {
 	type: "node.create";
 	node: CanvasNode;
-	pageId: string;
+	/** Required without `location`; ignored when `location` names the tree. */
+	pageId?: string;
 	parentId?: string;
 	index?: number;
 }
 
-export interface CanvasNodeMoveCommand {
+export interface CanvasNodeMoveCommand extends CanvasCommandLocationOptions {
 	type: "node.move";
 	nodeId: string;
 	from: CanvasPoint;
 	to: CanvasPoint;
 }
 
-export interface CanvasNodeResizeCommand {
+export interface CanvasNodeResizeCommand extends CanvasCommandLocationOptions {
 	type: "node.resize";
 	nodeId: string;
 	from: CanvasRect;
 	to: CanvasRect;
 }
 
-export interface CanvasNodeRotateCommand {
+export interface CanvasNodeRotateCommand extends CanvasCommandLocationOptions {
 	type: "node.rotate";
 	nodeId: string;
 	from: number;
 	to: number;
 }
 
-export interface CanvasNodeDeleteCommand {
+export interface CanvasNodeDeleteCommand extends CanvasCommandLocationOptions {
 	type: "node.delete";
 	nodeId: string;
 }
@@ -65,7 +83,7 @@ export interface CanvasNodeDeleteCommand {
  * Move a node to a new index among its siblings (same parent). `toIndex` is
  * clamped to the sibling range; the inverse restores the prior index.
  */
-export interface CanvasNodeReorderCommand {
+export interface CanvasNodeReorderCommand extends CanvasCommandLocationOptions {
 	type: "node.reorder";
 	nodeId: string;
 	toIndex: number;
@@ -79,14 +97,16 @@ export interface CanvasNodeReorderCommand {
  * inverse reparents back to the original parent at the original index, so
  * layer-panel drag-and-drop is fully undoable.
  */
-export interface CanvasNodeReparentCommand {
+export interface CanvasNodeReparentCommand
+	extends CanvasCommandLocationOptions {
 	type: "node.reparent";
 	nodeId: string;
 	toParentId: string;
 	toIndex: number;
 }
 
-export interface CanvasNodeUpdateCommand<K extends CanvasNodeKind> {
+export interface CanvasNodeUpdateCommand<K extends CanvasNodeKind>
+	extends CanvasCommandLocationOptions {
 	type: "node.update";
 	nodeId: string;
 	kind: K;
@@ -97,7 +117,8 @@ export type CanvasAnyNodeUpdateCommand = {
 	[K in CanvasNodeKind]: CanvasNodeUpdateCommand<K>;
 }[CanvasNodeKind];
 
-export interface CanvasImageReplaceCommand {
+export interface CanvasImageReplaceCommand
+	extends CanvasCommandLocationOptions {
 	type: "image.replace";
 	nodeId: string;
 	fromAssetId: string;
@@ -111,9 +132,10 @@ export interface CanvasImageReplaceCommand {
  * No child transforms are altered (the group is created with an identity
  * transform), so grouping is visually a no-op and exactly reversible.
  */
-export interface CanvasNodeGroupCommand {
+export interface CanvasNodeGroupCommand extends CanvasCommandLocationOptions {
 	type: "node.group";
-	pageId: string;
+	/** Required without `location`; ignored when `location` names the tree. */
+	pageId?: string;
 	childIds: string[];
 	groupId: string;
 	groupName?: string;
@@ -132,7 +154,7 @@ export interface CanvasNodeGroupCommand {
  * placed back at its recorded original index so the prior tree is reconstructed
  * exactly even for non-contiguous selections.
  */
-export interface CanvasNodeUngroupCommand {
+export interface CanvasNodeUngroupCommand extends CanvasCommandLocationOptions {
 	type: "node.ungroup";
 	groupId: string;
 	restore?: Array<{ id: string; index: number }>;
@@ -145,7 +167,8 @@ export interface CanvasNodeUngroupCommand {
  * `node.update` restoring the applied keys' prior values exactly. Multi-node
  * paste is a `batch` of these (one per target — one undo entry).
  */
-export interface CanvasNodeApplyStyleCommand {
+export interface CanvasNodeApplyStyleCommand
+	extends CanvasCommandLocationOptions {
 	type: "node.applyStyle";
 	nodeId: string;
 	style: CanvasNodeStyle;
@@ -266,6 +289,184 @@ export interface CanvasAssetRemoveCommand {
 	assetId: string;
 }
 
+// ---------------------------------------------------------------------------
+// Local Components — registry + instance commands (plan 0023 M3-02, LC-CMD).
+// Registry commands manage their definition's `revision` themselves: a
+// content-bearing edit writes `revision ?? prior + 1`, and every inverse
+// carries the ACTUAL prior revision (the page.set-background convention), so
+// command → inverse → original round-trips byte-identically. Instance
+// commands are ordinary node edits on the instance node and never touch the
+// Registry.
+// ---------------------------------------------------------------------------
+
+/**
+ * Add a Component Source to the Registry.
+ *
+ * `restore` mode carries the complete definition verbatim — deterministic,
+ * replayable, and exactly what `component.delete`'s inverse needs (INV-10:
+ * it restores the `components` key itself when it was dropped).
+ * `from-selection` mode (M3-05) turns page/Source nodes into a new
+ * definition plus a first instance; its IDs are allocated by the caller so
+ * replay is deterministic.
+ */
+export type CanvasComponentCreateCommand =
+	| {
+			type: "component.create";
+			mode: "restore";
+			definition: CanvasComponentDefinition;
+	  }
+	| {
+			type: "component.create";
+			mode: "from-selection";
+			/** Tree the selection lives in. Absent = the page tree holding the nodes. */
+			location?: CanvasDocumentLocation;
+			selectedNodeIds: string[];
+			componentId: string;
+			sourceRootId: string;
+			firstInstanceId: string;
+			name?: string;
+			/**
+			 * How the Source root is formed: `reuse-container` promotes a single
+			 * selected group/frame to the root; `wrap-in-frame` wraps the
+			 * selection in a new frame at the selection's world AABB. Default:
+			 * `reuse-container` for a single container selection, else
+			 * `wrap-in-frame`.
+			 */
+			rootStrategy?: "reuse-container" | "wrap-in-frame";
+	  };
+
+export interface CanvasComponentRenameCommand {
+	type: "component.rename";
+	componentId: string;
+	/** Informational prior name (the page.rename convention). */
+	from?: string;
+	to: string;
+	/** Write this exact revision instead of `prior + 1` — how an inverse restores the ACTUAL prior. */
+	revision?: number;
+}
+
+/**
+ * Copy a definition under a new id. Source node ids are remapped via
+ * `regenerateNodeIds` (INV-2: unique across Pages AND definitions) and
+ * property bindings follow the same id map; Property IDs are kept —
+ * cross-definition reuse is explicitly permitted (TD §5.5). The copy starts
+ * at `revision: 1` with no dependents.
+ */
+export interface CanvasComponentDuplicateCommand {
+	type: "component.duplicate";
+	componentId: string;
+	/** Caller-supplied, following the `node.group`/`page.duplicate` id convention. */
+	newComponentId: string;
+	/** Default: `"<source name> copy"`. */
+	name?: string;
+}
+
+/**
+ * Delete a definition with ZERO references (LC-DELETE). Any remaining page
+ * instance or dependent definition rejects the command — "detach all and
+ * delete" is a `component-ops` orchestration that builds one atomic batch.
+ * Deleting the last definition drops the `components` key entirely; the
+ * inverse (`component.create` restore) brings the key back (INV-10).
+ */
+export interface CanvasComponentDeleteCommand {
+	type: "component.delete";
+	componentId: string;
+}
+
+/**
+ * Expose a component property (M3-06, LC-CREATE-003). Rejected on write when
+ * the Property ID already exists on this definition, the target node is not
+ * in the Source tree, or the target kind is incompatible (§10.1) — the same
+ * table `validateComponentGraph` applies on read.
+ */
+export interface CanvasComponentAddPropertyCommand {
+	type: "component.add-property";
+	componentId: string;
+	property: CanvasComponentProperty;
+	/** Insertion index into `properties` (append when omitted) — gives remove's inverse an exact slot. */
+	index?: number;
+	/** Write this exact revision instead of `prior + 1` (inverse convention). */
+	revision?: number;
+}
+
+/**
+ * Replace one property wholesale (rename, retarget, re-kind). The Property
+ * ID is STABLE (INV-6): `to.id` must equal `propertyId` — renaming a
+ * property never changes its identity, so instance overrides keep applying.
+ */
+export interface CanvasComponentUpdatePropertyCommand {
+	type: "component.update-property";
+	componentId: string;
+	propertyId: string;
+	to: CanvasComponentProperty;
+	revision?: number;
+}
+
+/**
+ * Remove a property. Existing instance overrides for the id are NOT touched
+ * — they become orphans, retained verbatim, and re-apply if the same
+ * Property ID is later restored compatibly (§10.3). The Editor owns the
+ * "overrides exist — confirm?" prompt; the command itself is unconditional.
+ */
+export interface CanvasComponentRemovePropertyCommand {
+	type: "component.remove-property";
+	componentId: string;
+	propertyId: string;
+	revision?: number;
+}
+
+/**
+ * Insert a new instance node referencing `componentId` (LC-INSTANCE-001).
+ * A dedicated command (not bare `node.create`) so the Source reference is
+ * validated at the boundary — a typo never silently creates a broken
+ * reference. `pageId` is required without `location`, like `node.create`.
+ */
+export interface CanvasComponentInstanceInsertCommand
+	extends CanvasCommandLocationOptions {
+	type: "component-instance.insert";
+	componentId: string;
+	/** Caller-supplied instance node id (deterministic/replayable). */
+	instanceId: string;
+	pageId?: string;
+	parentId?: string;
+	index?: number;
+	bounds: CanvasBounds;
+	transform?: Partial<CanvasTransform>;
+	overrides?: CanvasComponentOverrideMap;
+	name?: string;
+	layoutItem?: CanvasLayoutItem;
+}
+
+/**
+ * Set one typed override, keyed by Property ID (LC-INSTANCE-003, INV-6).
+ * Writes the entry verbatim — target validation happens at resolve time, so
+ * an entry whose property has since changed is retained as an orphan rather
+ * than rejected here (§10.3). The inverse restores the prior entry, or
+ * resets the key when there was none.
+ */
+export interface CanvasComponentInstanceSetOverrideCommand
+	extends CanvasCommandLocationOptions {
+	type: "component-instance.set-override";
+	nodeId: string;
+	propertyId: string;
+	value: CanvasComponentOverride;
+}
+
+/** Remove one override. Resetting an absent key is a validated no-op. */
+export interface CanvasComponentInstanceResetOverrideCommand
+	extends CanvasCommandLocationOptions {
+	type: "component-instance.reset-override";
+	nodeId: string;
+	propertyId: string;
+}
+
+/** Remove every override on the instance. The inverse restores the exact prior map. */
+export interface CanvasComponentInstanceResetAllOverridesCommand
+	extends CanvasCommandLocationOptions {
+	type: "component-instance.reset-all-overrides";
+	nodeId: string;
+}
+
 /**
  * A composite, reversible command: applies its `commands` in order as a single
  * undoable unit. Its inverse (produced by `applyCommand`) is another `batch`
@@ -305,7 +506,8 @@ export interface CanvasLayoutGeometryWrite {
  * padding, direction and alignment together is one `frame.set-layout`, hence
  * one Undo entry, rather than four commands.
  */
-export interface CanvasFrameSetLayoutCommand {
+export interface CanvasFrameSetLayoutCommand
+	extends CanvasCommandLocationOptions {
 	type: "frame.set-layout";
 	nodeId: string;
 	layout: CanvasAutoLayout;
@@ -320,7 +522,8 @@ export interface CanvasFrameSetLayoutCommand {
  * The inverse restores both the intent and every prior geometry value, so a
  * remove/undo round-trip is exact.
  */
-export interface CanvasFrameRemoveLayoutCommand {
+export interface CanvasFrameRemoveLayoutCommand
+	extends CanvasCommandLocationOptions {
 	type: "frame.remove-layout";
 	nodeId: string;
 	/** Resolved geometry to bake in as the descendants' new authoritative values. */
@@ -378,6 +581,17 @@ export type CanvasCommand =
 	| CanvasPageDeleteCommand
 	| CanvasAssetPutCommand
 	| CanvasAssetRemoveCommand
+	| CanvasComponentCreateCommand
+	| CanvasComponentRenameCommand
+	| CanvasComponentDuplicateCommand
+	| CanvasComponentDeleteCommand
+	| CanvasComponentAddPropertyCommand
+	| CanvasComponentUpdatePropertyCommand
+	| CanvasComponentRemovePropertyCommand
+	| CanvasComponentInstanceInsertCommand
+	| CanvasComponentInstanceSetOverrideCommand
+	| CanvasComponentInstanceResetOverrideCommand
+	| CanvasComponentInstanceResetAllOverridesCommand
 	| CanvasBatchCommand;
 
 export type CanvasCommandKind = CanvasCommand["type"];

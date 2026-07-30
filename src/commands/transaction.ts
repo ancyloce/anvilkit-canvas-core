@@ -6,7 +6,7 @@ import {
 	commandToChange,
 	commandToChangeRecord,
 } from "./change-events.js";
-import { applyCommand } from "./runtime.js";
+import { applyCommandCore, settleComponentRevisions } from "./runtime.js";
 import type {
 	CanvasBatchCommand,
 	CanvasCommand,
@@ -91,7 +91,10 @@ export function applyCommands(
 			commandIdFactory,
 		});
 		if (record !== null) records.push(record);
-		const result = applyCommand(working, cmd, applyOptions);
+		// The core, not the settling `applyCommand`: the transaction is ONE
+		// undoable unit, so each touched Source's revision settles exactly once
+		// at the end (plan 0023 M3-02), not once per sub-command.
+		const result = applyCommandCore(working, cmd, applyOptions);
 		working = result.ir;
 		return result.inverse;
 	};
@@ -103,5 +106,10 @@ export function applyCommands(
 		...(label !== undefined ? { label } : {}),
 		commands: inverses,
 	};
-	return { ir: working, inverse, changes, records };
+	return {
+		ir: settleComponentRevisions(ir, working),
+		inverse,
+		changes,
+		records,
+	};
 }

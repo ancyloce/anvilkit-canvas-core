@@ -1,4 +1,6 @@
 import { resolveNow } from "../clock.js";
+import { buildComponentGraph } from "../components/graph.js";
+import { propertyTargetsNode } from "../components/validate.js";
 import {
 	type AffineMatrix,
 	childrenBoundsFromExtents,
@@ -8,6 +10,7 @@ import {
 	toAffineMatrix,
 	transformedBoundsExtent,
 } from "../geometry/affine.js";
+import { createComponentInstance, createFrame } from "../ir/builders.js";
 import {
 	CanvasIRMutationError,
 	insertNode,
@@ -21,6 +24,10 @@ import { regenerateNodeIds } from "../ir/regenerate-ids.js";
 import type {
 	CanvasAutoLayout,
 	CanvasBounds,
+	CanvasComponentDefinition,
+	CanvasComponentInstanceNode,
+	CanvasComponentOverrideMap,
+	CanvasComponentProperty,
 	CanvasContainerNode,
 	CanvasFrameNode,
 	CanvasGroupNode,
@@ -32,8 +39,21 @@ import type {
 	CanvasPage,
 	CanvasTransform,
 } from "../ir/types.js";
-import { findNode, isContainerNode, parentOf } from "../ir/walkers.js";
-import { MAX_COMPOSITE_COMMAND_DESCENDANTS } from "../limits.js";
+import type { CanvasDocumentLocation } from "../ir/walkers.js";
+import {
+	findNode,
+	findNodeInSubtree,
+	isContainerNode,
+	MAX_TREE_DEPTH,
+	parentOf,
+	walkDocument,
+} from "../ir/walkers.js";
+import {
+	MAX_COMPONENT_DEFINITIONS_PER_DOCUMENT,
+	MAX_COMPONENT_OVERRIDES_PER_INSTANCE,
+	MAX_COMPONENT_PROPERTIES_PER_COMPONENT,
+	MAX_COMPOSITE_COMMAND_DESCENDANTS,
+} from "../limits.js";
 import { computeStylePatch } from "./apply-style.js";
 import type {
 	CanvasAnyNodeUpdateCommand,
@@ -41,6 +61,17 @@ import type {
 	CanvasAssetRemoveCommand,
 	CanvasBatchCommand,
 	CanvasCommand,
+	CanvasComponentAddPropertyCommand,
+	CanvasComponentCreateCommand,
+	CanvasComponentDeleteCommand,
+	CanvasComponentDuplicateCommand,
+	CanvasComponentInstanceInsertCommand,
+	CanvasComponentInstanceResetAllOverridesCommand,
+	CanvasComponentInstanceResetOverrideCommand,
+	CanvasComponentInstanceSetOverrideCommand,
+	CanvasComponentRemovePropertyCommand,
+	CanvasComponentRenameCommand,
+	CanvasComponentUpdatePropertyCommand,
 	CanvasFrameRemoveLayoutCommand,
 	CanvasFrameSetLayoutCommand,
 	CanvasImageReplaceCommand,
@@ -73,6 +104,7 @@ export type CanvasCommandErrorCode =
 	| "parent-not-found"
 	| "parent-not-group"
 	| "page-not-found"
+	| "location-not-found"
 	| "kind-mismatch"
 	| "asset-mismatch"
 	| "asset-not-found"
@@ -128,12 +160,31 @@ function expectPage(ir: CanvasIR, pageId: string): CanvasPage {
 function expectNode(
 	ir: CanvasIR,
 	id: string,
-): { node: CanvasNode; page: CanvasPage } {
-	const found = findNode(ir, id);
-	if (!found) {
-		throw new CanvasCommandError("node-not-found", `Node id "${id}" not found`);
+	location?: CanvasDocumentLocation,
+): { node: CanvasNode; page?: CanvasPage } {
+	if (!location) {
+		const found = findNode(ir, id);
+		if (!found) {
+			throw new CanvasCommandError(
+				"node-not-found",
+				`Node id "${id}" not found`,
+			);
+		}
+		return found;
 	}
-	return found;
+	const found = findNodeInSubtree(resolveScopeRoot(ir, location), id);
+	if (!found) {
+		throw new CanvasCommandError(
+			"node-not-found",
+			`Node id "${id}" not found in ${location.kind} "${location.id}"`,
+		);
+	}
+	return {
+		node: found.node,
+		...(location.kind === "page"
+			? { page: ir.pages.find((p) => p.id === location.id) }
+			: {}),
+	};
 }
 
 function rethrowMutationError(err: unknown): never {
@@ -143,20 +194,67 @@ function rethrowMutationError(err: unknown): never {
 				throw new CanvasCommandError("node-not-found", err.message);
 			case "parent-not-found":
 				throw new CanvasCommandError("parent-not-found", err.message);
-			// Removing/moving a page root is an invariant violation, not a missing
-			// parent — surface it distinctly so callers can tell the two apart.
+			// Removing/moving a page root (or a Source root) is an invariant
+			// violation, not a missing parent — surface it distinctly.
 			case "cannot-remove-page-root":
 			case "cannot-move-page-root":
+			case "cannot-remove-source-root":
+			case "cannot-move-source-root":
+			case "invalid-root-replacement":
 				throw new CanvasCommandError("invariant-violated", err.message);
 			case "parent-not-group":
 				throw new CanvasCommandError("parent-not-group", err.message);
 			case "index-out-of-range":
 				throw new CanvasCommandError("index-out-of-range", err.message);
+			case "location-not-found":
+				throw new CanvasCommandError("location-not-found", err.message);
 			case "cycle-detected":
 				throw new CanvasCommandError("invariant-violated", err.message);
 		}
 	}
 	throw err;
+}
+
+/**
+ * The tree a `location`-carrying command targets. Throws a typed
+ * `location-not-found` for a missing page/definition — a command that names
+ * a tree that does not exist is a caller defect, never a silent no-op.
+ */
+function resolveScopeRoot(
+	ir: CanvasIR,
+	location: CanvasDocumentLocation,
+): CanvasNode {
+	const root =
+		location.kind === "page"
+			? ir.pages.find((p) => p.id === location.id)?.root
+			: ir.components?.[location.id]?.root;
+	if (!root) {
+		throw new CanvasCommandError(
+			"location-not-found",
+			`${location.kind === "page" ? "Page" : "Component definition"} "${location.id}" not found`,
+		);
+	}
+	return root;
+}
+
+/**
+ * Scoped complement of `findNode`: absent `location` searches every page
+ * (the legacy behavior); a `location` searches exactly that tree — so a
+ * Source-scoped command can never accidentally hit a same-id page node and
+ * vice versa.
+ */
+function findNodeInScope(
+	ir: CanvasIR,
+	id: string,
+	location: CanvasDocumentLocation | undefined,
+): { node: CanvasNode; parent: CanvasContainerNode | null } | null {
+	if (!location) {
+		const found = findNode(ir, id);
+		if (!found) return null;
+		const parentResult = parentOf(ir, id);
+		return { node: found.node, parent: parentResult?.parent ?? null };
+	}
+	return findNodeInSubtree(resolveScopeRoot(ir, location), id);
 }
 
 /**
@@ -168,9 +266,10 @@ function assertUnlocked(
 	ir: CanvasIR,
 	nodeId: string,
 	options: CommandApplyOptions,
+	location?: CanvasDocumentLocation,
 ): void {
 	if (options.enforceLocked !== true) return;
-	const found = findNode(ir, nodeId);
+	const found = findNodeInScope(ir, nodeId, location);
 	if (found && found.node.locked === true) {
 		throw new CanvasCommandError(
 			"node-locked",
@@ -181,11 +280,45 @@ function assertUnlocked(
 
 function resolveParentId(
 	ir: CanvasIR,
-	pageId: string,
-	parentId: string | undefined,
+	cmd: {
+		pageId?: string;
+		parentId?: string;
+		location?: CanvasDocumentLocation;
+	},
 ): string {
-	const page = expectPage(ir, pageId);
-	return parentId ?? page.root.id;
+	if (cmd.location) {
+		return cmd.parentId ?? resolveScopeRoot(ir, cmd.location).id;
+	}
+	if (cmd.pageId === undefined) {
+		throw new CanvasCommandError(
+			"page-not-found",
+			"A node command without a location must carry pageId",
+		);
+	}
+	const page = expectPage(ir, cmd.pageId);
+	return cmd.parentId ?? page.root.id;
+}
+
+/**
+ * Spread-friendly `location` forwarding: mutation options and inverse
+ * commands carry the SAME location the command did, and none at all when the
+ * command had none (an absent key, not `location: undefined`).
+ */
+function locationSpread(cmd: { location?: CanvasDocumentLocation }): {
+	location?: CanvasDocumentLocation;
+} {
+	return cmd.location !== undefined ? { location: cmd.location } : {};
+}
+
+/** `pageId` for page-tree commands; typed error when neither it nor `location` is given. */
+function requirePageId(cmd: { type: string; pageId?: string }): string {
+	if (cmd.pageId === undefined) {
+		throw new CanvasCommandError(
+			"page-not-found",
+			`${cmd.type} without a location must carry pageId`,
+		);
+	}
+	return cmd.pageId;
 }
 
 function locateSiblingIndex(
@@ -207,13 +340,14 @@ function applyNodeCreate(
 	cmd: CanvasNodeCreateCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
-	const parentId = resolveParentId(ir, cmd.pageId, cmd.parentId);
+	const parentId = resolveParentId(ir, cmd);
 	let next: CanvasIR;
 	try {
 		next = insertNode(ir, {
 			parentId,
 			node: cmd.node,
 			...(cmd.index !== undefined ? { index: cmd.index } : {}),
+			...(cmd.location !== undefined ? { location: cmd.location } : {}),
 			now: options.now,
 		});
 	} catch (err) {
@@ -222,6 +356,7 @@ function applyNodeCreate(
 	const inverse: CanvasNodeDeleteCommand = {
 		type: "node.delete",
 		nodeId: cmd.node.id,
+		...(cmd.location !== undefined ? { location: cmd.location } : {}),
 	};
 	return { ir: next, inverse };
 }
@@ -231,29 +366,64 @@ function applyNodeDelete(
 	cmd: CanvasNodeDeleteCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
-	assertUnlocked(ir, cmd.nodeId, options);
-	const { node, page } = expectNode(ir, cmd.nodeId);
-	const parentResult = parentOf(ir, cmd.nodeId);
-	if (!parentResult) {
-		throw new CanvasCommandError(
-			"parent-not-found",
-			`Node "${cmd.nodeId}" has no parent (likely a page root)`,
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	let node: CanvasNode;
+	let parent: CanvasContainerNode;
+	// The inverse re-creates the node in the same tree: `pageId` when it lives
+	// on a page (resolved for the legacy path exactly as before), `location`
+	// when the command was scoped.
+	let pageId: string | undefined;
+	if (cmd.location) {
+		const found = findNodeInSubtree(
+			resolveScopeRoot(ir, cmd.location),
+			cmd.nodeId,
 		);
+		if (!found) {
+			throw new CanvasCommandError(
+				"node-not-found",
+				`Node id "${cmd.nodeId}" not found in ${cmd.location.kind} "${cmd.location.id}"`,
+			);
+		}
+		if (!found.parent) {
+			throw new CanvasCommandError(
+				"parent-not-found",
+				`Node "${cmd.nodeId}" has no parent (a tree root)`,
+			);
+		}
+		node = found.node;
+		parent = found.parent;
+		pageId = cmd.location.kind === "page" ? cmd.location.id : undefined;
+	} else {
+		const found = expectNode(ir, cmd.nodeId);
+		const parentResult = parentOf(ir, cmd.nodeId);
+		if (!parentResult) {
+			throw new CanvasCommandError(
+				"parent-not-found",
+				`Node "${cmd.nodeId}" has no parent (likely a page root)`,
+			);
+		}
+		node = found.node;
+		parent = parentResult.parent;
+		pageId = found.page?.id;
 	}
-	const parent = parentResult.parent;
 	const index = locateSiblingIndex(parent, cmd.nodeId);
 	let next: CanvasIR;
 	try {
-		next = removeNode(ir, { id: cmd.nodeId, now: options.now });
+		next = removeNode(ir, {
+			id: cmd.nodeId,
+			...(cmd.location !== undefined ? { location: cmd.location } : {}),
+			now: options.now,
+		});
 	} catch (err) {
 		rethrowMutationError(err);
 	}
 	const inverse: CanvasNodeCreateCommand = {
 		type: "node.create",
 		node,
-		pageId: page.id,
+		...(pageId !== undefined ? { pageId } : {}),
 		parentId: parent.id,
 		index,
+		...(cmd.location !== undefined ? { location: cmd.location } : {}),
 	};
 	return { ir: next, inverse };
 }
@@ -263,8 +433,8 @@ function applyNodeMove(
 	cmd: CanvasNodeMoveCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
-	assertUnlocked(ir, cmd.nodeId, options);
-	const { node } = expectNode(ir, cmd.nodeId);
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	const { node } = expectNode(ir, cmd.nodeId, cmd.location);
 	const currentX = node.transform.x;
 	const currentY = node.transform.y;
 	let next: CanvasIR;
@@ -274,6 +444,7 @@ function applyNodeMove(
 			patch: {
 				transform: { ...node.transform, x: cmd.to.x, y: cmd.to.y },
 			} as Partial<Omit<CanvasNode, "id" | "type">>,
+			...locationSpread(cmd),
 			now: options.now,
 		});
 	} catch (err) {
@@ -284,6 +455,7 @@ function applyNodeMove(
 		nodeId: cmd.nodeId,
 		from: { x: cmd.to.x, y: cmd.to.y },
 		to: { x: currentX, y: currentY },
+		...locationSpread(cmd),
 	};
 	return { ir: next, inverse };
 }
@@ -293,8 +465,8 @@ function applyNodeResize(
 	cmd: CanvasNodeResizeCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
-	assertUnlocked(ir, cmd.nodeId, options);
-	const { node } = expectNode(ir, cmd.nodeId);
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	const { node } = expectNode(ir, cmd.nodeId, cmd.location);
 	const currentX = node.transform.x;
 	const currentY = node.transform.y;
 	const currentW = node.bounds.width;
@@ -307,6 +479,7 @@ function applyNodeResize(
 				transform: { ...node.transform, x: cmd.to.x, y: cmd.to.y },
 				bounds: { width: cmd.to.width, height: cmd.to.height },
 			} as Partial<Omit<CanvasNode, "id" | "type">>,
+			...locationSpread(cmd),
 			now: options.now,
 		});
 	} catch (err) {
@@ -327,6 +500,7 @@ function applyNodeResize(
 			width: currentW,
 			height: currentH,
 		},
+		...locationSpread(cmd),
 	};
 	return { ir: next, inverse };
 }
@@ -336,8 +510,8 @@ function applyNodeRotate(
 	cmd: CanvasNodeRotateCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
-	assertUnlocked(ir, cmd.nodeId, options);
-	const { node } = expectNode(ir, cmd.nodeId);
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	const { node } = expectNode(ir, cmd.nodeId, cmd.location);
 	const currentRotation = node.transform.rotation;
 	let next: CanvasIR;
 	try {
@@ -346,6 +520,7 @@ function applyNodeRotate(
 			patch: {
 				transform: { ...node.transform, rotation: cmd.to },
 			} as Partial<Omit<CanvasNode, "id" | "type">>,
+			...locationSpread(cmd),
 			now: options.now,
 		});
 	} catch (err) {
@@ -356,6 +531,7 @@ function applyNodeRotate(
 		nodeId: cmd.nodeId,
 		from: cmd.to,
 		to: currentRotation,
+		...locationSpread(cmd),
 	};
 	return { ir: next, inverse };
 }
@@ -373,9 +549,9 @@ function applyNodeUpdate(
 	// field edits through under this exemption.
 	const isUnlockPatch = cmd.patch.locked === false;
 	if (!isUnlockPatch) {
-		assertUnlocked(ir, cmd.nodeId, options);
+		assertUnlocked(ir, cmd.nodeId, options, cmd.location);
 	}
-	const { node } = expectNode(ir, cmd.nodeId);
+	const { node } = expectNode(ir, cmd.nodeId, cmd.location);
 	if (node.type !== cmd.kind) {
 		throw new CanvasCommandError(
 			"kind-mismatch",
@@ -394,6 +570,7 @@ function applyNodeUpdate(
 		next = updateNode<CanvasNodeKind>(ir, {
 			id: cmd.nodeId,
 			patch: cmd.patch as Partial<Omit<CanvasNode, "id" | "type">>,
+			...locationSpread(cmd),
 			now: options.now,
 		});
 	} catch (err) {
@@ -406,6 +583,7 @@ function applyNodeUpdate(
 		patch: inversePatch as Partial<
 			Omit<CanvasNodeByKind<CanvasNodeKind>, "id" | "type">
 		>,
+		...locationSpread(cmd),
 	} as CanvasAnyNodeUpdateCommand;
 	return { ir: next, inverse };
 }
@@ -415,8 +593,8 @@ function applyNodeApplyStyle(
 	cmd: CanvasNodeApplyStyleCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
-	assertUnlocked(ir, cmd.nodeId, options);
-	const { node } = expectNode(ir, cmd.nodeId);
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	const { node } = expectNode(ir, cmd.nodeId, cmd.location);
 	const { patch } = computeStylePatch(node, cmd.style);
 	const inversePatch: Record<string, unknown> = {};
 	const nodeRecord = node as unknown as Record<string, unknown>;
@@ -428,6 +606,7 @@ function applyNodeApplyStyle(
 		nodeId: cmd.nodeId,
 		kind: node.type,
 		patch: inversePatch,
+		...locationSpread(cmd),
 	} as CanvasAnyNodeUpdateCommand;
 	if (Object.keys(patch).length === 0) {
 		// Every key was incompatible — a reported no-op, never an error (FR-121).
@@ -438,6 +617,7 @@ function applyNodeApplyStyle(
 		next = updateNode<CanvasNodeKind>(ir, {
 			id: cmd.nodeId,
 			patch: patch as Partial<Omit<CanvasNode, "id" | "type">>,
+			...locationSpread(cmd),
 			now: options.now,
 		});
 	} catch (err) {
@@ -451,8 +631,8 @@ function applyImageReplace(
 	cmd: CanvasImageReplaceCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
-	assertUnlocked(ir, cmd.nodeId, options);
-	const { node } = expectNode(ir, cmd.nodeId);
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	const { node } = expectNode(ir, cmd.nodeId, cmd.location);
 	if (node.type !== "image") {
 		throw new CanvasCommandError(
 			"kind-mismatch",
@@ -471,6 +651,7 @@ function applyImageReplace(
 		next = updateNode<"image">(ir, {
 			id: cmd.nodeId,
 			patch: { assetId: cmd.toAssetId },
+			...locationSpread(cmd),
 			now: options.now,
 		});
 	} catch (err) {
@@ -481,6 +662,7 @@ function applyImageReplace(
 		nodeId: cmd.nodeId,
 		fromAssetId: cmd.toAssetId,
 		toAssetId: cmd.fromAssetId,
+		...locationSpread(cmd),
 	};
 	return { ir: next, inverse };
 }
@@ -539,7 +721,7 @@ function applyNodeGroup(
 	options: CommandApplyOptions,
 ): CommandApplyResult {
 	for (const childId of cmd.childIds) {
-		assertUnlocked(ir, childId, options);
+		assertUnlocked(ir, childId, options, cmd.location);
 	}
 	if (cmd.childIds.length === 0) {
 		throw new CanvasCommandError(
@@ -554,8 +736,8 @@ function applyNodeGroup(
 			"node.group childIds contains duplicates",
 		);
 	}
-	const page = expectPage(ir, cmd.pageId);
-	if (findNode(ir, cmd.groupId)) {
+	const page = cmd.location ? undefined : expectPage(ir, requirePageId(cmd));
+	if (findNodeInScope(ir, cmd.groupId, cmd.location)) {
 		throw new CanvasCommandError(
 			"invariant-violated",
 			`Group id "${cmd.groupId}" already exists`,
@@ -566,30 +748,47 @@ function applyNodeGroup(
 	let parent: CanvasContainerNode | undefined;
 	const entries: GroupChildEntry[] = [];
 	for (const id of cmd.childIds) {
-		const found = findNode(ir, id);
-		if (!found || found.page.id !== page.id) {
-			throw new CanvasCommandError(
-				"node-not-found",
-				`Node "${id}" not found on page "${cmd.pageId}"`,
-			);
+		let node: CanvasNode;
+		let childParent: CanvasContainerNode | null;
+		if (cmd.location) {
+			const found = findNodeInSubtree(resolveScopeRoot(ir, cmd.location), id);
+			if (!found) {
+				throw new CanvasCommandError(
+					"node-not-found",
+					`Node "${id}" not found in ${cmd.location.kind} "${cmd.location.id}"`,
+				);
+			}
+			node = found.node;
+			childParent = found.parent;
+		} else {
+			const found = findNode(ir, id);
+			if (!found || (page && found.page.id !== page.id)) {
+				throw new CanvasCommandError(
+					"node-not-found",
+					`Node "${id}" not found on page "${cmd.pageId}"`,
+				);
+			}
+			node = found.node;
+			childParent = parentOf(ir, id)?.parent ?? null;
 		}
-		const parentResult = parentOf(ir, id);
-		if (!parentResult) {
+		if (!childParent) {
 			throw new CanvasCommandError(
 				"invariant-violated",
-				`Cannot group page-root node "${id}"`,
+				cmd.location?.kind === "component"
+					? `Cannot group Component Source root "${id}"`
+					: `Cannot group page-root node "${id}"`,
 			);
 		}
 		if (parent === undefined) {
-			parent = parentResult.parent;
-		} else if (parent.id !== parentResult.parent.id) {
+			parent = childParent;
+		} else if (parent.id !== childParent.id) {
 			throw new CanvasCommandError(
 				"invariant-violated",
 				"node.group requires all childIds to share the same parent",
 			);
 		}
-		const index = parentResult.parent.children.findIndex((c) => c.id === id);
-		entries.push({ id, node: found.node, index });
+		const index = childParent.children.findIndex((c) => c.id === id);
+		entries.push({ id, node, index });
 	}
 	if (parent === undefined) {
 		throw new CanvasCommandError(
@@ -649,6 +848,7 @@ function applyNodeGroup(
 				remaining.splice(minIndex, 0, groupNode);
 				return remaining;
 			},
+			...locationSpread(cmd),
 			now: options.now,
 		});
 	} catch (err) {
@@ -658,6 +858,7 @@ function applyNodeGroup(
 		type: "node.ungroup",
 		groupId: cmd.groupId,
 		restore: entries.map((e) => ({ id: e.id, index: e.index })),
+		...locationSpread(cmd),
 	};
 	return { ir: next, inverse };
 }
@@ -710,6 +911,7 @@ function applyLayoutGeometryWrites(
 	ir: CanvasIR,
 	writes: readonly CanvasLayoutGeometryWrite[] | undefined,
 	options: CommandApplyOptions,
+	location?: CanvasDocumentLocation,
 ): { ir: CanvasIR; prior: CanvasLayoutGeometryWrite[] } {
 	const prior: CanvasLayoutGeometryWrite[] = [];
 	let next = ir;
@@ -719,8 +921,8 @@ function applyLayoutGeometryWrites(
 		"geometry writes",
 	);
 	for (const write of writes ?? []) {
-		assertUnlocked(next, write.nodeId, options);
-		const { node } = expectNode(next, write.nodeId);
+		assertUnlocked(next, write.nodeId, options, location);
+		const { node } = expectNode(next, write.nodeId, location);
 		const patch: Record<string, unknown> = {};
 		const before: CanvasLayoutGeometryWrite = { nodeId: write.nodeId };
 		if (write.transform !== undefined) {
@@ -741,6 +943,7 @@ function applyLayoutGeometryWrites(
 			next = updateNode<CanvasNodeKind>(next, {
 				id: write.nodeId,
 				patch: patch as Partial<Omit<CanvasNode, "id" | "type">>,
+				...(location !== undefined ? { location } : {}),
 				now: options.now,
 			});
 		} catch (err) {
@@ -751,8 +954,12 @@ function applyLayoutGeometryWrites(
 	return { ir: next, prior };
 }
 
-function expectFrame(ir: CanvasIR, nodeId: string): CanvasFrameNode {
-	const { node } = expectNode(ir, nodeId);
+function expectFrame(
+	ir: CanvasIR,
+	nodeId: string,
+	location?: CanvasDocumentLocation,
+): CanvasFrameNode {
+	const { node } = expectNode(ir, nodeId, location);
 	if (node.type !== "frame") {
 		throw new CanvasCommandError(
 			"kind-mismatch",
@@ -770,11 +977,19 @@ function invertFrameLayoutChange(
 	nodeId: string,
 	previous: CanvasAutoLayout | undefined,
 	prior: readonly CanvasLayoutGeometryWrite[],
+	location?: CanvasDocumentLocation,
 ): CanvasFrameSetLayoutCommand | CanvasFrameRemoveLayoutCommand {
 	const geometry = prior.length > 0 ? { geometry: prior } : {};
+	const scope = location !== undefined ? { location } : {};
 	return previous
-		? { type: "frame.set-layout", nodeId, layout: previous, ...geometry }
-		: { type: "frame.remove-layout", nodeId, ...geometry };
+		? {
+				type: "frame.set-layout",
+				nodeId,
+				layout: previous,
+				...geometry,
+				...scope,
+			}
+		: { type: "frame.remove-layout", nodeId, ...geometry, ...scope };
 }
 
 function applyFrameSetLayout(
@@ -782,12 +997,13 @@ function applyFrameSetLayout(
 	cmd: CanvasFrameSetLayoutCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
-	assertUnlocked(ir, cmd.nodeId, options);
-	const previous = expectFrame(ir, cmd.nodeId).autoLayout;
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	const previous = expectFrame(ir, cmd.nodeId, cmd.location).autoLayout;
 	const { ir: withGeometry, prior } = applyLayoutGeometryWrites(
 		ir,
 		cmd.geometry,
 		options,
+		cmd.location,
 	);
 	let next: CanvasIR;
 	try {
@@ -796,6 +1012,7 @@ function applyFrameSetLayout(
 			patch: { autoLayout: cmd.layout } as Partial<
 				Omit<CanvasNode, "id" | "type">
 			>,
+			...locationSpread(cmd),
 			now: options.now,
 		});
 	} catch (err) {
@@ -803,7 +1020,7 @@ function applyFrameSetLayout(
 	}
 	return {
 		ir: next,
-		inverse: invertFrameLayoutChange(cmd.nodeId, previous, prior),
+		inverse: invertFrameLayoutChange(cmd.nodeId, previous, prior, cmd.location),
 	};
 }
 
@@ -812,8 +1029,8 @@ function applyFrameRemoveLayout(
 	cmd: CanvasFrameRemoveLayoutCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
-	assertUnlocked(ir, cmd.nodeId, options);
-	const frame = expectFrame(ir, cmd.nodeId);
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	const frame = expectFrame(ir, cmd.nodeId, cmd.location);
 	const previous = frame.autoLayout;
 	// The inverse must be able to restore every descendant's prior geometry, so
 	// the subtree — not just the supplied payload — is what has to stay bounded.
@@ -826,6 +1043,7 @@ function applyFrameRemoveLayout(
 		ir,
 		cmd.geometry,
 		options,
+		cmd.location,
 	);
 	let next: CanvasIR;
 	try {
@@ -836,6 +1054,7 @@ function applyFrameRemoveLayout(
 				Omit<CanvasNode, "id" | "type">
 			>,
 			id: cmd.nodeId,
+			...locationSpread(cmd),
 			now: options.now,
 		});
 	} catch (err) {
@@ -843,7 +1062,7 @@ function applyFrameRemoveLayout(
 	}
 	return {
 		ir: next,
-		inverse: invertFrameLayoutChange(cmd.nodeId, previous, prior),
+		inverse: invertFrameLayoutChange(cmd.nodeId, previous, prior, cmd.location),
 	};
 }
 
@@ -1012,8 +1231,8 @@ function applyNodeUngroup(
 	cmd: CanvasNodeUngroupCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
-	assertUnlocked(ir, cmd.groupId, options);
-	const found = expectNode(ir, cmd.groupId);
+	assertUnlocked(ir, cmd.groupId, options, cmd.location);
+	const found = expectNode(ir, cmd.groupId, cmd.location);
 	if (found.node.type !== "group") {
 		throw new CanvasCommandError(
 			"kind-mismatch",
@@ -1021,14 +1240,17 @@ function applyNodeUngroup(
 		);
 	}
 	const group = found.node;
-	const parentResult = parentOf(ir, cmd.groupId);
-	if (!parentResult) {
+	const scopedParent = cmd.location
+		? (findNodeInSubtree(resolveScopeRoot(ir, cmd.location), cmd.groupId)
+				?.parent ?? null)
+		: (parentOf(ir, cmd.groupId)?.parent ?? null);
+	if (!scopedParent || !isContainerNode(scopedParent)) {
 		throw new CanvasCommandError(
 			"invariant-violated",
 			`Cannot ungroup parentless group "${cmd.groupId}" (likely a page root)`,
 		);
 	}
-	const parent = parentResult.parent;
+	const parent = scopedParent;
 	const groupIndex = parent.children.findIndex((c) => c.id === cmd.groupId);
 	const children = group.children;
 	const childIds = children.map((c) => c.id);
@@ -1079,6 +1301,7 @@ function applyNodeUngroup(
 				result.splice(groupIndex, 0, ...spillChildren);
 				return result;
 			},
+			...locationSpread(cmd),
 			now: options.now,
 		});
 	} catch (err) {
@@ -1086,10 +1309,11 @@ function applyNodeUngroup(
 	}
 	const inverse: CanvasNodeGroupCommand = {
 		type: "node.group",
-		pageId: found.page.id,
+		...(found.page !== undefined ? { pageId: found.page.id } : {}),
 		childIds,
 		groupId: cmd.groupId,
 		groupTemplate,
+		...locationSpread(cmd),
 	};
 	return { ir: next, inverse };
 }
@@ -1311,7 +1535,9 @@ function applyBatch(
 	let working = ir;
 	const inverses: CanvasCommand[] = [];
 	for (const sub of cmd.commands) {
-		const result = applyCommand(working, sub, options);
+		// The core, not the settling wrapper: the whole batch settles Source
+		// revisions once at ITS boundary (see `settleComponentRevisions`).
+		const result = applyCommandCore(working, sub, options);
 		working = result.ir;
 		inverses.push(result.inverse);
 	}
@@ -1329,15 +1555,17 @@ function applyNodeReorder(
 	cmd: CanvasNodeReorderCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
-	assertUnlocked(ir, cmd.nodeId, options);
-	const parentResult = parentOf(ir, cmd.nodeId);
-	if (!parentResult) {
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	const found = findNodeInScope(ir, cmd.nodeId, cmd.location);
+	// Missing node and tree root fail identically (the legacy `parentOf`
+	// contract): neither has a parent to reorder within.
+	if (!found || !found.parent) {
 		throw new CanvasCommandError(
 			"parent-not-found",
 			`Node "${cmd.nodeId}" has no parent (likely a page root)`,
 		);
 	}
-	const parent = parentResult.parent;
+	const parent = found.parent;
 	const fromIndex = parent.children.findIndex((c) => c.id === cmd.nodeId);
 	if (fromIndex < 0) {
 		throw new CanvasCommandError(
@@ -1353,6 +1581,7 @@ function applyNodeReorder(
 			parentId: parent.id,
 			fromIndex,
 			toIndex,
+			...locationSpread(cmd),
 			now: options.now,
 		});
 	} catch (err) {
@@ -1362,6 +1591,7 @@ function applyNodeReorder(
 		type: "node.reorder",
 		nodeId: cmd.nodeId,
 		toIndex: fromIndex,
+		...locationSpread(cmd),
 	};
 	return { ir: next, inverse };
 }
@@ -1371,15 +1601,15 @@ function applyNodeReparent(
 	cmd: CanvasNodeReparentCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult {
-	assertUnlocked(ir, cmd.nodeId, options);
-	const parentResult = parentOf(ir, cmd.nodeId);
-	if (!parentResult) {
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	const found = findNodeInScope(ir, cmd.nodeId, cmd.location);
+	if (!found || !found.parent) {
 		throw new CanvasCommandError(
 			"parent-not-found",
 			`Node "${cmd.nodeId}" has no parent (missing, or a page root — page roots cannot be reparented)`,
 		);
 	}
-	const fromParent = parentResult.parent;
+	const fromParent = found.parent;
 	const fromIndex = fromParent.children.findIndex((c) => c.id === cmd.nodeId);
 	if (fromIndex < 0) {
 		throw new CanvasCommandError(
@@ -1387,7 +1617,7 @@ function applyNodeReparent(
 			`Node "${cmd.nodeId}" not found under parent "${fromParent.id}"`,
 		);
 	}
-	const target = findNode(ir, cmd.toParentId);
+	const target = findNodeInScope(ir, cmd.toParentId, cmd.location);
 	if (!target) {
 		throw new CanvasCommandError(
 			"parent-not-found",
@@ -1412,6 +1642,7 @@ function applyNodeReparent(
 			id: cmd.nodeId,
 			newParentId: cmd.toParentId,
 			index: toIndex,
+			...locationSpread(cmd),
 			now: options.now,
 		});
 	} catch (err) {
@@ -1422,6 +1653,7 @@ function applyNodeReparent(
 		nodeId: cmd.nodeId,
 		toParentId: fromParent.id,
 		toIndex: fromIndex,
+		...locationSpread(cmd),
 	};
 	return { ir: next, inverse };
 }
@@ -1628,7 +1860,892 @@ function applyAssetRemove(
 	return { ir: next, inverse };
 }
 
-export function applyCommand(
+// ---------------------------------------------------------------------------
+// Local Components — registry + instance command handlers (plan 0023 M3-02).
+// ---------------------------------------------------------------------------
+
+function expectDefinition(
+	ir: CanvasIR,
+	componentId: string,
+): CanvasComponentDefinition {
+	const definition = ir.components?.[componentId];
+	if (!definition) {
+		throw new CanvasCommandError(
+			"location-not-found",
+			`Component definition "${componentId}" not found`,
+		);
+	}
+	return definition;
+}
+
+/**
+ * Rewrite one Registry entry (metadata edits like rename). Content edits to
+ * a Source TREE go through the scoped mutation engine instead — this is only
+ * for definition-level fields the tree engine cannot express.
+ */
+function withDefinition(
+	ir: CanvasIR,
+	componentId: string,
+	definition: CanvasComponentDefinition,
+	options: CommandApplyOptions,
+): CanvasIR {
+	return bumpMetadata(
+		{
+			...ir,
+			components: { ...ir.components, [componentId]: definition },
+		},
+		options,
+	);
+}
+
+/** Every node id used anywhere in the document — pages and Source trees. */
+function collectDocumentNodeIds(ir: CanvasIR): Set<string> {
+	const ids = new Set<string>();
+	walkDocument(ir, ({ node }) => {
+		ids.add(node.id);
+	});
+	return ids;
+}
+
+/**
+ * Reject a registry write that would break the component graph: a duplicate
+ * definition id, colliding Source node ids (INV-2), a dependency cycle, or
+ * an over-deep nested chain (LC-GRAPH: reject on write).
+ */
+function assertRegistryAddable(
+	ir: CanvasIR,
+	definition: CanvasComponentDefinition,
+): void {
+	if (ir.components?.[definition.id]) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Component id "${definition.id}" already exists`,
+		);
+	}
+	if (
+		Object.keys(ir.components ?? {}).length >=
+		MAX_COMPONENT_DEFINITIONS_PER_DOCUMENT
+	) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Registry is full: MAX_COMPONENT_DEFINITIONS_PER_DOCUMENT (${MAX_COMPONENT_DEFINITIONS_PER_DOCUMENT})`,
+		);
+	}
+	const existingIds = collectDocumentNodeIds(ir);
+	const incoming = findDuplicateSourceNodeId(definition.root, existingIds);
+	if (incoming) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Source node id "${incoming}" already exists elsewhere in the document (INV-2)`,
+		);
+	}
+	const graph = buildComponentGraph({
+		...ir.components,
+		[definition.id]: definition,
+	});
+	if (graph.cycles.length > 0) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Adding component "${definition.id}" would create a dependency cycle: ${graph.cycles[0]?.join(" → ")}`,
+		);
+	}
+	if (graph.depthExceeded.length > 0) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Adding component "${definition.id}" would exceed the nested-component depth cap`,
+		);
+	}
+}
+
+function findDuplicateSourceNodeId(
+	root: CanvasNode,
+	existing: ReadonlySet<string>,
+	depth = 0,
+): string | null {
+	if (depth > MAX_TREE_DEPTH) return null;
+	if (existing.has(root.id)) return root.id;
+	if (isContainerNode(root)) {
+		for (const child of root.children) {
+			const hit = findDuplicateSourceNodeId(child, existing, depth + 1);
+			if (hit) return hit;
+		}
+	}
+	return null;
+}
+
+function applyComponentCreate(
+	ir: CanvasIR,
+	cmd: CanvasComponentCreateCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	if (cmd.mode !== "restore") {
+		return applyComponentCreateFromSelection(ir, cmd, options);
+	}
+	assertRegistryAddable(ir, cmd.definition);
+	const next = withDefinition(ir, cmd.definition.id, cmd.definition, options);
+	const inverse: CanvasComponentDeleteCommand = {
+		type: "component.delete",
+		componentId: cmd.definition.id,
+	};
+	return { ir: next, inverse };
+}
+
+const IDENTITY_TRANSFORM: CanvasTransform = {
+	x: 0,
+	y: 0,
+	rotation: 0,
+	scaleX: 1,
+	scaleY: 1,
+};
+
+/**
+ * M3-04 + M3-05: turn a same-parent selection into a Component Source plus
+ * its first instance, atomically, with visual placement unchanged (AC-001).
+ *
+ * Root strategy: a single selected group/frame is PROMOTED to the Source
+ * root (its transform moves onto the instance; the resolver composes the
+ * instance placement over the root, so parity is exact). A leaf or
+ * multi-selection is WRAPPED in a new frame at the selection's tight
+ * parent-local AABB, children re-expressed frame-locally in paint order —
+ * Auto Layout is never inferred (LC-CREATE-001).
+ *
+ * Source node ids are remapped via `regenerateNodeIds` (INV-2); the root
+ * takes the caller-allocated `sourceRootId`, and the caller also allocates
+ * `componentId`/`firstInstanceId`, so replay is deterministic at every
+ * externally-referenced id. Validation of the final component graph runs
+ * AFTER the instance is placed, so a create inside a Source tree that would
+ * close a dependency cycle is rejected whole (nothing escapes — the input
+ * document is never mutated).
+ */
+function applyComponentCreateFromSelection(
+	ir: CanvasIR,
+	cmd: Extract<CanvasComponentCreateCommand, { mode: "from-selection" }>,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	if (cmd.selectedNodeIds.length === 0) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			"component.create requires at least one selected node",
+		);
+	}
+	if (new Set(cmd.selectedNodeIds).size !== cmd.selectedNodeIds.length) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			"component.create selectedNodeIds contains duplicates",
+		);
+	}
+	// Resolve the tree the selection lives in: explicit, or the page holding
+	// the first selected node.
+	let location = cmd.location;
+	if (!location) {
+		const first = cmd.selectedNodeIds[0] as string;
+		const page = ir.pages.find((p) => findNodeInSubtree(p.root, first));
+		if (!page) {
+			throw new CanvasCommandError(
+				"node-not-found",
+				`Node id "${first}" not found on any page`,
+			);
+		}
+		location = { kind: "page", id: page.id };
+	}
+	const scopeRoot = resolveScopeRoot(ir, location);
+	// Same-parent validation (the node.group contract): one parent, sibling
+	// set — which also excludes ancestor/descendant pairs by construction.
+	let parent: CanvasContainerNode | undefined;
+	const entries: GroupChildEntry[] = [];
+	for (const id of cmd.selectedNodeIds) {
+		assertUnlocked(ir, id, options, location);
+		const found = findNodeInSubtree(scopeRoot, id);
+		if (!found) {
+			throw new CanvasCommandError(
+				"node-not-found",
+				`Node "${id}" not found in ${location.kind} "${location.id}"`,
+			);
+		}
+		if (!found.parent) {
+			throw new CanvasCommandError(
+				"invariant-violated",
+				`Cannot create a component from tree root "${id}"`,
+			);
+		}
+		if (parent === undefined) {
+			parent = found.parent;
+		} else if (parent.id !== found.parent.id) {
+			throw new CanvasCommandError(
+				"invariant-violated",
+				"component.create requires all selected nodes to share the same parent",
+			);
+		}
+		const index = found.parent.children.findIndex((c) => c.id === id);
+		entries.push({ id, node: found.node, index });
+	}
+	if (parent === undefined) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			"component.create could not resolve a parent",
+		);
+	}
+	entries.sort((a, b) => a.index - b.index);
+	const minIndex = (entries[0] as GroupChildEntry).index;
+	// Caller-allocated ids must be globally fresh — simpler and stricter than
+	// "fresh after the selection vanishes", and what an id factory produces
+	// anyway.
+	const currentIds = collectDocumentNodeIds(ir);
+	for (const [label, id] of [
+		["firstInstanceId", cmd.firstInstanceId],
+		["sourceRootId", cmd.sourceRootId],
+	] as const) {
+		if (currentIds.has(id)) {
+			throw new CanvasCommandError(
+				"invariant-violated",
+				`component.create ${label} "${id}" already exists in the document`,
+			);
+		}
+	}
+
+	const single = entries.length === 1 ? (entries[0] as GroupChildEntry) : null;
+	const singleContainer =
+		single && isContainerNode(single.node) ? single.node : null;
+	const strategy =
+		cmd.rootStrategy ?? (singleContainer ? "reuse-container" : "wrap-in-frame");
+
+	let sourceRootDraft: CanvasNode;
+	let instanceTransform: Partial<CanvasTransform>;
+	let instanceBounds: CanvasBounds;
+	let instanceZIndex: number;
+	let instanceLayoutItem = singleContainer?.layoutItem;
+	if (strategy === "reuse-container") {
+		if (!singleContainer) {
+			throw new CanvasCommandError(
+				"invariant-violated",
+				"rootStrategy reuse-container requires exactly one selected group/frame",
+			);
+		}
+		// The container's placement moves onto the instance; the Source root is
+		// normalized to identity (the resolver overwrites root transform/bounds
+		// with the instance's — §9.3). Its slot in a parent Auto Layout
+		// (`layoutItem`) belongs to the instance, not the Source.
+		const { layoutItem: _lifted, ...rest } = singleContainer;
+		sourceRootDraft = { ...rest, transform: IDENTITY_TRANSFORM };
+		instanceTransform = singleContainer.transform;
+		instanceBounds = singleContainer.bounds;
+		instanceZIndex = singleContainer.zIndex ?? 0;
+	} else {
+		// Tight parent-local AABB (transform-aware) — NOT the origin-anchored
+		// children-bounds used by node.group, which would inflate the frame.
+		let minX = Number.POSITIVE_INFINITY;
+		let minY = Number.POSITIVE_INFINITY;
+		let maxX = Number.NEGATIVE_INFINITY;
+		let maxY = Number.NEGATIVE_INFINITY;
+		for (const entry of entries) {
+			const ext = transformedBoundsExtent(
+				entry.node.transform,
+				entry.node.bounds.width,
+				entry.node.bounds.height,
+			);
+			if (ext.minX < minX) minX = ext.minX;
+			if (ext.minY < minY) minY = ext.minY;
+			if (ext.maxX > maxX) maxX = ext.maxX;
+			if (ext.maxY > maxY) maxY = ext.maxY;
+		}
+		instanceBounds = { width: maxX - minX, height: maxY - minY };
+		instanceTransform = { x: minX, y: minY };
+		instanceZIndex = 0;
+		instanceLayoutItem = undefined;
+		// Children re-expressed frame-locally, in sibling paint order; Auto
+		// Layout is never inferred (the wrap frame is a plain frame).
+		sourceRootDraft = createFrame({
+			id: cmd.sourceRootId,
+			bounds: instanceBounds,
+			children: entries.map((entry) => ({
+				...entry.node,
+				transform: {
+					...entry.node.transform,
+					x: entry.node.transform.x - minX,
+					y: entry.node.transform.y - minY,
+				},
+			})),
+		});
+	}
+	// Fresh Source node ids (INV-2), then pin the root to the caller's id.
+	const { node: remappedRoot } = regenerateNodeIds(sourceRootDraft);
+	const sourceRoot: CanvasNode = { ...remappedRoot, id: cmd.sourceRootId };
+	const definition: CanvasComponentDefinition = {
+		id: cmd.componentId,
+		name: cmd.name ?? "Component",
+		revision: 1,
+		root: sourceRoot,
+		properties: [],
+	};
+
+	const instance = createComponentInstance({
+		id: cmd.firstInstanceId,
+		componentId: cmd.componentId,
+		bounds: instanceBounds,
+		transform: instanceTransform,
+		zIndex: instanceZIndex,
+		...(instanceLayoutItem !== undefined
+			? { layoutItem: instanceLayoutItem }
+			: {}),
+	});
+	const selectedIds = new Set(cmd.selectedNodeIds);
+	let working: CanvasIR;
+	try {
+		// One tree rewrite: drop the selection, splice the instance into the
+		// topmost selected slot (the node.group convention).
+		working = replaceChildrenInParent(ir, {
+			parentId: parent.id,
+			replace: (children) => {
+				const remaining = children.filter((c) => !selectedIds.has(c.id));
+				remaining.splice(minIndex, 0, instance);
+				return remaining;
+			},
+			location,
+			now: options.now,
+		});
+	} catch (err) {
+		rethrowMutationError(err);
+	}
+	// Validate against the POST-placement document: node-id freshness for the
+	// definition, and the full dependency graph including the edge the new
+	// instance just added (a create inside a Source tree can close a cycle).
+	assertRegistryAddable(working, definition);
+	const next = withDefinition(working, cmd.componentId, definition, options);
+
+	const inverse: CanvasBatchCommand = {
+		type: "batch",
+		commands: [
+			{
+				type: "node.delete",
+				nodeId: cmd.firstInstanceId,
+				...(location !== undefined ? { location } : {}),
+			},
+			...entries.map(
+				(entry): CanvasNodeCreateCommand => ({
+					type: "node.create",
+					node: entry.node,
+					...(location.kind === "page" ? { pageId: location.id } : {}),
+					parentId: (parent as CanvasContainerNode).id,
+					index: entry.index,
+					location,
+				}),
+			),
+			{ type: "component.delete", componentId: cmd.componentId },
+		],
+	};
+	return { ir: next, inverse };
+}
+
+function applyComponentRename(
+	ir: CanvasIR,
+	cmd: CanvasComponentRenameCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const definition = expectDefinition(ir, cmd.componentId);
+	const next = withDefinition(
+		ir,
+		cmd.componentId,
+		{
+			...definition,
+			name: cmd.to,
+			revision: cmd.revision ?? definition.revision + 1,
+		},
+		options,
+	);
+	const inverse: CanvasComponentRenameCommand = {
+		type: "component.rename",
+		componentId: cmd.componentId,
+		from: cmd.to,
+		to: definition.name,
+		revision: definition.revision,
+	};
+	return { ir: next, inverse };
+}
+
+function applyComponentDuplicate(
+	ir: CanvasIR,
+	cmd: CanvasComponentDuplicateCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const definition = expectDefinition(ir, cmd.componentId);
+	const { node: newRoot, idMap } = regenerateNodeIds(definition.root);
+	const duplicated: CanvasComponentDefinition = {
+		id: cmd.newComponentId,
+		name: cmd.name ?? `${definition.name} copy`,
+		// A fresh definition with no dependents starts its own revision line.
+		revision: 1,
+		root: newRoot,
+		// Property IDs are kept (cross-definition reuse is permitted, TD §5.5);
+		// bindings follow the remapped Source node ids.
+		properties: definition.properties.map((property) => ({
+			...property,
+			nodeId: idMap.get(property.nodeId) ?? property.nodeId,
+		})),
+	};
+	assertRegistryAddable(ir, duplicated);
+	const next = withDefinition(ir, cmd.newComponentId, duplicated, options);
+	const inverse: CanvasComponentDeleteCommand = {
+		type: "component.delete",
+		componentId: cmd.newComponentId,
+	};
+	return { ir: next, inverse };
+}
+
+/** Where instances of `componentId` still live (page trees and Source trees). */
+function findComponentReferences(
+	ir: CanvasIR,
+	componentId: string,
+): { count: number; locations: string[] } {
+	const locations: string[] = [];
+	walkDocument(ir, ({ node, location }) => {
+		if (
+			node.type === "component-instance" &&
+			node.componentId === componentId
+		) {
+			locations.push(`${location.kind}:${location.id}`);
+		}
+	});
+	return { count: locations.length, locations };
+}
+
+function applyComponentDelete(
+	ir: CanvasIR,
+	cmd: CanvasComponentDeleteCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const definition = expectDefinition(ir, cmd.componentId);
+	const references = findComponentReferences(ir, cmd.componentId);
+	if (references.count > 0) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Component "${cmd.componentId}" still has ${references.count} reference(s) (${references.locations.join(", ")}) — detach or delete them first (LC-DELETE)`,
+		);
+	}
+	const { [cmd.componentId]: _removed, ...remaining } = ir.components ?? {};
+	const base = bumpMetadata(ir, options);
+	// INV-10: an empty Registry is normalized to an ABSENT `components` key.
+	const { components: _components, ...withoutRegistry } = base;
+	const next: CanvasIR =
+		Object.keys(remaining).length > 0
+			? { ...base, components: remaining }
+			: withoutRegistry;
+	const inverse: CanvasComponentCreateCommand = {
+		type: "component.create",
+		mode: "restore",
+		definition,
+	};
+	return { ir: next, inverse };
+}
+
+/**
+ * Reject a property whose binding is invalid against the CURRENT Source tree
+ * (M3-06 reject-on-write): the target node must exist in the definition and
+ * accept the property's kind (§10.1) — the same table the read-side
+ * validator applies.
+ */
+function assertPropertyBindable(
+	definition: CanvasComponentDefinition,
+	property: CanvasComponentProperty,
+): void {
+	const target = findNodeInSubtree(definition.root, property.nodeId);
+	if (!target) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Property "${property.id}" targets node "${property.nodeId}", which is not in component "${definition.id}"'s Source tree`,
+		);
+	}
+	if (!propertyTargetsNode(property, target.node)) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Property "${property.id}" (${property.kind}) cannot bind node "${target.node.id}" ("${target.node.type}")`,
+		);
+	}
+}
+
+function applyComponentAddProperty(
+	ir: CanvasIR,
+	cmd: CanvasComponentAddPropertyCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const definition = expectDefinition(ir, cmd.componentId);
+	if (definition.properties.some((p) => p.id === cmd.property.id)) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Property id "${cmd.property.id}" already exists on component "${cmd.componentId}"`,
+		);
+	}
+	if (definition.properties.length >= MAX_COMPONENT_PROPERTIES_PER_COMPONENT) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Component "${cmd.componentId}" would exceed MAX_COMPONENT_PROPERTIES_PER_COMPONENT (${MAX_COMPONENT_PROPERTIES_PER_COMPONENT})`,
+		);
+	}
+	assertPropertyBindable(definition, cmd.property);
+	const at = cmd.index ?? definition.properties.length;
+	if (at < 0 || at > definition.properties.length) {
+		throw new CanvasCommandError(
+			"index-out-of-range",
+			`Property index ${at} out of range for ${definition.properties.length} properties`,
+		);
+	}
+	const properties = [...definition.properties];
+	properties.splice(at, 0, cmd.property);
+	const next = withDefinition(
+		ir,
+		cmd.componentId,
+		{
+			...definition,
+			properties,
+			revision: cmd.revision ?? definition.revision + 1,
+		},
+		options,
+	);
+	const inverse: CanvasComponentRemovePropertyCommand = {
+		type: "component.remove-property",
+		componentId: cmd.componentId,
+		propertyId: cmd.property.id,
+		revision: definition.revision,
+	};
+	return { ir: next, inverse };
+}
+
+function applyComponentUpdateProperty(
+	ir: CanvasIR,
+	cmd: CanvasComponentUpdatePropertyCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const definition = expectDefinition(ir, cmd.componentId);
+	if (cmd.to.id !== cmd.propertyId) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Property IDs are stable (INV-6): cannot rewrite "${cmd.propertyId}" to "${cmd.to.id}"`,
+		);
+	}
+	const at = definition.properties.findIndex((p) => p.id === cmd.propertyId);
+	const prior = definition.properties[at];
+	if (at < 0 || !prior) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Property "${cmd.propertyId}" not found on component "${cmd.componentId}"`,
+		);
+	}
+	assertPropertyBindable(definition, cmd.to);
+	const properties = [...definition.properties];
+	properties[at] = cmd.to;
+	const next = withDefinition(
+		ir,
+		cmd.componentId,
+		{
+			...definition,
+			properties,
+			revision: cmd.revision ?? definition.revision + 1,
+		},
+		options,
+	);
+	const inverse: CanvasComponentUpdatePropertyCommand = {
+		type: "component.update-property",
+		componentId: cmd.componentId,
+		propertyId: cmd.propertyId,
+		to: prior,
+		revision: definition.revision,
+	};
+	return { ir: next, inverse };
+}
+
+function applyComponentRemoveProperty(
+	ir: CanvasIR,
+	cmd: CanvasComponentRemovePropertyCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const definition = expectDefinition(ir, cmd.componentId);
+	const at = definition.properties.findIndex((p) => p.id === cmd.propertyId);
+	const prior = definition.properties[at];
+	if (at < 0 || !prior) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Property "${cmd.propertyId}" not found on component "${cmd.componentId}"`,
+		);
+	}
+	// Instance override maps are deliberately untouched: entries for this id
+	// become orphans, retained verbatim (§10.3).
+	const properties = definition.properties.filter(
+		(p) => p.id !== cmd.propertyId,
+	);
+	const next = withDefinition(
+		ir,
+		cmd.componentId,
+		{
+			...definition,
+			properties,
+			revision: cmd.revision ?? definition.revision + 1,
+		},
+		options,
+	);
+	const inverse: CanvasComponentAddPropertyCommand = {
+		type: "component.add-property",
+		componentId: cmd.componentId,
+		property: prior,
+		index: at,
+		revision: definition.revision,
+	};
+	return { ir: next, inverse };
+}
+
+/**
+ * TD §5.2: a `locked` node inside a Source makes its exposed properties
+ * READ-ONLY in every instance — under `enforceLocked`, override writes bound
+ * to that node are typed `node-locked` errors. Orphan overrides (no matching
+ * property) have no bound node and are not lock-protected. Independent of
+ * the instance node's own lock, which `assertUnlocked` covers.
+ */
+function assertPropertyWritable(
+	ir: CanvasIR,
+	instance: CanvasComponentInstanceNode,
+	propertyId: string,
+	options: CommandApplyOptions,
+): void {
+	if (options.enforceLocked !== true) return;
+	const definition = ir.components?.[instance.componentId];
+	if (!definition) return;
+	const property = definition.properties.find((p) => p.id === propertyId);
+	if (!property) return;
+	const target = findNodeInSubtree(definition.root, property.nodeId);
+	if (target?.node.locked === true) {
+		throw new CanvasCommandError(
+			"node-locked",
+			`Property "${propertyId}" binds locked Source node "${property.nodeId}" of component "${instance.componentId}" — read-only in every instance (enforceLocked)`,
+		);
+	}
+}
+
+function applyComponentInstanceInsert(
+	ir: CanvasIR,
+	cmd: CanvasComponentInstanceInsertCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	// The boundary where a broken reference is prevented: inserting an
+	// instance of an unknown Source is a typed error, never a silent
+	// placeholder-to-be.
+	expectDefinition(ir, cmd.componentId);
+	const node = createComponentInstance({
+		id: cmd.instanceId,
+		componentId: cmd.componentId,
+		bounds: cmd.bounds,
+		...(cmd.transform !== undefined ? { transform: cmd.transform } : {}),
+		...(cmd.overrides !== undefined ? { overrides: cmd.overrides } : {}),
+		...(cmd.name !== undefined ? { name: cmd.name } : {}),
+		...(cmd.layoutItem !== undefined ? { layoutItem: cmd.layoutItem } : {}),
+	});
+	const parentId = resolveParentId(ir, cmd);
+	let next: CanvasIR;
+	try {
+		next = insertNode(ir, {
+			parentId,
+			node,
+			...(cmd.index !== undefined ? { index: cmd.index } : {}),
+			...locationSpread(cmd),
+			now: options.now,
+		});
+	} catch (err) {
+		rethrowMutationError(err);
+	}
+	const inverse: CanvasNodeDeleteCommand = {
+		type: "node.delete",
+		nodeId: cmd.instanceId,
+		...locationSpread(cmd),
+	};
+	return { ir: next, inverse };
+}
+
+function expectInstanceNode(
+	ir: CanvasIR,
+	nodeId: string,
+	location: CanvasDocumentLocation | undefined,
+): CanvasComponentInstanceNode {
+	const found = findNodeInScope(ir, nodeId, location);
+	if (!found) {
+		throw new CanvasCommandError(
+			"node-not-found",
+			`Node id "${nodeId}" not found`,
+		);
+	}
+	if (found.node.type !== "component-instance") {
+		throw new CanvasCommandError(
+			"kind-mismatch",
+			`Node "${nodeId}" is of kind "${found.node.type}", not "component-instance"`,
+		);
+	}
+	return found.node;
+}
+
+function writeOverrideMap(
+	ir: CanvasIR,
+	nodeId: string,
+	overrides: CanvasComponentOverrideMap | undefined,
+	location: CanvasDocumentLocation | undefined,
+	options: CommandApplyOptions,
+): CanvasIR {
+	try {
+		return updateNode<"component-instance">(ir, {
+			id: nodeId,
+			// `undefined` deletes the key (mergeNodePatch), so an emptied map
+			// normalizes back to an absent `overrides` field.
+			patch: { overrides },
+			...(location !== undefined ? { location } : {}),
+			now: options.now,
+		});
+	} catch (err) {
+		rethrowMutationError(err);
+	}
+}
+
+function applyComponentInstanceSetOverride(
+	ir: CanvasIR,
+	cmd: CanvasComponentInstanceSetOverrideCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	const node = expectInstanceNode(ir, cmd.nodeId, cmd.location);
+	assertPropertyWritable(ir, node, cmd.propertyId, options);
+	const prior = node.overrides?.[cmd.propertyId];
+	const nextMap: CanvasComponentOverrideMap = {
+		...node.overrides,
+		[cmd.propertyId]: cmd.value,
+	};
+	if (Object.keys(nextMap).length > MAX_COMPONENT_OVERRIDES_PER_INSTANCE) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Instance "${cmd.nodeId}" would exceed MAX_COMPONENT_OVERRIDES_PER_INSTANCE (${MAX_COMPONENT_OVERRIDES_PER_INSTANCE})`,
+		);
+	}
+	const next = writeOverrideMap(ir, cmd.nodeId, nextMap, cmd.location, options);
+	const inverse:
+		| CanvasComponentInstanceSetOverrideCommand
+		| CanvasComponentInstanceResetOverrideCommand = prior
+		? {
+				type: "component-instance.set-override",
+				nodeId: cmd.nodeId,
+				propertyId: cmd.propertyId,
+				value: prior,
+				...locationSpread(cmd),
+			}
+		: {
+				type: "component-instance.reset-override",
+				nodeId: cmd.nodeId,
+				propertyId: cmd.propertyId,
+				...locationSpread(cmd),
+			};
+	return { ir: next, inverse };
+}
+
+function applyComponentInstanceResetOverride(
+	ir: CanvasIR,
+	cmd: CanvasComponentInstanceResetOverrideCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	const node = expectInstanceNode(ir, cmd.nodeId, cmd.location);
+	assertPropertyWritable(ir, node, cmd.propertyId, options);
+	const prior = node.overrides?.[cmd.propertyId];
+	if (prior === undefined) {
+		// Resetting an absent key is a validated no-op (the instance exists and
+		// is an instance); the inverse is the same no-op.
+		return { ir, inverse: cmd };
+	}
+	const { [cmd.propertyId]: _removed, ...remaining } = node.overrides ?? {};
+	const nextMap = Object.keys(remaining).length > 0 ? remaining : undefined;
+	const next = writeOverrideMap(ir, cmd.nodeId, nextMap, cmd.location, options);
+	const inverse: CanvasComponentInstanceSetOverrideCommand = {
+		type: "component-instance.set-override",
+		nodeId: cmd.nodeId,
+		propertyId: cmd.propertyId,
+		value: prior,
+		...locationSpread(cmd),
+	};
+	return { ir: next, inverse };
+}
+
+function applyComponentInstanceResetAllOverrides(
+	ir: CanvasIR,
+	cmd: CanvasComponentInstanceResetAllOverridesCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	const node = expectInstanceNode(ir, cmd.nodeId, cmd.location);
+	const prior = node.overrides;
+	if (prior === undefined || Object.keys(prior).length === 0) {
+		return { ir, inverse: cmd };
+	}
+	// All-or-nothing: one read-only (locked-bound) override blocks the whole
+	// reset rather than a partial clear.
+	for (const propertyId of Object.keys(prior)) {
+		assertPropertyWritable(ir, node, propertyId, options);
+	}
+	const next = writeOverrideMap(
+		ir,
+		cmd.nodeId,
+		undefined,
+		cmd.location,
+		options,
+	);
+	const inverse = {
+		type: "node.update",
+		nodeId: cmd.nodeId,
+		kind: "component-instance",
+		patch: { overrides: prior },
+		...locationSpread(cmd),
+	} as CanvasAnyNodeUpdateCommand;
+	return { ir: next, inverse };
+}
+
+/**
+ * Bump each touched Source's `revision` exactly once for one applied
+ * command/batch/transaction (plan 0023 M3-02, LC-PROPAGATE).
+ *
+ * "Touched" is detected structurally: mutations are immutable with
+ * structural sharing, so a definition whose reference survived was not
+ * edited. A definition whose reference changed while its `revision` stayed
+ * the same had tree/content edits that no handler versioned — those get the
+ * single top-level bump. A handler that already managed `revision` itself
+ * (the registry commands) is skipped, so a mixed batch still increments
+ * exactly once overall.
+ *
+ * Undo/redo route through here like any other application, so undoing a
+ * Source edit bumps the revision AGAIN (monotonic) — propagation must fire
+ * for the restored content exactly as it did for the edit.
+ */
+export function settleComponentRevisions(
+	before: CanvasIR,
+	after: CanvasIR,
+): CanvasIR {
+	const prevRegistry = before.components;
+	const nextRegistry = after.components;
+	if (!nextRegistry || prevRegistry === nextRegistry) return after;
+	let changed = false;
+	const settled: Record<string, CanvasComponentDefinition> = {};
+	for (const [id, definition] of Object.entries(nextRegistry)) {
+		if (!definition) continue;
+		const prev = prevRegistry?.[id];
+		if (prev && prev !== definition && prev.revision === definition.revision) {
+			settled[id] = { ...definition, revision: definition.revision + 1 };
+			changed = true;
+		} else {
+			settled[id] = definition;
+		}
+	}
+	return changed ? { ...after, components: settled } : after;
+}
+
+/**
+ * The non-settling application primitive: applies `cmd` and returns the
+ * inverse WITHOUT the once-per-application Source-revision settle. Every
+ * composition wrapper (`batch` sub-commands here, `applyCommands` in
+ * `transaction.ts`) folds over THIS and settles once at its own boundary —
+ * calling the settling `applyCommand` per sub-command would bump a Source
+ * once per sub-command instead of once per undoable unit. Use
+ * `applyCommand` unless you are building such a wrapper.
+ */
+export function applyCommandCore(
 	ir: CanvasIR,
 	cmd: CanvasCommand,
 	options: CommandApplyOptions = {},
@@ -1684,6 +2801,28 @@ export function applyCommand(
 			return applyAssetPut(ir, cmd, options);
 		case "asset.remove":
 			return applyAssetRemove(ir, cmd, options);
+		case "component.create":
+			return applyComponentCreate(ir, cmd, options);
+		case "component.rename":
+			return applyComponentRename(ir, cmd, options);
+		case "component.duplicate":
+			return applyComponentDuplicate(ir, cmd, options);
+		case "component.delete":
+			return applyComponentDelete(ir, cmd, options);
+		case "component.add-property":
+			return applyComponentAddProperty(ir, cmd, options);
+		case "component.update-property":
+			return applyComponentUpdateProperty(ir, cmd, options);
+		case "component.remove-property":
+			return applyComponentRemoveProperty(ir, cmd, options);
+		case "component-instance.insert":
+			return applyComponentInstanceInsert(ir, cmd, options);
+		case "component-instance.set-override":
+			return applyComponentInstanceSetOverride(ir, cmd, options);
+		case "component-instance.reset-override":
+			return applyComponentInstanceResetOverride(ir, cmd, options);
+		case "component-instance.reset-all-overrides":
+			return applyComponentInstanceResetAllOverrides(ir, cmd, options);
 		case "batch":
 			return applyBatch(ir, cmd, options);
 		default:
@@ -1695,4 +2834,20 @@ export function applyCommand(
 				`Unrecognized command type "${(cmd as { type: string }).type}"`,
 			);
 	}
+}
+
+/**
+ * Apply one command (including a whole `batch`) and settle Source revisions
+ * once — the entry point everything user-facing goes through.
+ */
+export function applyCommand(
+	ir: CanvasIR,
+	cmd: CanvasCommand,
+	options: CommandApplyOptions = {},
+): CommandApplyResult {
+	const result = applyCommandCore(ir, cmd, options);
+	return {
+		ir: settleComponentRevisions(ir, result.ir),
+		inverse: result.inverse,
+	};
 }

@@ -12,6 +12,25 @@ import type { CanvasCommand, CommandApplyOptions } from "./types.js";
  * diffing whole IRs. Records are best-effort and derived from the command shape;
  * `pageId` is omitted where the command does not carry it (node delete/ungroup).
  */
+/**
+ * What happened to a Component Source (plan 0023 M3-03). `source-edit` is
+ * any location-scoped node command inside the Source tree; the named ops map
+ * 1:1 onto the registry commands. Instance-side edits (inserting an
+ * instance, setting/resetting overrides) are ordinary NODE changes on the
+ * instance node (`updated` with `keys: ["overrides"]`, `added`, `removed`)
+ * and deliberately do NOT use this kind. Virtual (resolved) node ids never
+ * appear as change targets.
+ */
+export type CanvasComponentChangeOp =
+	| "create"
+	| "rename"
+	| "duplicate"
+	| "delete"
+	| "add-property"
+	| "update-property"
+	| "remove-property"
+	| "source-edit";
+
 export type CanvasChange =
 	| { kind: "added"; nodeId: string; pageId?: string }
 	| { kind: "removed"; nodeId: string; pageId?: string }
@@ -30,7 +49,14 @@ export type CanvasChange =
 				| "layout-aids"
 				| "duplicate";
 	  }
-	| { kind: "asset"; assetId: string; op: "put" | "remove" };
+	| { kind: "asset"; assetId: string; op: "put" | "remove" }
+	| {
+			kind: "component";
+			componentId: string;
+			op: CanvasComponentChangeOp;
+			/** The Source revision the command wrote, when the command carries it. */
+			revision?: number;
+	  };
 
 /**
  * Derive the change record for a single command, or `null` when there is no
@@ -38,9 +64,24 @@ export type CanvasChange =
  * individually by `applyCommands`). Pure: reads only the command.
  */
 export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
+	// A node command scoped INSIDE a Component Source tree is a Source edit:
+	// consumers react at the component level (re-resolve dependents), not to
+	// the individual Source node — those ids are meaningless outside the
+	// definition. Page-scoped locations keep their ordinary node records.
+	const sourceEdit = componentSourceChange(cmd);
+	if (sourceEdit) return sourceEdit;
 	switch (cmd.type) {
 		case "node.create":
-			return { kind: "added", nodeId: cmd.node.id, pageId: cmd.pageId };
+			return {
+				kind: "added",
+				nodeId: cmd.node.id,
+				// A page-scoped create may carry the page in `location` instead of
+				// `pageId`; the created node does not exist pre-mutation, so the
+				// record enricher cannot backfill this by IR lookup.
+				pageId:
+					cmd.pageId ??
+					(cmd.location?.kind === "page" ? cmd.location.id : undefined),
+			};
 		case "node.delete":
 			return { kind: "removed", nodeId: cmd.nodeId };
 		case "node.reorder":
@@ -88,7 +129,13 @@ export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
 		case "image.replace":
 			return { kind: "updated", nodeId: cmd.nodeId, keys: ["assetId"] };
 		case "node.group":
-			return { kind: "added", nodeId: cmd.groupId, pageId: cmd.pageId };
+			return {
+				kind: "added",
+				nodeId: cmd.groupId,
+				pageId:
+					cmd.pageId ??
+					(cmd.location?.kind === "page" ? cmd.location.id : undefined),
+			};
 		case "node.ungroup":
 			return { kind: "removed", nodeId: cmd.groupId };
 		// Layout writes map onto the EXISTING `updated`/`added` kinds — no new
@@ -126,6 +173,61 @@ export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
 			return { kind: "page", pageId: cmd.pageId, op: "layout-aids" };
 		case "page.reorder":
 			return { kind: "page", pageId: cmd.pageId, op: "reorder" };
+		case "component.create":
+			return {
+				kind: "component",
+				componentId:
+					cmd.mode === "restore" ? cmd.definition.id : cmd.componentId,
+				op: "create",
+			};
+		case "component.rename":
+			return {
+				kind: "component",
+				componentId: cmd.componentId,
+				op: "rename",
+				...(cmd.revision !== undefined ? { revision: cmd.revision } : {}),
+			};
+		case "component.duplicate":
+			return {
+				kind: "component",
+				componentId: cmd.newComponentId,
+				op: "duplicate",
+			};
+		case "component.delete":
+			return { kind: "component", componentId: cmd.componentId, op: "delete" };
+		case "component.add-property":
+			return {
+				kind: "component",
+				componentId: cmd.componentId,
+				op: "add-property",
+				...(cmd.revision !== undefined ? { revision: cmd.revision } : {}),
+			};
+		case "component.update-property":
+			return {
+				kind: "component",
+				componentId: cmd.componentId,
+				op: "update-property",
+				...(cmd.revision !== undefined ? { revision: cmd.revision } : {}),
+			};
+		case "component.remove-property":
+			return {
+				kind: "component",
+				componentId: cmd.componentId,
+				op: "remove-property",
+				...(cmd.revision !== undefined ? { revision: cmd.revision } : {}),
+			};
+		case "component-instance.insert":
+			return {
+				kind: "added",
+				nodeId: cmd.instanceId,
+				pageId:
+					cmd.pageId ??
+					(cmd.location?.kind === "page" ? cmd.location.id : undefined),
+			};
+		case "component-instance.set-override":
+		case "component-instance.reset-override":
+		case "component-instance.reset-all-overrides":
+			return { kind: "updated", nodeId: cmd.nodeId, keys: ["overrides"] };
 		case "batch":
 			// Batches carry no single record; applyCommands maps each sub-command.
 			return null;
@@ -151,6 +253,23 @@ export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
  */
 function assertNoUnmappedCommand(_cmd: never): null {
 	return null;
+}
+
+/**
+ * The `component`-kind change for a Source-scoped node command, or `null`
+ * when the command isn't one. Only node commands carry `location`; page,
+ * asset, and batch commands never reach the true branch.
+ */
+function componentSourceChange(cmd: CanvasCommand): CanvasChange | null {
+	// Registry commands (`component.*`) carry their own precise op below —
+	// only tree-content commands (node + instance) collapse to `source-edit`.
+	if (cmd.type.startsWith("component.")) return null;
+	if (!("location" in cmd) || cmd.location?.kind !== "component") return null;
+	return {
+		kind: "component",
+		componentId: cmd.location.id,
+		op: "source-edit",
+	};
 }
 
 /** Who produced a {@link CanvasChangeRecord}: applied locally, or received from a remote peer/server. */
@@ -197,7 +316,9 @@ export interface ChangeRecordOptions extends CommandApplyOptions {
 }
 
 function resolveChangeNodeIds(change: CanvasChange): readonly string[] {
-	return change.kind === "page" || change.kind === "asset"
+	return change.kind === "page" ||
+		change.kind === "asset" ||
+		change.kind === "component"
 		? []
 		: [change.nodeId];
 }
@@ -214,6 +335,7 @@ function resolveChangePageId(
 	ir: CanvasIR,
 ): string | undefined {
 	if (change.kind === "asset") return undefined; // document-level
+	if (change.kind === "component") return undefined; // Registry-level, no page
 	if (change.kind === "page") return change.pageId;
 	if (
 		(change.kind === "added" || change.kind === "removed") &&

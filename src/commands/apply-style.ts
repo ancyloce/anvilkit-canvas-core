@@ -92,6 +92,9 @@ export const NODE_STYLE_KEYS: Record<
 	"ai-placeholder": BASE_KEYS,
 	video: BASE_KEYS,
 	audio: BASE_KEYS,
+	// The instance root paints nothing of its own; per-instance content
+	// changes go through the typed override map, which is NOT node style.
+	"component-instance": BASE_KEYS,
 };
 
 /** A frame's "fill" is stored under `background`; every other kind uses `fill`. */
