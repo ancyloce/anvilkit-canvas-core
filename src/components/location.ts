@@ -17,7 +17,7 @@ import { findNodeInSubtree } from "../ir/walkers.js";
 
 export type { CanvasDocumentLocation };
 
-interface TreeAccessWriteOptions {
+export interface TreeAccessWriteOptions {
 	now?: () => string;
 }
 

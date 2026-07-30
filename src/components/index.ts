@@ -18,7 +18,11 @@ export {
 } from "./cache.js";
 export {
 	buildComponentGraph,
+	buildComponentReferenceIndex,
 	type CanvasComponentGraph,
+	type CanvasComponentPageInstanceRef,
+	type CanvasComponentReferenceIndex,
+	type CanvasComponentSourceInstanceRef,
 	collectNestedComponentIds,
 } from "./graph.js";
 export {
@@ -29,7 +33,11 @@ export {
 	encodeResolvedNodeId,
 	findComponentProperty,
 } from "./identity.js";
-export { type CanvasTreeAccess, createTreeAccess } from "./location.js";
+export {
+	type CanvasTreeAccess,
+	createTreeAccess,
+	type TreeAccessWriteOptions,
+} from "./location.js";
 export {
 	applyComponentOverrides,
 	type CanvasAppliedOverrides,
