@@ -228,6 +228,16 @@ export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
 		case "component-instance.reset-override":
 		case "component-instance.reset-all-overrides":
 			return { kind: "updated", nodeId: cmd.nodeId, keys: ["overrides"] };
+		// Deliberately LOSSY like the other composite commands: the record
+		// reports the in-place node swap (the materialized root keeps the
+		// instance's id, so `nodeId` stays addressable); the full subtree it
+		// spliced in rides on `record.command` for lossless replay.
+		case "component-instance.detach":
+			return {
+				kind: "updated",
+				nodeId: cmd.nodeId,
+				keys: ["type", "children"],
+			};
 		case "batch":
 			// Batches carry no single record; applyCommands maps each sub-command.
 			return null;

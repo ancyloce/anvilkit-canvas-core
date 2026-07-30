@@ -1,5 +1,6 @@
 import { resolveNow } from "../clock.js";
 import { buildComponentGraph } from "../components/graph.js";
+import { resolveComponentInstance } from "../components/resolve.js";
 import { propertyTargetsNode } from "../components/validate.js";
 import {
 	type AffineMatrix,
@@ -18,9 +19,10 @@ import {
 	removeNode,
 	reorderChildren,
 	replaceChildrenInParent,
+	replaceNode,
 	updateNode,
 } from "../ir/mutations.js";
-import { regenerateNodeIds } from "../ir/regenerate-ids.js";
+import { defaultIdFactory, regenerateNodeIds } from "../ir/regenerate-ids.js";
 import type {
 	CanvasAutoLayout,
 	CanvasBounds,
@@ -41,6 +43,7 @@ import type {
 } from "../ir/types.js";
 import type { CanvasDocumentLocation } from "../ir/walkers.js";
 import {
+	CanvasIRDepthError,
 	findNode,
 	findNodeInSubtree,
 	isContainerNode,
@@ -65,6 +68,7 @@ import type {
 	CanvasComponentCreateCommand,
 	CanvasComponentDeleteCommand,
 	CanvasComponentDuplicateCommand,
+	CanvasComponentInstanceDetachCommand,
 	CanvasComponentInstanceInsertCommand,
 	CanvasComponentInstanceResetAllOverridesCommand,
 	CanvasComponentInstanceResetOverrideCommand,
@@ -2698,6 +2702,137 @@ function applyComponentInstanceResetAllOverrides(
 	return { ir: next, inverse };
 }
 
+/** Any component-instance node left in an expansion = a degraded nested boundary. */
+function findResidualInstance(node: CanvasNode, depth = 0): CanvasNode | null {
+	if (depth > MAX_TREE_DEPTH) return null;
+	if (node.type === "component-instance") return node;
+	if (isContainerNode(node)) {
+		for (const child of node.children) {
+			const hit = findResidualInstance(child, depth + 1);
+			if (hit) return hit;
+		}
+	}
+	return null;
+}
+
+/**
+ * Rebuild an expanded subtree with persistent ids: the root keeps `rootId`
+ * (the instance's own id — selection stays stable), descendants take
+ * `nodeIds[virtualId]` or a fresh generated id. Purely an id rewrite — the
+ * resolver already applied overrides and instance-level presentation, so
+ * style/content/transforms are preserved verbatim (INV-12).
+ */
+function materializeExpandedTree(
+	node: CanvasNode,
+	rootId: string | undefined,
+	nodeIds: Readonly<Record<string, string>> | undefined,
+	depth = 0,
+): CanvasNode {
+	if (depth > MAX_TREE_DEPTH) {
+		throw new CanvasIRDepthError([node.id]);
+	}
+	const id = rootId ?? nodeIds?.[node.id] ?? defaultIdFactory();
+	if (!isContainerNode(node)) {
+		return { ...node, id };
+	}
+	return {
+		...node,
+		id,
+		children: node.children.map((child) =>
+			materializeExpandedTree(child, undefined, nodeIds, depth + 1),
+		),
+	};
+}
+
+function applyComponentInstanceDetach(
+	ir: CanvasIR,
+	cmd: CanvasComponentInstanceDetachCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	const instance = expectInstanceNode(ir, cmd.nodeId, cmd.location);
+	const found = findNodeInScope(ir, cmd.nodeId, cmd.location);
+	if (!found?.parent) {
+		throw new CanvasCommandError(
+			"parent-not-found",
+			`Instance "${cmd.nodeId}" has no parent (a tree root cannot be detached in place)`,
+		);
+	}
+	const parent = found.parent;
+	const index = locateSiblingIndex(parent, cmd.nodeId);
+	// Resolve FULLY first; anything less than a complete expansion makes the
+	// detach unsafe and the command fails atomically (NFR-002).
+	const resolved = resolveComponentInstance(ir.components, instance);
+	const errors = resolved.issues.filter((issue) => issue.severity === "error");
+	const residual = resolved.placeholder
+		? instance
+		: findResidualInstance(resolved.root);
+	if (resolved.placeholder || errors.length > 0 || residual) {
+		const reason = resolved.placeholder
+			? `Source "${instance.componentId}" did not resolve`
+			: errors.length > 0
+				? (errors[0]?.message ?? "resolution reported errors")
+				: `nested instance "${residual?.id}" degraded instead of expanding`;
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Cannot detach "${cmd.nodeId}": ${reason}`,
+		);
+	}
+	const materialized = materializeExpandedTree(
+		resolved.root,
+		instance.id,
+		cmd.nodeIds,
+	);
+	// Materialized ids must be fresh: the instance id is being reused for the
+	// root (same slot, stable selection), everything else must not collide.
+	const existingIds = collectDocumentNodeIds(ir);
+	existingIds.delete(instance.id);
+	const clash = findDuplicateSourceNodeId(materialized, existingIds);
+	if (clash) {
+		throw new CanvasCommandError(
+			"invariant-violated",
+			`Detach would materialize node id "${clash}", which already exists in the document`,
+		);
+	}
+	let next: CanvasIR;
+	try {
+		next = replaceNode(ir, {
+			id: cmd.nodeId,
+			node: materialized,
+			...locationSpread(cmd),
+			now: options.now,
+		});
+	} catch (err) {
+		rethrowMutationError(err);
+	}
+	// AC-008: undo restores the INSTANCE — swap the materialized subtree back
+	// out for the original node at the exact same slot.
+	const pageId = cmd.location
+		? cmd.location.kind === "page"
+			? cmd.location.id
+			: undefined
+		: expectNode(ir, cmd.nodeId).page?.id;
+	const inverse: CanvasBatchCommand = {
+		type: "batch",
+		commands: [
+			{
+				type: "node.delete",
+				nodeId: materialized.id,
+				...locationSpread(cmd),
+			},
+			{
+				type: "node.create",
+				node: instance,
+				...(pageId !== undefined ? { pageId } : {}),
+				parentId: parent.id,
+				index,
+				...locationSpread(cmd),
+			},
+		],
+	};
+	return { ir: next, inverse };
+}
+
 /**
  * Bump each touched Source's `revision` exactly once for one applied
  * command/batch/transaction (plan 0023 M3-02, LC-PROPAGATE).
@@ -2823,6 +2958,8 @@ export function applyCommandCore(
 			return applyComponentInstanceResetOverride(ir, cmd, options);
 		case "component-instance.reset-all-overrides":
 			return applyComponentInstanceResetAllOverrides(ir, cmd, options);
+		case "component-instance.detach":
+			return applyComponentInstanceDetach(ir, cmd, options);
 		case "batch":
 			return applyBatch(ir, cmd, options);
 		default:

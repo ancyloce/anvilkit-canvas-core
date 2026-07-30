@@ -468,6 +468,27 @@ export interface CanvasComponentInstanceResetAllOverridesCommand
 }
 
 /**
+ * Materialize an instance into plain nodes at the exact same tree position
+ * (M3-07, LC-INSTANCE-005). Resolution runs fully first — overrides applied,
+ * nested instances expanded recursively (never "outer only") — and fails
+ * atomically when it cannot (missing Source, cycle/depth/budget degradation).
+ * The materialized root keeps the instance's persistent id, placement, and
+ * `layoutItem` (a Flow child keeps its slot); descendants take ids from
+ * `nodeIds` (keyed by the resolver's deterministic virtual ids) or a fresh
+ * factory. Component metadata, virtual ids, and override maps are gone from
+ * the result (INV-12: world-space appearance is preserved exactly). Build
+ * the payload with `component-ops` `buildDetachCommand` to get the complete
+ * id map back.
+ */
+export interface CanvasComponentInstanceDetachCommand
+	extends CanvasCommandLocationOptions {
+	type: "component-instance.detach";
+	nodeId: string;
+	/** virtual node id → persistent id for the materialized descendants. */
+	nodeIds?: Readonly<Record<string, string>>;
+}
+
+/**
  * A composite, reversible command: applies its `commands` in order as a single
  * undoable unit. Its inverse (produced by `applyCommand`) is another `batch`
  * whose sub-commands are the reversed inverses, so history replays it like any
@@ -592,6 +613,7 @@ export type CanvasCommand =
 	| CanvasComponentInstanceSetOverrideCommand
 	| CanvasComponentInstanceResetOverrideCommand
 	| CanvasComponentInstanceResetAllOverridesCommand
+	| CanvasComponentInstanceDetachCommand
 	| CanvasBatchCommand;
 
 export type CanvasCommandKind = CanvasCommand["type"];
