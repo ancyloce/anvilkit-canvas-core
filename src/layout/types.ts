@@ -1,3 +1,8 @@
+import {
+	type CanvasResolvedNodeId,
+	toResolvedNodeId,
+} from "../components/identity.js";
+import type { CanvasResolvedComponentOrigin } from "../components/types.js";
 import type { AffineMatrix } from "../geometry/affine.js";
 import type { Aabb } from "../geometry/hit-test.js";
 import type {
@@ -31,29 +36,14 @@ import type { CanvasLayoutIssue } from "./validate.js";
  * type is exactly how two coordinate conventions drift apart.
  */
 
-/**
- * Identity of a node in the resolved tree.
- *
- * Branded rather than a bare `string` so a source node id and a resolved node
- * id cannot be swapped at a call site. Today the two are 1:1 and the brand is
- * a pure compile-time distinction; PRD 0015 introduces virtual component nodes
- * that have a resolved identity with no single source node, and the brand is
- * what lets that land without touching every consumer signature.
- */
-export type CanvasResolvedNodeId = string & {
-	readonly __brand: "CanvasResolvedNodeId";
-};
-
-/**
- * Brand a source node id as a resolved id.
- *
- * The only sanctioned way to produce a `CanvasResolvedNodeId`, so the
- * source→resolved mapping stays one function rather than a cast at every
- * construction site.
- */
-export function toResolvedNodeId(sourceNodeId: string): CanvasResolvedNodeId {
-	return sourceNodeId as CanvasResolvedNodeId;
-}
+// Resolved-node identity moved to `components/identity.ts` (plan 0023 M2-01):
+// the virtual-id codec mints these ids and `components/` (rank 2) cannot
+// import upward from `layout/` (rank 4). Re-exported here unchanged, so every
+// existing consumer signature — and the public barrel — is untouched.
+export {
+	type CanvasResolvedNodeId,
+	toResolvedNodeId,
+} from "../components/identity.js";
 
 /**
  * Where a node ended up, in every space a consumer needs.
@@ -101,6 +91,12 @@ export interface CanvasResolvedNodeRecord {
 	/** The source node this record resolves. Style and content are read from here; geometry never is. */
 	readonly node: CanvasNode;
 	readonly geometry: CanvasResolvedGeometry;
+	/**
+	 * Component provenance when this record is a VIRTUAL node expanded from a
+	 * component instance (plan 0023 M2-03). Absent on every record of a
+	 * component-free document — additive, existing consumers untouched.
+	 */
+	readonly component?: CanvasResolvedComponentOrigin;
 }
 
 /**

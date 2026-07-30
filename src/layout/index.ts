@@ -30,6 +30,13 @@ export {
 	materializeCanvasLayout,
 } from "./materialize.js";
 export { resolveCanvasLayout } from "./resolve.js";
+// The COMPOSED resolver (plan 0023 M2-06): component expansion strictly
+// before layout. The only path component-bearing documents may use.
+export {
+	type CanvasComponentResolveOptions,
+	type CanvasResolvedComponentDocument,
+	resolveCanvasDocument,
+} from "./resolve-document.js";
 // --- resolved-tree contracts -------------------------------------------------
 export type {
 	CanvasLayoutMeasurementProvider,
