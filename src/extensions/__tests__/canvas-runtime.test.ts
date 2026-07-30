@@ -496,7 +496,7 @@ describe("container predicate ↔ kind-registry parity", () => {
 		}
 	});
 
-	it("registers all 15 built-in kinds", () => {
+	it("registers all 16 built-in kinds", () => {
 		const kinds = createCanvasRuntime()
 			.nodeKinds.list()
 			.map((d) => d.kind)
@@ -504,6 +504,7 @@ describe("container predicate ↔ kind-registry parity", () => {
 		expect(kinds).toEqual([
 			"ai-placeholder",
 			"audio",
+			"component-instance",
 			"ellipse",
 			"frame",
 			"group",

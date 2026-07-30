@@ -12,9 +12,11 @@ import {
 } from "../ir/migrations.js";
 import type { CanvasIR, CanvasNode } from "../ir/types.js";
 import {
+	buildCanvasComponentRegistrySchema,
 	CANVAS_IR_VERSION,
 	CanvasAiPlaceholderNodeSchema,
 	CanvasAudioNodeSchema,
+	CanvasComponentInstanceNodeSchema,
 	CanvasEllipseNodeSchema,
 	CanvasFrameNodeSchema,
 	CanvasFrameNodeShape,
@@ -34,6 +36,7 @@ import {
 	CanvasSvgNodeSchema,
 	CanvasTextNodeSchema,
 	CanvasVideoNodeSchema,
+	omitEmptyComponents,
 } from "../ir/validators.js";
 import {
 	type CanvasCommandHandler,
@@ -143,6 +146,17 @@ const BUILTIN_COMMAND_TYPE_FLAGS: Readonly<
 	"page.set-layout-aids": true,
 	"asset.put": true,
 	"asset.remove": true,
+	"component.create": true,
+	"component.rename": true,
+	"component.duplicate": true,
+	"component.delete": true,
+	"component.add-property": true,
+	"component.update-property": true,
+	"component.remove-property": true,
+	"component-instance.insert": true,
+	"component-instance.set-override": true,
+	"component-instance.reset-override": true,
+	"component-instance.reset-all-overrides": true,
 	batch: true,
 };
 
@@ -189,6 +203,14 @@ const BUILTIN_KIND_DEFS: CanvasNodeKindDefinition[] = [
 	},
 	{ kind: "video", schema: asKindSchema(CanvasVideoNodeSchema) },
 	{ kind: "audio", schema: asKindSchema(CanvasAudioNodeSchema) },
+	// SEEDED builtin, not an extension (plan 0023 A-2): extension containers
+	// are rejected (`container-kind-unsupported`), and only a builtin is
+	// exempt from the shadow guard — the extension route could never expand
+	// subtrees. A leaf: the expanded tree is virtual, never `children`.
+	{
+		kind: "component-instance",
+		schema: asKindSchema(CanvasComponentInstanceNodeSchema),
+	},
 ];
 
 // The member-tuple type z.discriminatedUnion expects can't be expressed for a
@@ -233,6 +255,7 @@ function buildExtendedSchemas(
 		CanvasAiPlaceholderNodeSchema,
 		CanvasVideoNodeSchema,
 		CanvasAudioNodeSchema,
+		CanvasComponentInstanceNodeSchema,
 		...extraSchemas,
 	];
 	union = z.discriminatedUnion(
@@ -248,10 +271,17 @@ function buildExtendedSchemas(
 		...CanvasPageShape,
 		root: group,
 	});
-	const irSchema = z.looseObject({
-		...CanvasIRShape,
-		pages: z.array(page).min(1),
-	}) as unknown as z.ZodType<CanvasIR>;
+	const irSchema = z
+		.looseObject({
+			...CanvasIRShape,
+			pages: z.array(page).min(1),
+			// Bound to THIS union (like `pages`/`root`), so a custom node kind
+			// nested inside a Source tree validates exactly like one nested
+			// inside a page; same empty-registry normalization as the static
+			// path (INV-10) so the two cannot drift.
+			components: buildCanvasComponentRegistrySchema(union).optional(),
+		})
+		.transform(omitEmptyComponents) as unknown as z.ZodType<CanvasIR>;
 
 	return { nodeSchema: union, irSchema };
 }
