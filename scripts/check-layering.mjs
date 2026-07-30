@@ -58,12 +58,30 @@ const LAYERS = [
 		rank: 2,
 		match: (p) => p === "comment-contracts.ts",
 	},
+	// Local Components resolver-side domain (PLAN 0023 M1, TD §22). Reads
+	// `ir/` only. The PERSISTED component shapes (definition/registry/
+	// property/override types + schemas) follow the layout/ precedent
+	// documented below: they live in `ir/` at rank 1, because `ir/types.ts`
+	// owns `CanvasIR.components` and `ir/validators.ts` spreads the schemas —
+	// rank 1 cannot import upward. Only resolver-side contracts and logic
+	// (identity, graph, resolve, cache — M2) belong here.
+	{ domain: "components", rank: 2, match: (p) => p.startsWith("components/") },
 	{ domain: "commands", rank: 3, match: (p) => p.startsWith("commands/") },
 	{ domain: "extensions", rank: 4, match: (p) => p.startsWith("extensions/") },
 	// Template definition/instantiation (FR-020..022). Same rank as extensions —
 	// it needs ir + commands (for the reversible-batch instantiation wrapper,
 	// canvas-m2-003) but never touches extensions, and vice versa.
 	{ domain: "templates", rank: 4, match: (p) => p.startsWith("templates/") },
+	// Component document operations (PLAN 0023, decision D-1): FOLDED INTO
+	// the `templates` domain rather than given a separate rank-4 domain.
+	// TD §16.3 makes `templates/instantiate.ts` ↔ component-import coupling
+	// inevitable, and equal-rank cross-domain imports are violations —
+	// same-domain membership is what keeps that edge legal.
+	{
+		domain: "templates",
+		rank: 4,
+		match: (p) => p.startsWith("component-ops/"),
+	},
 	// The canonical Brand Kit contract (FR-031) + apply-brand transforms
 	// (FR-032, canvas-m2-006). Bumped from rank 2 to rank 4 in canvas-m2-006:
 	// the contract itself only reads `ir/`, but `applyBrandColors`/etc. wrap
