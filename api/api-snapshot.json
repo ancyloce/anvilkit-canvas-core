@@ -28719,7 +28719,39 @@
 						"summary": [
 							{
 								"kind": "text",
-								"text": "Persistent instance node ID that produced this record."
+								"text": "The instance node that produced this record — its IMMEDIATE owner, which is\na persistent document id only at "
+							},
+							{
+								"kind": "code",
+								"text": "`depth: 1`"
+							},
+							{
+								"kind": "text",
+								"text": ".\n\nInside a NESTED instance this is the nested instance's own VIRTUAL id: the\nexpansion threads that codec id down as the child pass's instance id, so a\nrecord two definitions deep reports something like\n"
+							},
+							{
+								"kind": "code",
+								"text": "`akv1:6:inst-112:outer-nested`"
+							},
+							{
+								"kind": "text",
+								"text": ", which addresses no document node. A\nconsumer that needs the persistent instance a record ultimately belongs to\n(selection, commands, anything persisted) must follow the owner chain to\nits fixed point — the record whose origin names itself. Editor-side that is\n"
+							},
+							{
+								"kind": "code",
+								"text": "`persistentInstanceIdFor`"
+							},
+							{
+								"kind": "text",
+								"text": " in "
+							},
+							{
+								"kind": "code",
+								"text": "`selection/component-selection-policy.ts`"
+							},
+							{
+								"kind": "text",
+								"text": "."
 							}
 						]
 					},

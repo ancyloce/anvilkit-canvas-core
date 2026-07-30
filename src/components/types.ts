@@ -67,7 +67,19 @@ export interface CanvasComponentIssue {
  * absent on every record.
  */
 export interface CanvasResolvedComponentOrigin {
-	/** Persistent instance node ID that produced this record. */
+	/**
+	 * The instance node that produced this record — its IMMEDIATE owner, which is
+	 * a persistent document id only at `depth: 1`.
+	 *
+	 * Inside a NESTED instance this is the nested instance's own VIRTUAL id: the
+	 * expansion threads that codec id down as the child pass's instance id, so a
+	 * record two definitions deep reports something like
+	 * `akv1:6:inst-112:outer-nested`, which addresses no document node. A
+	 * consumer that needs the persistent instance a record ultimately belongs to
+	 * (selection, commands, anything persisted) must follow the owner chain to
+	 * its fixed point — the record whose origin names itself. Editor-side that is
+	 * `persistentInstanceIdFor` in `selection/component-selection-policy.ts`.
+	 */
 	readonly instanceId: string;
 	readonly componentId: string;
 	/**
