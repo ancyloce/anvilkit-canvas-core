@@ -1,0 +1,197 @@
+[
+	{
+		"name": "empty-containers",
+		"why": "Empty object and array emit as {} and [] with no whitespace, at every nesting level.",
+		"input": {
+			"obj": {},
+			"arr": [],
+			"nested": {
+				"b": [],
+				"a": {}
+			}
+		},
+		"expected": "{\"arr\":[],\"nested\":{\"a\":{},\"b\":[]},\"obj\":{}}"
+	},
+	{
+		"name": "key-ordering-utf16",
+		"why": "Keys sort by UTF-16 code unit, NOT numerically and NOT by locale: \"10\" precedes \"2\" because '1' < '2', and uppercase precedes lowercase.",
+		"input": {
+			"b": 1,
+			"A": 2,
+			"a": 3,
+			"": 4,
+			"B": 5,
+			"10": 6,
+			"2": 7
+		},
+		"expected": "{\"\":4,\"10\":6,\"2\":7,\"A\":2,\"B\":5,\"a\":3,\"b\":1}"
+	},
+	{
+		"name": "key-ordering-astral",
+		"why": "UTF-16 code-unit order differs from CODE POINT order above the BMP: U+10000 begins with surrogate U+D800, which is BELOW U+FFFD, so the astral key sorts before it. Code-point sorting would place it last. This is the discriminator between a correct JCS sort and a plausible-looking one.",
+		"input": {
+			"\ufffd": 1,
+			"\ud800\udc00": 2,
+			"\uffff": 3,
+			"z": 4
+		},
+		"expected": "{\"z\":4,\"\ud800\udc00\":2,\"\ufffd\":1,\"\uffff\":3}"
+	},
+	{
+		"name": "nested-objects",
+		"why": "Sorting is recursive; inner objects sort independently of their position.",
+		"input": {
+			"z": {
+				"c": 1,
+				"a": {
+					"y": 2,
+					"b": 3
+				}
+			},
+			"a": [
+				{
+					"q": 1,
+					"p": 2
+				}
+			]
+		},
+		"expected": "{\"a\":[{\"p\":2,\"q\":1}],\"z\":{\"a\":{\"b\":3,\"y\":2},\"c\":1}}"
+	},
+	{
+		"name": "array-order-preserved",
+		"why": "Arrays are semantically ordered; JCS never sorts them.",
+		"input": {
+			"a": [
+				3,
+				1,
+				2,
+				"b",
+				"a",
+				null,
+				true,
+				false
+			]
+		},
+		"expected": "{\"a\":[3,1,2,\"b\",\"a\",null,true,false]}"
+	},
+	{
+		"name": "nfc-keys",
+		"why": "Decomposed keys normalize to NFC BEFORE sorting: 'e'+U+0301 becomes U+00E9. Normalizing first is what makes the resulting order independent of input form.",
+		"input": {
+			"e\u0301cole": 1,
+			"cafe\u0301": 2
+		},
+		"expected": "{\"caf\u00e9\":2,\"\u00e9cole\":1}"
+	},
+	{
+		"name": "nfc-values",
+		"why": "String VALUES normalize too, so visually identical values from different input methods hash identically.",
+		"input": {
+			"a": "\u00e9",
+			"b": "e\u0301",
+			"c": "A\u0301"
+		},
+		"expected": "{\"a\":\"\u00e9\",\"b\":\"\u00e9\",\"c\":\"\u00c1\"}"
+	},
+	{
+		"name": "surrogate-pairs",
+		"why": "Astral characters emit literally as UTF-8 4-byte sequences, not as escapes.",
+		"input": {
+			"emoji": "\ud83c\udfa8",
+			"clef": "\ud834\udd1e",
+			"pair": "a\ud83c\udfa8b"
+		},
+		"expected": "{\"clef\":\"\ud834\udd1e\",\"emoji\":\"\ud83c\udfa8\",\"pair\":\"a\ud83c\udfa8b\"}"
+	},
+	{
+		"name": "negative-zero",
+		"why": "RFC 8785 renders -0 as 0 (ECMAScript Number::toString), so +0 and -0 are indistinguishable in the preimage.",
+		"input": {
+			"nz": 0,
+			"z": -0.0,
+			"arr": [
+				-0.0,
+				0
+			]
+		},
+		"expected": "{\"arr\":[0,0],\"nz\":0,\"z\":0}"
+	},
+	{
+		"name": "numbers-rfc8785",
+		"why": "The RFC 8785 number vectors: precision truncation, exponent switchover, trailing-zero removal.",
+		"input": {
+			"n": [
+				333333333.3333333,
+				1e+30,
+				4.5,
+				0.002,
+				1e-27
+			]
+		},
+		"expected": "{\"n\":[333333333.3333333,1e+30,4.5,0.002,1e-27]}"
+	},
+	{
+		"name": "exponents-extremes",
+		"why": "Exponent-notation boundaries (1e20 vs 1e21, 1e-6 vs 1e-7) and the float64 extremes.",
+		"input": {
+			"n": [
+				1e+21,
+				1e+20,
+				1e-06,
+				1e-07,
+				5e-324,
+				1.7976931348623157e+308,
+				-1e+21
+			]
+		},
+		"expected": "{\"n\":[1e+21,100000000000000000000,0.000001,1e-7,5e-324,1.7976931348623157e+308,-1e+21]}"
+	},
+	{
+		"name": "integers-and-floats",
+		"why": "Integral values carry no decimal point; sign is preserved.",
+		"input": {
+			"n": [
+				0,
+				1,
+				-1,
+				9007199254740991,
+				-9007199254740991,
+				1.5,
+				-1.5
+			]
+		},
+		"expected": "{\"n\":[0,1,-1,9007199254740991,-9007199254740991,1.5,-1.5]}"
+	},
+	{
+		"name": "string-escapes",
+		"why": "Shortest-form escapes for the five named controls, lowercase \\uXXXX for other C0, and NO escaping of '/' or DEL (U+007F is not a control that JSON escapes).",
+		"input": {
+			"s": "\b\t\n\f\r\"\\/\u0000\u001f\u007f"
+		},
+		"expected": "{\"s\":\"\\b\\t\\n\\f\\r\\\"\\\\/\\u0000\\u001f\u007f\"}"
+	},
+	{
+		"name": "literals",
+		"why": "null / true / false at both object and array positions.",
+		"input": {
+			"n": null,
+			"t": true,
+			"f": false,
+			"arr": [
+				null,
+				true,
+				false
+			]
+		},
+		"expected": "{\"arr\":[null,true,false],\"f\":false,\"n\":null,\"t\":true}"
+	},
+	{
+		"name": "unicode-values-mixed",
+		"why": "Non-ASCII values pass through as UTF-8, including CJK and the euro sign from the RFC example.",
+		"input": {
+			"s": "\u20ac$A'B\"\\",
+			"cjk": "\u65e5\u672c\u8a9e"
+		},
+		"expected": "{\"cjk\":\"\u65e5\u672c\u8a9e\",\"s\":\"\u20ac$A'B\\\"\\\\\"}"
+	}
+]
