@@ -33,8 +33,14 @@ export type {
 	CanvasPolicyQuery,
 } from "../policy-contracts.js";
 export { CANVAS_ALLOW_ALL_POLICY } from "../policy-contracts.js";
+export * from "./audit.js";
 export * from "./command-policy.js";
 export * from "./compliance-cache.js";
 export * from "./compliance.js";
-export * from "./prepare-export.js";
+/**
+ * `prepare-export.ts` lives in this directory but is NOT re-exported here — it
+ * ships from `@anvilkit/canvas-core/export-preparation` instead. See that
+ * module's header: bundling it with the decision surface pulled the whole
+ * rank-2 resolver into this entry and took it to 99.9% of its budget.
+ */
 export * from "./types.js";

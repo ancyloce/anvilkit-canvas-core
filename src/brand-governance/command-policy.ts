@@ -255,6 +255,22 @@ export function validateBrandComponentCommand({
 				);
 			}
 			break;
+		case "source-update":
+			if (!pathPermits(path, (p) => p.allowSourceUpdate, true)) {
+				return deny(
+					"source-update-denied",
+					"A component on this instance's path pins its version.",
+				);
+			}
+			break;
+		case "source-swap":
+			if (!pathPermits(path, (p) => p.allowSourceSwap, true)) {
+				return deny(
+					"source-swap-denied",
+					"A component on this instance's path forbids replacing it with a different component.",
+				);
+			}
+			break;
 		case "override-set":
 		case "override-reset": {
 			if (query.propertyId === undefined) break;

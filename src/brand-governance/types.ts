@@ -156,6 +156,8 @@ const KNOWN_POLICY_KEYS: ReadonlySet<string> = new Set([
 	"allowDetach",
 	"allowFlatten",
 	"allowVariantChange",
+	"allowSourceUpdate",
+	"allowSourceSwap",
 	"recommendedEnforcement",
 ]);
 

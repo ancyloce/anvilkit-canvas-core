@@ -390,6 +390,125 @@ describe("assertBrandComponentCommand — throws BEFORE mutation", () => {
 	});
 });
 
+describe("source-update / source-swap path rules (TD §15.1)", () => {
+	/**
+	 * TD §15.1's matrix lists "Update/swap" as governed by portable policy, but
+	 * the intersection switch had no case for either — they fell to `default`
+	 * and were gated by the host capability alone. These are the rules that
+	 * close that, and they are separate fields on purpose: "take my bug fixes,
+	 * but do not substitute a different component for our logo lockup" is a
+	 * realistic posture that one combined field could not express.
+	 */
+
+	it("allows both when no policy says otherwise", () => {
+		for (const operation of ["source-update", "source-swap"] as const) {
+			expect(
+				validateBrandComponentCommand({
+					ir: doc({}),
+					query: { operation, instanceId: "inst-1" },
+					context: context(),
+				}).outcome,
+			).toBe("allow");
+		}
+	});
+
+	it("`allowSourceUpdate: false` denies update but NOT swap", () => {
+		const ir = doc({ allowSourceUpdate: false });
+		const update = validateBrandComponentCommand({
+			ir,
+			query: { operation: "source-update", instanceId: "inst-1" },
+			context: context(),
+		});
+		expect(update.outcome).toBe("deny");
+		expect(update.reason).toBe("source-update-denied");
+		// The asymmetry is the point.
+		expect(
+			validateBrandComponentCommand({
+				ir,
+				query: { operation: "source-swap", instanceId: "inst-1" },
+				context: context(),
+			}).outcome,
+		).toBe("allow");
+	});
+
+	it("`allowSourceSwap: false` denies swap but NOT update", () => {
+		const ir = doc({ allowSourceSwap: false });
+		const swap = validateBrandComponentCommand({
+			ir,
+			query: { operation: "source-swap", instanceId: "inst-1" },
+			context: context(),
+		});
+		expect(swap.outcome).toBe("deny");
+		expect(swap.reason).toBe("source-swap-denied");
+		expect(
+			validateBrandComponentCommand({
+				ir,
+				query: { operation: "source-update", instanceId: "inst-1" },
+				context: context(),
+			}).outcome,
+		).toBe("allow");
+	});
+
+	it("intersects down the path — a NESTED policy wins over a permissive parent", () => {
+		// The property that makes this a path rule rather than a flag on the
+		// outermost component.
+		const ir = doc(
+			{ allowSourceUpdate: true },
+			{ allowSourceUpdate: false },
+		);
+		expect(
+			validateBrandComponentCommand({
+				ir,
+				query: { operation: "source-update", instanceId: "inst-1" },
+				context: context(),
+			}).reason,
+		).toBe("source-update-denied");
+	});
+
+	it("a permissive nested policy cannot re-open what the parent closed", () => {
+		const ir = doc({ allowSourceSwap: false }, { allowSourceSwap: true });
+		expect(
+			validateBrandComponentCommand({
+				ir,
+				query: { operation: "source-swap", instanceId: "inst-1" },
+				context: context(),
+			}).outcome,
+		).toBe("deny");
+	});
+
+	it("is a WARNING, not a denial, when the host is only advising (OD-10)", () => {
+		// A component cannot escalate a host running advisory.
+		expect(
+			validateBrandComponentCommand({
+				ir: doc({ allowSourceUpdate: false }),
+				query: { operation: "source-update", instanceId: "inst-1" },
+				context: context({ enforcement: "warning" }),
+			}).outcome,
+		).toBe("warn");
+	});
+
+	it("the host capability is still checked FIRST", () => {
+		// Capability denial reports `capability-denied`, not the policy reason —
+		// the two are different remedies (ask an admin vs. change the component).
+		expect(
+			validateBrandComponentCommand({
+				ir: doc({ allowSourceUpdate: false }),
+				query: { operation: "source-update", instanceId: "inst-1" },
+				context: context({
+					capabilities: {
+						canEditOverrides: true,
+						canChangeVariant: true,
+						canDetach: true,
+						canFlatten: true,
+						canInsertExternalComponents: true,
+						canUpdateComponents: false,
+					},
+				}),
+			}).reason,
+		).toBe("capability-denied");
+	});
+});
+
 describe("bypass coverage — every operation has a rule", () => {
 	it("no operation is silently unguarded", () => {
 		// The claim is COVERAGE, so this enumerates the union rather than a
