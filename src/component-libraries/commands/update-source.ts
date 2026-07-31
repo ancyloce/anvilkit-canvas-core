@@ -27,7 +27,10 @@
  * re-presents the preview if it changed (§31.3).
  */
 
-import { CanvasCommandError } from "../../commands/runtime.js";
+import {
+	assertBrandPolicy,
+	CanvasCommandError,
+} from "../../commands/runtime.js";
 import type {
 	CommandApplyOptions,
 	CommandApplyResult,
@@ -195,6 +198,24 @@ function applySourceChange(
 			);
 		}
 		instances.push(instance);
+	}
+
+	// Policy, per instance, after the whole batch is known to be valid and
+	// BEFORE any mutation (plan 0021 M5 follow-up #1).
+	//
+	// Per instance rather than once for the command, because policy is an
+	// intersection down each instance's own path (OD-08): a nested instance can
+	// forbid what its parent permits, so asking once about the first would let
+	// the rest through. And before any mutation, for the same reason the
+	// `from`-check above is: a refusal must abort the batch rather than apply it
+	// to a subset, which for an update across 200 instances is the difference
+	// between "nothing happened" and "the document is now half-migrated".
+	for (const instance of instances) {
+		assertBrandPolicy(options, {
+			operation: isSwap ? "source-swap" : "source-update",
+			instanceId: instance.id,
+			...(cmd.location !== undefined ? { location: cmd.location } : {}),
+		});
 	}
 
 	const report = compareComponentDefinitions(

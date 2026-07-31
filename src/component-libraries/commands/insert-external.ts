@@ -25,7 +25,10 @@
  * byte-identical.
  */
 
-import { CanvasCommandError } from "../../commands/runtime.js";
+import {
+	assertBrandPolicy,
+	CanvasCommandError,
+} from "../../commands/runtime.js";
 import type {
 	CommandApplyOptions,
 	CommandApplyResult,
@@ -147,6 +150,19 @@ function applyInsertExternal(
 	cmd: CanvasComponentInsertExternalCommand,
 	options: CommandApplyOptions,
 ): CommandApplyResult<CanvasComponentRevertExternalInsertCommand> {
+	// 0. Policy, before anything else (plan 0021 M5 follow-up #1).
+	//
+	//    `insert-external` is asked about with NO `instanceId`: the instance does
+	//    not exist yet, so there is no path to intersect policies down. What the
+	//    host is being asked is the capability question — may this session bring
+	//    external content into this document at all — and answering it here is
+	//    what makes `canInsertExternalComponents: false` mean something for the
+	//    public command API and not only for the hidden Libraries panel.
+	assertBrandPolicy(options, {
+		operation: "insert-external",
+		...(cmd.location !== undefined ? { location: cmd.location } : {}),
+	});
+
 	// 1. Identity: the instance must point at exactly what is being stored.
 	if (!componentSourceRefsEqual(cmd.source, cmd.candidate.ref)) {
 		throw new CanvasCommandError(

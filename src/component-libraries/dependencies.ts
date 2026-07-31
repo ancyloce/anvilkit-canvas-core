@@ -108,6 +108,34 @@ export function validateExternalClosure(
 	const maxNodes =
 		options.maxExpandedNodes ?? MAX_COMPONENT_EXPANDED_NODES_PER_RESOLUTION;
 
+	// A snapshot that lists ITSELF is a cycle of length one, and unlike a longer
+	// cycle it needs no registry to see (plan 0021 T-048). Checking it here
+	// matters because `closureResolver` is optional: without this, an envelope
+	// admitted with no resolver — the documented, supported case — would pass
+	// closure validation while being trivially self-referential.
+	let selfKey: string | undefined;
+	try {
+		selfKey = snapshotKey(snapshot.ref);
+	} catch {
+		selfKey = undefined;
+	}
+	if (selfKey !== undefined) {
+		for (const dependency of snapshot.dependencies ?? []) {
+			let dependencyKey: string;
+			try {
+				dependencyKey = snapshotKey(dependency);
+			} catch {
+				continue;
+			}
+			if (dependencyKey === selfKey) {
+				return componentDiagnostic(
+					"component-dependency-missing",
+					`Snapshot "${selfKey}" declares itself as a dependency (cycle).`,
+				);
+			}
+		}
+	}
+
 	const pending = new Map<string, CanvasExternalComponentSnapshot>();
 	for (const entry of options.pending ?? []) {
 		try {
