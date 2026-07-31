@@ -36,6 +36,13 @@ const LAYERS = [
 	// algorithm has to sit below both. It imports nothing, so rank 0 is the
 	// correct floor rather than an arbitrary low rank.
 	{ domain: "hash", rank: 0, match: (p) => p === "hash.ts" },
+	// Shared URI scheme allowlist (plan 0021 T-009). Extracted from
+	// `serialize/svg.ts` (rank 5) because `component-libraries/` (rank 4) must
+	// sanitize Provider-supplied release-notes/thumbnail URLs and cannot import
+	// upward. It imports nothing, so rank 0 is the correct floor — the same
+	// reasoning that created `limits.ts` and `hash.ts`. `serialize/svg.ts`
+	// re-exports its names, so this consolidation breaks no importer.
+	{ domain: "uri", rank: 0, match: (p) => p === "uri.ts" },
 	{ domain: "ir", rank: 1, match: (p) => p.startsWith("ir/") },
 	{ domain: "ai-contracts", rank: 2, match: (p) => p === "ai-contracts.ts" },
 	// The headless text-measurement port. A host-implemented contract over IR
@@ -66,6 +73,21 @@ const LAYERS = [
 	// rank 1 cannot import upward. Only resolver-side contracts and logic
 	// (identity, graph, resolve, cache — M2) belong here.
 	{ domain: "components", rank: 2, match: (p) => p.startsWith("components/") },
+	// The brand-policy decision port (plan 0021 T-003/T-038, D-3). A
+	// host-implemented contract over `ir/` types only — the same shape as
+	// `text-contracts.ts`/`comment-contracts.ts`, hence the same rank.
+	//
+	// Rank 2 is what makes the enforcement design work: `commands/` (rank 3)
+	// can import the port, so every mutation path can consult policy. It is
+	// ALSO why `clipboard/` (rank 2, a same-rank sibling) cannot — clipboard
+	// policy is therefore enforced in the CALLER (the Editor action layer and
+	// the paste command at rank >= 3), and `clipboard/payload.ts` itself stays
+	// policy-free. See plan 0021 §4.2.
+	{
+		domain: "policy-contracts",
+		rank: 2,
+		match: (p) => p === "policy-contracts.ts",
+	},
 	{ domain: "commands", rank: 3, match: (p) => p.startsWith("commands/") },
 	{ domain: "extensions", rank: 4, match: (p) => p.startsWith("extensions/") },
 	// Template definition/instantiation (FR-020..022). Same rank as extensions —
@@ -104,7 +126,35 @@ const LAYERS = [
 	//      the shapes it spreads and `clipboard/` (rank 2) needs the
 	//      capability type. Only RESOLVED-tree contracts belong here.
 	{ domain: "layout", rank: 4, match: (p) => p.startsWith("layout/") },
+	// External Component Libraries (plan 0021, D-3): canonicalization,
+	// integrity, snapshot-key codec, admission, resolution, and the six
+	// library commands. Needs `ir/` (1), `components/` (2) for the local
+	// definition shapes, and `commands/` (3) for reversible batches — so rank
+	// 4, a sibling of `templates`/`brand`/`layout`, is the floor.
+	//
+	// Two consequences the design depends on:
+	//   1. `ir/` (rank 1) CANNOT import the snapshot-key Zod schema from here.
+	//      The persisted shapes and their key validation must therefore be
+	//      declared in `ir/` itself, exactly as `layout/` and `components/`
+	//      already do — see the self-test case asserting this edge is illegal.
+	//   2. `clipboard/` (rank 2) cannot import it either, so the M2
+	//      `snapshotRefs` carry is validated caller-side.
+	{
+		domain: "component-libraries",
+		rank: 4,
+		match: (p) => p.startsWith("component-libraries/"),
+	},
 	{ domain: "serialize", rank: 5, match: (p) => p.startsWith("serialize/") },
+	// Brand governance (plan 0021, D-3): the shared command policy gateway and
+	// the component-aware compliance extensions. Reads `brand/` (4) and
+	// `component-libraries/` (4) — two same-rank siblings that cannot reach
+	// each other — plus `policy-contracts.ts` (2), so it must outrank all
+	// three. Rank 5 alongside `serialize/` (no dependency either way).
+	{
+		domain: "brand-governance",
+		rank: 5,
+		match: (p) => p.startsWith("brand-governance/"),
+	},
 	// Design-level AI job contracts (FR-050/052, canvas-m4-001/003). Needs
 	// BOTH templates (CanvasSizePreset id) and brand (BrandKitDefinition)
 	// types — same-rank siblings that don't depend on each other — plus
@@ -205,6 +255,31 @@ function selfTest() {
 		["ir/builders.ts", "ir/validators.ts", false], // same domain
 		["commands/runtime.ts", "clock.ts", false], // downward to leaf
 		["clock.ts", "unmapped-thing.ts", true], // unmapped importee
+		// --- plan 0021 M0 (T-003) -------------------------------------------
+		// The port is reachable from the command layer: this is the whole
+		// reason `policy-contracts.ts` sits at rank 2 rather than beside
+		// `brand-governance/`.
+		["commands/runtime.ts", "policy-contracts.ts", false],
+		// ...but the gateway that USES the port is not. An enforcement helper
+		// must never be imported downward into `commands/`.
+		["commands/runtime.ts", "brand-governance/gateway.ts", true],
+		// `clipboard/` is a same-rank sibling of the port, so it cannot consult
+		// policy itself — paste enforcement lives in the caller.
+		["clipboard/payload.ts", "policy-contracts.ts", true],
+		// The gateway may read both rank-4 domains it composes.
+		["brand-governance/gateway.ts", "brand/compliance.ts", false],
+		["brand-governance/gateway.ts", "component-libraries/snapshot-key.ts", false],
+		// ...and component-libraries may not reach back up into it.
+		["component-libraries/admission.ts", "brand-governance/gateway.ts", true],
+		// The shared URI allowlist is reachable from every domain that needs it,
+		// including the rank-5 serializer it was extracted from.
+		["component-libraries/limits.ts", "uri.ts", false],
+		["serialize/svg.ts", "uri.ts", false],
+		// Load-bearing M1 constraint: `ir/` cannot import the snapshot-key
+		// schema, so the persisted registry shapes and their key validation
+		// must be declared in `ir/` itself (as `layout/` and `components/`
+		// already do). If this ever stops failing, the rank table moved.
+		["ir/validators.ts", "component-libraries/snapshot-key.ts", true],
 	];
 	const failures = cases.filter(
 		([importer, importee, expectViolation]) =>
