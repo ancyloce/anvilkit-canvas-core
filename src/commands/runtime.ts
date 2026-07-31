@@ -1,4 +1,5 @@
 import { resolveNow } from "../clock.js";
+import { componentSourceLabel, localComponentIdOf } from "../ir/component-source.js";
 import {
 	buildComponentGraph,
 	buildComponentReferenceIndex,
@@ -44,6 +45,10 @@ import type {
 	CanvasPage,
 	CanvasTransform,
 } from "../ir/types.js";
+import type {
+	CanvasPolicyDecision,
+	CanvasPolicyQuery,
+} from "../policy-contracts.js";
 import type { CanvasDocumentLocation } from "../ir/walkers.js";
 import {
 	CanvasIRDepthError,
@@ -106,6 +111,14 @@ import type {
 	CommandApplyResult,
 } from "./types.js";
 
+/**
+ * Every reason a command refuses to apply.
+ *
+ * **Closed on purpose.** Commands throw rather than return, and this union is
+ * what makes a `catch` block able to switch exhaustively instead of matching on
+ * message text. Widening it is additive and safe; turning it into `string` would
+ * not be.
+ */
 export type CanvasCommandErrorCode =
 	| "node-not-found"
 	| "parent-not-found"
@@ -118,15 +131,51 @@ export type CanvasCommandErrorCode =
 	| "index-out-of-range"
 	| "invariant-violated"
 	| "node-locked"
-	| "unknown-command";
+	| "unknown-command"
+	// --- External Component Libraries + brand governance (plan 0021 T-011) ---
+	//
+	// The five conditions that must ABORT a mutation rather than be reported
+	// about it. The first four are also members of
+	// `CanvasComponentDiagnosticCode` (`component-libraries/diagnostics.ts`),
+	// because the same condition is a diagnostic when found while *reading* a
+	// document and a hard failure when found while *changing* one — see that
+	// module's header. A type-level assertion there proves the overlap stays in
+	// sync with this union.
+	//
+	// They are declared here, in `commands/` (rank 3), rather than imported from
+	// `component-libraries/` (rank 4): a lower rank cannot import a higher one,
+	// and this union has to be usable by every command handler.
+	| "component-library-capability-denied"
+	| "component-integrity-mismatch"
+	| "component-snapshot-missing"
+	| "component-dependency-missing"
+	| "brand-policy-denied";
 
 export class CanvasCommandError extends Error {
 	readonly code: CanvasCommandErrorCode;
 
-	constructor(code: CanvasCommandErrorCode, message: string) {
+	/**
+	 * The structured decision behind a `brand-policy-denied` throw (plan 0021
+	 * T-040), absent for every other code.
+	 *
+	 * The Editor needs the STABLE `reason` to pick localized copy. `message`
+	 * cannot serve that purpose: it interpolates `decision.detail`, which is
+	 * explicitly log-only and may name a provider or an identity. Without this
+	 * field the only way to recover the reason is to parse the message — which
+	 * is both brittle and one careless `{error.message}` away from rendering
+	 * the detail it exists to keep out of the UI.
+	 */
+	readonly policy?: CanvasPolicyDecision;
+
+	constructor(
+		code: CanvasCommandErrorCode,
+		message: string,
+		policy?: CanvasPolicyDecision,
+	) {
 		super(message);
 		this.name = "CanvasCommandError";
 		this.code = code;
+		if (policy) this.policy = policy;
 	}
 }
 
@@ -2512,7 +2561,12 @@ function assertPropertyWritable(
 	options: CommandApplyOptions,
 ): void {
 	if (options.enforceLocked !== true) return;
-	const definition = ir.components?.[instance.componentId];
+	const localId = localComponentIdOf(instance.source);
+	// Property locking is a property of a LOCAL Source tree. An external
+	// Source's lock state travels with its snapshot and is enforced by the
+	// library commands (M2+), not by this local-registry lookup.
+	if (localId === undefined) return;
+	const definition = ir.components?.[localId];
 	if (!definition) return;
 	const property = definition.properties.find((p) => p.id === propertyId);
 	if (!property) return;
@@ -2520,7 +2574,7 @@ function assertPropertyWritable(
 	if (target?.node.locked === true) {
 		throw new CanvasCommandError(
 			"node-locked",
-			`Property "${propertyId}" binds locked Source node "${property.nodeId}" of component "${instance.componentId}" — read-only in every instance (enforceLocked)`,
+			`Property "${propertyId}" binds locked Source node "${property.nodeId}" of component "${localId}" — read-only in every instance (enforceLocked)`,
 		);
 	}
 }
@@ -2606,6 +2660,34 @@ function writeOverrideMap(
 	}
 }
 
+
+/**
+ * Consult brand policy through the rank-2 port (plan 0021 T-039).
+ *
+ * A no-op when no `brandPolicy` is wired, which is every existing caller — so
+ * this is additive. A `deny` throws BEFORE any mutation, so a refused command
+ * leaves the document untouched; a `warn` is intentionally silent here and is
+ * surfaced by the compliance report instead (advisory mode must not block).
+ *
+ * The evaluator is called rather than the gateway imported: the gateway lives
+ * in `brand-governance/` at rank 5 and this file is rank 3. The port is what
+ * makes enforcement reachable from where mutations actually happen.
+ */
+function assertBrandPolicy(
+	options: CommandApplyOptions,
+	query: CanvasPolicyQuery,
+): void {
+	const policy = options.brandPolicy;
+	if (!policy) return;
+	const decision = policy.evaluate(query, policy.context);
+	if (decision.outcome !== "deny") return;
+	throw new CanvasCommandError(
+		"brand-policy-denied",
+		`${decision.reason ?? "brand-policy-denied"}: ${decision.detail ?? "denied by brand policy"}`,
+		decision,
+	);
+}
+
 function applyComponentInstanceSetOverride(
 	ir: CanvasIR,
 	cmd: CanvasComponentInstanceSetOverrideCommand,
@@ -2614,6 +2696,13 @@ function applyComponentInstanceSetOverride(
 	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
 	const node = expectInstanceNode(ir, cmd.nodeId, cmd.location);
 	assertPropertyWritable(ir, node, cmd.propertyId, options);
+	assertBrandPolicy(options, {
+		operation: "override-set",
+		instanceId: cmd.nodeId,
+		propertyId: cmd.propertyId,
+		...(cmd.location !== undefined ? { location: cmd.location } : {}),
+		value: cmd.value,
+	});
 	const prior = node.overrides?.[cmd.propertyId];
 	const nextMap: CanvasComponentOverrideMap = {
 		...node.overrides,
@@ -2653,6 +2742,12 @@ function applyComponentInstanceResetOverride(
 	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
 	const node = expectInstanceNode(ir, cmd.nodeId, cmd.location);
 	assertPropertyWritable(ir, node, cmd.propertyId, options);
+	assertBrandPolicy(options, {
+		operation: "override-reset",
+		instanceId: cmd.nodeId,
+		propertyId: cmd.propertyId,
+		...(cmd.location !== undefined ? { location: cmd.location } : {}),
+	});
 	const prior = node.overrides?.[cmd.propertyId];
 	if (prior === undefined) {
 		// Resetting an absent key is a validated no-op (the instance exists and
@@ -2753,6 +2848,11 @@ function applyComponentInstanceDetach(
 	options: CommandApplyOptions,
 ): CommandApplyResult {
 	assertUnlocked(ir, cmd.nodeId, options, cmd.location);
+	assertBrandPolicy(options, {
+		operation: "detach",
+		instanceId: cmd.nodeId,
+		...(cmd.location !== undefined ? { location: cmd.location } : {}),
+	});
 	const instance = expectInstanceNode(ir, cmd.nodeId, cmd.location);
 	const found = findNodeInScope(ir, cmd.nodeId, cmd.location);
 	if (!found?.parent) {
@@ -2772,7 +2872,7 @@ function applyComponentInstanceDetach(
 		: findResidualInstance(resolved.root);
 	if (resolved.placeholder || errors.length > 0 || residual) {
 		const reason = resolved.placeholder
-			? `Source "${instance.componentId}" did not resolve`
+			? `Source "${componentSourceLabel(instance.source)}" did not resolve`
 			: errors.length > 0
 				? (errors[0]?.message ?? "resolution reported errors")
 				: `nested instance "${residual?.id}" degraded instead of expanding`;

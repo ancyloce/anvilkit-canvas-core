@@ -201,7 +201,7 @@ describe("component-instance.detach (T-DET-1/T-DET-2)", () => {
 				type: "node.update",
 				nodeId: "inst-o",
 				kind: "component-instance",
-				patch: { componentId: "cmp-gone" },
+				patch: { source: { kind: "local", componentId: "cmp-gone" } },
 			},
 			{ now: NOW },
 		).ir;
@@ -283,7 +283,7 @@ describe("buildDetachCommand (component-ops)", () => {
 				type: "node.update",
 				nodeId: "inst-o",
 				kind: "component-instance",
-				patch: { componentId: "cmp-gone" },
+				patch: { source: { kind: "local", componentId: "cmp-gone" } },
 			},
 			{ now: NOW },
 		).ir;

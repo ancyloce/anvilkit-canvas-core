@@ -249,7 +249,7 @@ describe("component-instance.insert", () => {
 			{ now: NOW },
 		);
 		const node = pageInstance(inserted.ir, "inst-b");
-		expect(node.componentId).toBe("cmp-b");
+		expect(node.source).toEqual({ kind: "local", componentId: "cmp-b" });
 		expect(node.overrides).toEqual({ "prop-vis": OVERRIDE });
 		expect(inserted.inverse).toEqual({ type: "node.delete", nodeId: "inst-b" });
 		const undone = applyCommand(inserted.ir, inserted.inverse, { now: NOW });

@@ -18,6 +18,7 @@ import type {
 	CanvasTransform,
 } from "../ir/types.js";
 import type { CanvasDocumentLocation } from "../ir/walkers.js";
+import type { CanvasPolicyEvaluator } from "../policy-contracts.js";
 import type { CanvasNodeStyle } from "./apply-style.js";
 
 export interface CanvasPoint {
@@ -647,4 +648,40 @@ export interface CommandApplyOptions {
 	 * propagates to every sub-command; the batch stays all-or-nothing.
 	 */
 	enforceLocked?: boolean;
+	/**
+	 * Id source for commands that mint node ids themselves (plan 0021 T-035).
+	 *
+	 * Exists so replay and collaborative application can be deterministic: a
+	 * command that called a global uuid generator directly would produce
+	 * different ids on every peer and on every replay.
+	 *
+	 * Added to THIS options object rather than to a parallel "command context"
+	 * type — that is the T-035 DoD. `applyBatch` forwards the whole object to
+	 * every sub-command, so anything added here propagates for free and stays
+	 * all-or-nothing with the batch.
+	 *
+	 * NOTE: no built-in command mints an id today (every one takes its ids
+	 * explicitly), so this currently has no in-tree consumer. It is declared now
+	 * because M4's policy-aware mutation paths extend this same object, and
+	 * discovering the seam then would have meant either a breaking change or the
+	 * parallel type this DoD forbids.
+	 */
+	idFactory?: () => string;
+	/**
+	 * Brand-policy context and the evaluator to consult (plan 0021 T-035 step 1,
+	 * completed in M4 once T-036/T-037 defined the shapes).
+	 *
+	 * `context` is opaque here for the same reason it is opaque in
+	 * `policy-contracts.ts`: the concrete `CanvasBrandPolicyContext` lives at
+	 * rank 5 and `commands/` is rank 3. The evaluator supplied by the host (or
+	 * by `brand-governance/`) casts it back.
+	 *
+	 * Absent = no policy evaluation, which is exactly today's behaviour — so
+	 * every existing caller is unaffected. Like `enforceLocked`, it propagates
+	 * into every sub-command of a `batch` and the batch stays all-or-nothing.
+	 */
+	brandPolicy?: {
+		readonly evaluate: CanvasPolicyEvaluator;
+		readonly context: unknown;
+	};
 }

@@ -118,7 +118,7 @@ describe("T-CREATE-1 input shapes", () => {
 		// The instance sits in the group's slot with the group's placement.
 		expect(pageChildren(next).map((c) => c.id)).toEqual(["sib", "inst-1"]);
 		const instance = pageChildren(next)[1] as CanvasComponentInstanceNode;
-		expect(instance.componentId).toBe("cmp-new");
+		expect(instance.source).toEqual({ kind: "local", componentId: "cmp-new" });
 		expect(instance.transform).toEqual(group.transform);
 		expect(instance.bounds).toEqual(group.bounds);
 		expect(instance.zIndex).toBe(2);
