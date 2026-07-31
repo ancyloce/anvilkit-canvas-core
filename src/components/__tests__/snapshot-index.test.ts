@@ -156,3 +156,66 @@ describe("buildExternalSnapshotIndex (T-015)", () => {
 		expect(keys).toHaveLength(3);
 	});
 });
+
+describe("quarantine (plan 0021 T-045)", () => {
+	const REF = {
+		kind: "library" as const,
+		libraryId: "acme",
+		componentId: "card",
+		version: "1.0.0",
+		integrity: `sha256-${"A".repeat(43)}`,
+	};
+	const SNAPSHOT = {
+		canonicalFormatVersion: 1,
+		ref: REF,
+		definition: { id: "card", name: "Card", revision: 1, root: {}, properties: [] },
+		dependencies: [],
+	} as never;
+
+	it("hides a quarantined snapshot from get/has but remembers it", () => {
+		const key = snapshotKey(REF);
+		const index = buildExternalSnapshotIndex(
+			{ [key]: SNAPSHOT },
+			{ quarantinedKeys: [key] },
+		);
+		expect(index.get(REF)).toBeUndefined();
+		expect(index.has(REF)).toBe(false);
+		// The remembering is the point: it is what lets a caller distinguish
+		// "the bytes are wrong" from "we never had it".
+		expect(index.isQuarantined(key)).toBe(true);
+		expect(index.size).toBe(0);
+		expect(index.keys()).toEqual([]);
+	});
+
+	it("leaves other snapshots resolvable", () => {
+		const other = {
+			...REF,
+			componentId: "button",
+		};
+		const index = buildExternalSnapshotIndex(
+			{
+				[snapshotKey(REF)]: SNAPSHOT,
+				[snapshotKey(other)]: { ...SNAPSHOT, ref: other },
+			},
+			{ quarantinedKeys: [snapshotKey(REF)] },
+		);
+		expect(index.get(other)).toBeDefined();
+		expect(index.get(REF)).toBeUndefined();
+		expect(index.size).toBe(1);
+	});
+
+	it("reports quarantine even when the registry is absent", () => {
+		// A document can be quarantined down to nothing; the reason must survive.
+		const index = buildExternalSnapshotIndex(undefined, {
+			quarantinedKeys: ["k"],
+		});
+		expect(index.isQuarantined("k")).toBe(true);
+		expect(index.isQuarantined("other")).toBe(false);
+	});
+
+	it("an index built with no options quarantines nothing", () => {
+		const index = buildExternalSnapshotIndex({ [snapshotKey(REF)]: SNAPSHOT });
+		expect(index.isQuarantined(snapshotKey(REF))).toBe(false);
+		expect(index.get(REF)).toBeDefined();
+	});
+});
