@@ -47,7 +47,27 @@ export {
 	type CanvasResolvedComponentInstance,
 	resolveComponentInstance,
 } from "./resolve.js";
+export {
+	type CanvasDefinitionLookup,
+	type CanvasExternalComponentState,
+	componentSourceKey,
+	getDefinition,
+} from "./definition-lookup.js";
 export * from "./schema.js";
+export {
+	type CanvasComponentVariantIssue,
+	type CanvasComponentVariantIssueCode,
+	type CanvasComponentVariantResolution,
+	type CanvasComponentVariantResolutionCode,
+	resolveComponentVariant,
+	resolveDefinitionVariant,
+	validateComponentVariantSet,
+	variantPropertyTarget,
+} from "./variant-resolution.js";
+export {
+	buildExternalSnapshotIndex,
+	type CanvasExternalSnapshotIndex,
+} from "./snapshot-index.js";
 export * from "./types.js";
 export {
 	assertComponentGraph,

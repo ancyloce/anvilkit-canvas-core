@@ -20,6 +20,7 @@
  * then per-instance checks in page/document order.
  */
 
+import { localComponentIdOf } from "../ir/component-source.js";
 import type {
 	CanvasComponentInstanceNode,
 	CanvasComponentProperty,
@@ -163,19 +164,25 @@ export function validateComponentGraph(ir: CanvasIR): CanvasComponentIssue[] {
 
 	let predictedTotal = 0;
 	for (const { node, location } of instances) {
-		const definition = registry[node.componentId];
+		// External Sources are deliberately NOT validated against `ir.components`
+		// — they resolve from the snapshot registry, and reporting one as a
+		// missing local Source would be actively wrong. Their closure is
+		// validated separately (plan 0021 T-017).
+		const localId = localComponentIdOf(node.source);
+		if (localId === undefined) continue;
+		const definition = registry[localId];
 		if (!definition) {
 			issues.push({
 				code: "component-source-missing",
 				severity: "error",
-				componentId: node.componentId,
+				componentId: localId,
 				instanceId: node.id,
 				location,
-				message: `Instance "${node.id}" references component "${node.componentId}", which is not in the Registry.`,
+				message: `Instance "${node.id}" references component "${localId}", which is not in the Registry.`,
 			});
 			continue;
 		}
-		predictedTotal += expandedSize.get(node.componentId) ?? 0;
+		predictedTotal += expandedSize.get(localId) ?? 0;
 		for (const propertyId of Object.keys(node.overrides ?? {}).sort()) {
 			const override = node.overrides?.[propertyId];
 			if (!override) continue;
@@ -184,7 +191,7 @@ export function validateComponentGraph(ir: CanvasIR): CanvasComponentIssue[] {
 				issues.push({
 					code: "component-override-orphan",
 					severity: "warning",
-					componentId: node.componentId,
+					componentId: localId,
 					instanceId: node.id,
 					propertyId,
 					location,
@@ -196,7 +203,7 @@ export function validateComponentGraph(ir: CanvasIR): CanvasComponentIssue[] {
 				issues.push({
 					code: "component-override-type-invalid",
 					severity: "warning",
-					componentId: node.componentId,
+					componentId: localId,
 					instanceId: node.id,
 					propertyId,
 					location,

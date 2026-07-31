@@ -166,14 +166,14 @@ describe("hashes and keys", () => {
 
 	it("composite key embeds every §12.1 part and survives hostile ids", () => {
 		const key = composeCacheKey({
-			componentId: "cmp|weird:id",
+			sourceKey: "local:cmp|weird:id",
 			instanceId: "inst-1",
 			sourceRevision: 3,
 			overrideHash: "abc",
 			nestedDependencyRevisionHash: "def",
 			layoutEngineVersion: 1,
 		});
-		expect(key).toContain("cmp|weird:id");
+		expect(key).toContain("local:cmp|weird:id");
 		expect(key).toContain("|3|abc|def|1|none|none");
 		expect(key).toContain("6:inst-1");
 	});
@@ -187,7 +187,7 @@ describe("hashes and keys", () => {
 	 */
 	it("distinguishes two identical instances of the same component", () => {
 		const parts = {
-			componentId: "cmp-a",
+			sourceKey: "local:cmp-a",
 			sourceRevision: 1,
 			overrideHash: "none",
 			nestedDependencyRevisionHash: "none",
@@ -208,7 +208,7 @@ describe("hashes and keys", () => {
 		// to the same string and one instance would read another's expansion.
 		expect(
 			composeCacheKey({
-				componentId: "cmp-a",
+				sourceKey: "local:cmp-a",
 				instanceId: "b|1|none|none|1|none|none",
 				sourceRevision: 1,
 				overrideHash: "none",
@@ -217,7 +217,7 @@ describe("hashes and keys", () => {
 			}),
 		).not.toBe(
 			composeCacheKey({
-				componentId: "cmp-a",
+				sourceKey: "local:cmp-a",
 				instanceId: "b",
 				sourceRevision: 1,
 				overrideHash: "none",
@@ -244,7 +244,7 @@ describe("invalidation (T-PERF-1 core)", () => {
 		}
 		cache.layers.base.set(
 			composeCacheKey({
-				componentId: "cmp-a",
+				sourceKey: "local:cmp-a",
 				instanceId: "inst-a",
 				sourceRevision: 1,
 				overrideHash: "none",

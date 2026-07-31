@@ -15,6 +15,7 @@
  * diagnostic. No path throws into a render.
  */
 
+import { componentSourceLabel } from "../ir/component-source.js";
 import type {
 	CanvasComponentInstanceNode,
 	CanvasComponentRegistry,
@@ -33,15 +34,28 @@ import {
 	getDefinitionStructure,
 	internalCacheState,
 } from "./cache.js";
+import {
+	type CanvasDefinitionLookup,
+	getDefinition,
+} from "./definition-lookup.js";
 import { buildComponentGraph, type CanvasComponentGraph } from "./graph.js";
 import { encodeResolvedNodeId } from "./identity.js";
 import { applyComponentOverrides } from "./overrides.js";
+import type { CanvasExternalSnapshotIndex } from "./snapshot-index.js";
 import type {
 	CanvasComponentIssue,
 	CanvasResolvedComponentOrigin,
 } from "./types.js";
 
 export interface CanvasComponentExpansionOptions {
+	/**
+	 * Admitted external snapshots for this document (plan 0021 T-015/T-016).
+	 *
+	 * Omit for a local-only document. Omitting it does NOT make external
+	 * instances fetch anything — they resolve to `snapshot-missing` and degrade
+	 * to placeholders, exactly as they would offline.
+	 */
+	readonly externalSnapshots?: CanvasExternalSnapshotIndex;
 	/** Session cache; omit for a cold, cache-free expansion. */
 	readonly cache?: CanvasComponentResolutionCache;
 	/** Prebuilt dependency graph; derived from the registry when absent. */
@@ -79,10 +93,16 @@ interface ExpansionBudget {
 
 interface ExpansionContext {
 	readonly registry: CanvasComponentRegistry;
+	readonly external: CanvasExternalSnapshotIndex | undefined;
 	readonly graph: CanvasComponentGraph;
 	readonly maxDepth: number;
 	readonly budget: ExpansionBudget;
-	/** componentIds currently being expanded — the read-time cycle guard. */
+	/**
+	 * Source keys currently being expanded — the read-time cycle guard.
+	 *
+	 * Keys, not bare componentIds: a local `button` and a library `button` are
+	 * different Sources and must not collide here (see `componentSourceKey`).
+	 */
 	readonly stack: string[];
 	readonly issues: CanvasComponentIssue[];
 	readonly origins: Map<string, CanvasResolvedComponentOrigin>;
@@ -106,25 +126,54 @@ function expandInstance(
 	depth: number,
 	instanceRecordId: string,
 ): CanvasNode {
-	const componentId = instance.componentId;
-	const definition = ctx.registry[componentId];
-	if (!definition) {
+	// ONE lookup for both Source kinds (TD §10). A miss is a resolution state,
+	// never a fetch — which is what makes this render identically offline.
+	const lookup = getDefinition(instance.source, ctx.registry, ctx.external);
+	const label = componentSourceLabel(instance.source);
+	if (lookup.kind === "unresolved") {
 		pushIssue(ctx, {
-			code: "component-source-missing",
-			severity: "warning",
-			componentId,
+			// An external Source that resolved nowhere is reported as
+			// `component-snapshot-missing`, not `component-source-missing`: the
+			// fixes differ (re-fetch the snapshot vs. restore a local Source), and
+			// collapsing them would make the Libraries panel unable to offer
+			// recovery for the one case where recovery exists.
+			code:
+				lookup.reason === "local-missing"
+					? "component-source-missing"
+					: lookup.reason === "integrity-failed"
+						? "component-integrity-mismatch"
+						: "component-snapshot-missing",
+			// An integrity mismatch is an ERROR, not a warning. Every other
+			// unresolved reason describes something the document is merely
+			// missing; this one describes content that is present and provably
+			// not what was admitted, and `assertComponentGraph` — the strict gate
+			// export preparation runs — only looks at errors (T-045 step 3).
+			severity: lookup.reason === "integrity-failed" ? "error" : "warning",
+			...(lookup.source.kind === "local"
+				? { componentId: lookup.source.componentId }
+				: {}),
 			instanceId: instanceRecordId,
-			message: `Component "${componentId}" is not in this document's Registry; instance "${instanceRecordId}" renders as a selectable placeholder with its overrides retained.`,
+			message:
+				lookup.reason === "local-missing"
+					? `Component "${label}" is not in this document's Registry; instance "${instanceRecordId}" renders as a selectable placeholder with its overrides retained.`
+					: lookup.reason === "unkeyable"
+						? `Component "${label}" has a malformed reference and can never match a stored snapshot; instance "${instanceRecordId}" renders as a selectable placeholder.`
+						: lookup.reason === "integrity-failed"
+							? `The stored snapshot for "${label}" failed integrity re-verification and was quarantined; instance "${instanceRecordId}" renders as a selectable placeholder and cannot be exported until the exact version is re-fetched or the instance is removed.`
+							: `No stored snapshot for "${label}"; instance "${instanceRecordId}" renders as a selectable placeholder with its overrides retained. The snapshot can be re-fetched from the Libraries panel.`,
 		});
 		return instance;
 	}
-	if (ctx.stack.includes(componentId)) {
+	const { definition, sourceKey } = lookup;
+	const componentId =
+		lookup.kind === "local" ? lookup.componentId : lookup.ref.componentId;
+	if (ctx.stack.includes(sourceKey)) {
 		pushIssue(ctx, {
 			code: "component-cycle",
 			severity: "error",
 			componentId,
 			instanceId: instanceRecordId,
-			message: `Component "${componentId}" is already being expanded (${[...ctx.stack, componentId].join(" → ")}); placeholder emitted at the recursion boundary.`,
+			message: `Component "${label}" is already being expanded (${[...ctx.stack, sourceKey].join(" → ")}); placeholder emitted at the recursion boundary.`,
 		});
 		return instance;
 	}
@@ -146,7 +195,7 @@ function expandInstance(
 	);
 	ctx.issues.push(...issues);
 
-	ctx.stack.push(componentId);
+	ctx.stack.push(sourceKey);
 	const viewOf = (node: CanvasNode): CanvasNode => patches.get(node.id) ?? node;
 
 	const expandNode = (
@@ -262,47 +311,69 @@ export function resolveComponentInstance(
 		exhausted: false,
 	};
 
-	const definition = safeRegistry[instance.componentId];
-	const cacheKey = definition
-		? composeCacheKey({
-				componentId: instance.componentId,
-				// The expansion this key guards is instance-SPECIFIC (its root and
-				// every virtual id start from this id), so the id belongs in the key
-				// — see `ComponentCacheKeyParts.instanceId`.
-				instanceId: instance.id,
-				sourceRevision: definition.revision,
-				overrideHash: computeOverrideHash(instance.overrides),
-				nestedDependencyRevisionHash: computeDependencyRevisionHash(
-					instance.componentId,
-					safeRegistry,
-					graph,
-				),
-				layoutEngineVersion: options.layoutEngineVersion ?? 1,
-				...(options.measurementManifestHash !== undefined
-					? { measurementManifestHash: options.measurementManifestHash }
-					: {}),
-				...(options.assetIntrinsicManifestHash !== undefined
-					? {
-							assetIntrinsicManifestHash: options.assetIntrinsicManifestHash,
-						}
-					: {}),
-			})
-		: "unresolvable";
+	const lookup: CanvasDefinitionLookup = getDefinition(
+		instance.source,
+		safeRegistry,
+		options.externalSnapshots,
+	);
+	const cacheKey =
+		lookup.kind === "unresolved"
+			? "unresolvable"
+			: composeCacheKey({
+					// The SOURCE KEY, not a bare componentId. For an external Source it
+					// embeds `integrity`, which is what makes an entry version-exact:
+					// republished bytes get a different digest, hence a different key,
+					// hence no stale reuse. It also keeps a local `button` and a library
+					// `button` in separate cache slots.
+					sourceKey: lookup.sourceKey,
+					// The expansion this key guards is instance-SPECIFIC (its root and
+					// every virtual id start from this id), so the id belongs in the key
+					// — see `ComponentCacheKeyParts.instanceId`.
+					instanceId: instance.id,
+					sourceRevision: lookup.definition.revision,
+					overrideHash: computeOverrideHash(instance.overrides),
+					// A local Source's nested dependencies can be edited in place, so
+					// their revisions have to be folded in. An external snapshot is
+					// immutable and its whole closure is pinned by the integrity digest
+					// already inside `sourceKey` — there is nothing further to hash.
+					nestedDependencyRevisionHash:
+						lookup.kind === "local"
+							? computeDependencyRevisionHash(
+									lookup.componentId,
+									safeRegistry,
+									graph,
+								)
+							: "external-pinned",
+					layoutEngineVersion: options.layoutEngineVersion ?? 1,
+					...(options.measurementManifestHash !== undefined
+						? { measurementManifestHash: options.measurementManifestHash }
+						: {}),
+					...(options.assetIntrinsicManifestHash !== undefined
+						? {
+								assetIntrinsicManifestHash: options.assetIntrinsicManifestHash,
+							}
+						: {}),
+				});
 
 	const cacheState = options.cache
 		? internalCacheState(options.cache)
 		: undefined;
-	if (cacheState && definition) {
+	if (cacheState && lookup.kind !== "unresolved") {
 		const hit = cacheState.layers.instance.get(cacheKey) as
 			| CanvasResolvedComponentInstance
 			| undefined;
 		if (hit) return hit;
-		// Prime the structural layer while we are here.
-		getDefinitionStructure(cacheState, safeRegistry, instance.componentId);
+		// Prime the structural layer while we are here. Local only: the structural
+		// layer is keyed by local registry id, and an external definition is not in
+		// that registry.
+		if (lookup.kind === "local") {
+			getDefinitionStructure(cacheState, safeRegistry, lookup.componentId);
+		}
 	}
 
 	const ctx: ExpansionContext = {
 		registry: safeRegistry,
+		external: options.externalSnapshots,
 		graph,
 		maxDepth: options.maxDepth ?? MAX_COMPONENT_NESTED_DEPTH,
 		budget,
@@ -320,7 +391,7 @@ export function resolveComponentInstance(
 		expandedNodeCount: origins.size,
 		placeholder,
 	};
-	if (cacheState && definition && !placeholder) {
+	if (cacheState && lookup.kind !== "unresolved" && !placeholder) {
 		cacheState.layers.instance.set(cacheKey, result);
 	}
 	return result;

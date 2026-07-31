@@ -239,7 +239,17 @@ export function computeDependencyRevisionHash(
 }
 
 export interface ComponentCacheKeyParts {
-	readonly componentId: string;
+	/**
+	 * The Source's namespaced identity (`componentSourceKey`), NOT a bare
+	 * component id — `local:<componentId>` or `library:<snapshotKey>`.
+	 *
+	 * Renamed from `componentId` in plan 0021 T-016 rather than silently
+	 * redefined: a caller still passing a bare id produces keys that
+	 * `invalidateComponent` cannot match, so every `invalidateComponent` call
+	 * would evict nothing and stale expansions would be served forever. That is
+	 * invisible at runtime, so the rename makes a stale caller a compile error.
+	 */
+	readonly sourceKey: string;
 	readonly sourceRevision: number;
 	readonly overrideHash: string;
 	readonly nestedDependencyRevisionHash: string;
@@ -267,10 +277,10 @@ export interface ComponentCacheKeyParts {
 	readonly instanceId: string;
 }
 
-/** The §12.1 composite key. Length-prefixed head so `componentIdOfKey` never misparses an id containing the separator. */
+/** The §12.1 composite key. Length-prefixed head so `componentIdOfKey` never misparses a key containing the separator. */
 export function composeCacheKey(parts: ComponentCacheKeyParts): string {
 	return [
-		`${parts.componentId.length}:${parts.componentId}`,
+		`${parts.sourceKey.length}:${parts.sourceKey}`,
 		parts.sourceRevision,
 		parts.overrideHash,
 		parts.nestedDependencyRevisionHash,
@@ -288,5 +298,15 @@ function componentIdOfKey(key: string): string {
 	if (colon <= 0) return "";
 	const length = Number(key.slice(0, colon));
 	if (!Number.isInteger(length) || length < 0) return "";
-	return key.slice(colon + 1, colon + 1 + length);
+	const head = key.slice(colon + 1, colon + 1 + length);
+	// Since plan 0021 T-016 the head is a `componentSourceKey`, not a bare id:
+	// `local:<componentId>` or `library:<snapshotKey>`. Invalidation is driven by
+	// LOCAL Source edits, so only the local namespace can match — and it must be
+	// unwrapped or every `invalidateComponent` silently evicts nothing.
+	//
+	// An external key intentionally never matches: a snapshot is immutable, so
+	// there is nothing to invalidate. A republished version produces a different
+	// integrity digest, hence a different key, and the old entry simply goes
+	// unused rather than needing eviction.
+	return head.startsWith("local:") ? head.slice("local:".length) : "";
 }

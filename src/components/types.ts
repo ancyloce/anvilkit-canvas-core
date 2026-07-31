@@ -41,7 +41,34 @@ export type CanvasComponentIssueCode =
 	| "component-override-type-invalid"
 	| "component-materialization-stale"
 	| "component-detach-incomplete"
-	| "component-capability-unsupported";
+	| "component-capability-unsupported"
+	/**
+	 * An external Source has no admitted snapshot in this document
+	 * (plan 0021 T-016). Kept distinct from `component-source-missing` because
+	 * the two have different remedies — re-fetch the snapshot versus restore a
+	 * local Source — and only this one is recoverable from the Libraries panel.
+	 *
+	 * Additive: this union is GROW-ONLY, so hosts switching on it keep working.
+	 */
+	| "component-snapshot-missing"
+	/**
+	 * An external Source HAS an admitted snapshot, but that snapshot failed
+	 * cryptographic re-verification at load (plan 0021 T-045).
+	 *
+	 * Deliberately distinct from `component-snapshot-missing`. The two look the
+	 * same to the renderer — both produce a placeholder — but they mean opposite
+	 * things about trust and have opposite remedies. "Missing" means fetch it;
+	 * "integrity mismatch" means the bytes on disk are NOT the bytes that were
+	 * admitted, so the only safe remedies are re-fetch from the library or
+	 * remove the instance. Collapsing them would let a substituted definition
+	 * present as a benign cache miss.
+	 *
+	 * Named to match the `component-integrity-mismatch` DIAGNOSTIC code, which is
+	 * the same condition observed at admission time rather than at resolution.
+	 *
+	 * Additive: this union is GROW-ONLY, so hosts switching on it keep working.
+	 */
+	| "component-integrity-mismatch";
 
 /**
  * One component diagnostic (TD §19). `severity: "warning"` never throws

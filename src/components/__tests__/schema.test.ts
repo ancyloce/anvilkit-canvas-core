@@ -35,7 +35,7 @@ const GOLDEN: Record<string, unknown> = {
 						transform: { x: 10, y: 10, rotation: 0, scaleX: 1, scaleY: 1 },
 						bounds: { width: 100, height: 80 },
 						zIndex: 0,
-						componentId: "cmp-card",
+						source: { kind: "local", componentId: "cmp-card" },
 						overrides: {
 							"prop-title": {
 								kind: "text",
@@ -107,7 +107,7 @@ const GOLDEN: Record<string, unknown> = {
 						transform: { x: 0, y: 40, rotation: 0, scaleX: 1, scaleY: 1 },
 						bounds: { width: 40, height: 20 },
 						zIndex: 0,
-						componentId: "cmp-button",
+						source: { kind: "local", componentId: "cmp-button" },
 					},
 				],
 			},
@@ -164,5 +164,69 @@ describe("component schema golden round-trip (M1-13, INV-8)", () => {
 		expect(CanvasIRSchema.parse(jsonClone(runtimeOnce))).toEqual(
 			runtimeOnce as CanvasIR,
 		);
+	});
+});
+
+/**
+ * The golden above is the CANONICAL shape, so it round-trips byte-identically.
+ * A PRD 0015-authored document is a different thing: it must NOT round-trip
+ * unchanged, it must converge on the golden. Both halves matter — an
+ * implementation that skipped the migration would pass the round-trip suite
+ * above and fail every assertion here.
+ */
+describe("legacy componentId migrates to source (plan 0021 T-012)", () => {
+	/** The same document as GOLDEN, authored the way PRD 0015 wrote it. */
+	function legacyGolden(): Record<string, unknown> {
+		const doc = jsonClone(GOLDEN) as Record<string, unknown>;
+		const toLegacy = (node: Record<string, unknown>): void => {
+			if (node.type === "component-instance") {
+				const source = node.source as { componentId: string };
+				node.componentId = source.componentId;
+				delete node.source;
+			}
+			for (const child of (node.children as
+				| Record<string, unknown>[]
+				| undefined) ?? []) {
+				toLegacy(child);
+			}
+		};
+		for (const page of doc.pages as Record<string, unknown>[]) {
+			toLegacy(page.root as Record<string, unknown>);
+		}
+		for (const definition of Object.values(
+			doc.components as Record<string, Record<string, unknown>>,
+		)) {
+			toLegacy(definition.root as Record<string, unknown>);
+		}
+		return doc;
+	}
+
+	it("a legacy document parses into exactly the canonical golden", () => {
+		const legacy = legacyGolden();
+		// Guard the fixture itself: if this stopped producing the legacy shape
+		// the test below would pass vacuously.
+		expect(JSON.stringify(legacy)).toContain('"componentId":"cmp-card"');
+		expect(JSON.stringify(legacy)).not.toContain('"source"');
+
+		expect(CanvasIRSchema.parse(legacy)).toEqual(GOLDEN);
+	});
+
+	it("migrates identically on the extended (runtime) path", () => {
+		expect(createCanvasRuntime().migrate(legacyGolden())).toEqual(GOLDEN);
+	});
+
+	it("is idempotent — migrating an already-migrated document changes nothing", () => {
+		const once = CanvasIRSchema.parse(legacyGolden());
+		expect(CanvasIRSchema.parse(jsonClone(once))).toEqual(once);
+	});
+
+	it("drops the legacy field rather than carrying both", () => {
+		const parsed = CanvasIRSchema.parse(legacyGolden());
+		const root = parsed.pages[0]?.root as unknown as
+			| { children: Record<string, unknown>[] }
+			| undefined;
+		const instance = root?.children[0] as Record<string, unknown>;
+		expect(instance.source).toEqual({ kind: "local", componentId: "cmp-card" });
+		expect(instance).not.toHaveProperty("componentId");
 	});
 });
