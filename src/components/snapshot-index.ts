@@ -28,7 +28,7 @@
  * rebuild. The IR remains the single source of truth.
  */
 
-import { snapshotKey } from "../ir/snapshot-key.js";
+import { isSnapshotKey, snapshotKey } from "../ir/snapshot-key.js";
 import type {
 	CanvasExternalComponentRef,
 	CanvasExternalComponentSnapshot,
@@ -114,10 +114,19 @@ export function buildExternalSnapshotIndex(
 			: { ...EMPTY_INDEX, isQuarantined: (key) => quarantined.has(key) };
 	}
 
-	// `Object.entries` — own enumerable properties only. An inherited property
-	// is not part of the document and must not become an indexed snapshot.
+	// Two filters, both load-bearing (plan 0021 T-048):
+	//
+	// `Object.entries` gives own enumerable properties only, so an INHERITED
+	// property cannot become an indexed snapshot.
+	//
+	// `isSnapshotKey` then rejects any key that is not a well-formed
+	// `libraryId/componentId/version/integrity`. Without it a hostile or
+	// hand-edited registry can file content under `__proto__`, `constructor` or
+	// any other junk key: nothing is *polluted* (the index is a `Map`), but the
+	// entry is retrievable through `getByKey` and inflates `size`, which is a
+	// lookup answering for content no ref can legitimately address.
 	const entries = Object.entries(registry).filter(
-		([key]) => !quarantined.has(key),
+		([key]) => isSnapshotKey(key) && !quarantined.has(key),
 	);
 	if (entries.length === 0 && quarantined.size === 0) return EMPTY_INDEX;
 

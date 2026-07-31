@@ -22,7 +22,7 @@ export function resolveInlineExportDocument(
 			// document directly satisfies the old message while skipping component
 			// resolution and the compliance report entirely (AC-015).
 			"CanvasExportJobSource.documentRef requires host/worker resolution before use — canvas-core does not resolve refs. " +
-				"After resolving, call prepareExport({ document }, { context }) from @anvilkit/canvas-core/brand-governance rather than exporting the document directly: " +
+				"After resolving, call prepareExport({ document }, { context }) from @anvilkit/canvas-core/export-preparation rather than exporting the document directly: " +
 				"the inline and worker paths must produce the same compliance report and the same allow/block outcome.",
 		);
 	}

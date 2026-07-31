@@ -53,6 +53,10 @@ export type CanvasPolicyDenyReason =
 	| "flatten-denied"
 	/** A policy on the instance path sets `allowVariantChange: false`. */
 	| "variant-change-denied"
+	/** A policy on the instance path sets `allowSourceUpdate: false`. */
+	| "source-update-denied"
+	/** A policy on the instance path sets `allowSourceSwap: false`. */
+	| "source-swap-denied"
 	/** The value violates a token constraint on that property. */
 	| "token-not-allowed";
 

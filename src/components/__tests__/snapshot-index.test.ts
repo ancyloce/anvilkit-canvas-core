@@ -107,10 +107,22 @@ describe("buildExternalSnapshotIndex (T-015)", () => {
 			expect(Object.keys(registry)).toEqual(["__proto__"]);
 
 			const index = buildExternalSnapshotIndex(registry);
-			// It is indexed as an ordinary string key...
-			expect(index.getByKey("__proto__")).toBeDefined();
-			// ...and nothing leaked onto Object.prototype.
+			// Nothing leaked onto Object.prototype — the index is a `Map`, which
+			// has no prototype chain to poison. That was always true.
 			expect(({} as Record<string, unknown>).ref).toBeUndefined();
+			// TIGHTENED in plan 0021 T-048: the key is no longer indexed at all.
+			// It used to be kept as an ordinary string key, which polluted
+			// nothing but did let `getByKey` answer for content that NO ref can
+			// address — `get(ref)` derives its key via `snapshotKey`, which only
+			// ever produces a well-formed `library/component/version/integrity`.
+			// An entry reachable by neither `get` nor a legitimate `getByKey` is
+			// only a way to inflate `size` and confuse a diagnostic.
+			//
+			// This is a lookup concern, not a data-loss one: the entry remains in
+			// the document, and `verifyDocumentSnapshots` (T-045) reports a
+			// key/ref mismatch as an integrity finding rather than dropping it.
+			expect(index.getByKey("__proto__")).toBeUndefined();
+			expect(index.size).toBe(0);
 			// A well-formed ref still misses, because "__proto__" is not its key.
 			expect(index.get(REF)).toBeUndefined();
 		});

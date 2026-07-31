@@ -2672,8 +2672,17 @@ function writeOverrideMap(
  * The evaluator is called rather than the gateway imported: the gateway lives
  * in `brand-governance/` at rank 5 and this file is rank 3. The port is what
  * makes enforcement reachable from where mutations actually happen.
+ *
+ * **Exported** (plan 0021 M5 follow-up #1) because three of the nine policy
+ * operations belong to commands that cannot live in this file at all:
+ * `insert-external`, `source-update` and `source-swap` carry rank-4 branded
+ * types and register through the extension seam. They import this helper rather
+ * than re-deriving the check, so every operation refuses with the same code,
+ * the same structured `decision`, and the same before-any-mutation timing. A
+ * second implementation would be a second place for the three-state
+ * allow/warn/deny rule to drift.
  */
-function assertBrandPolicy(
+export function assertBrandPolicy(
 	options: CommandApplyOptions,
 	query: CanvasPolicyQuery,
 ): void {

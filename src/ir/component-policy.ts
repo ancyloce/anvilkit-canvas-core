@@ -64,6 +64,25 @@ export interface CanvasBrandComponentPolicy {
 	/** Whether a variant selection may be changed. Default `true`. */
 	readonly allowVariantChange?: boolean;
 	/**
+	 * Whether instances may be moved to a different VERSION of this same
+	 * component. Default `true`.
+	 *
+	 * TD §15.1 lists "Update/swap" as governed by portable policy; these are the
+	 * fields that make it so.
+	 */
+	readonly allowSourceUpdate?: boolean;
+	/**
+	 * Whether instances may be replaced by a DIFFERENT component. Default `true`.
+	 *
+	 * Separate from {@link allowSourceUpdate} because the two are different
+	 * risks and a brand owner may reasonably want opposite answers: "take my bug
+	 * fixes, but do not let anyone substitute a different component for our logo
+	 * lockup" is `allowSourceUpdate: true` with `allowSourceSwap: false`. One
+	 * combined field would force those together — the same reason `allowDetach`
+	 * and `allowFlatten` are separate despite sharing a row in that table.
+	 */
+	readonly allowSourceSwap?: boolean;
+	/**
 	 * What the component AUTHOR recommends when the host is enforcing.
 	 *
 	 * Only a recommendation: the host's `enforcement` mode is what decides
@@ -101,5 +120,7 @@ export const CanvasBrandComponentPolicySchema: z.ZodType<CanvasBrandComponentPol
 		allowDetach: z.boolean().optional(),
 		allowFlatten: z.boolean().optional(),
 		allowVariantChange: z.boolean().optional(),
+		allowSourceUpdate: z.boolean().optional(),
+		allowSourceSwap: z.boolean().optional(),
 		recommendedEnforcement: z.enum(["warning", "blocking"]).optional(),
 	}) as unknown as z.ZodType<CanvasBrandComponentPolicy>;
