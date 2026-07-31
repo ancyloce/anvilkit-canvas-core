@@ -232,7 +232,7 @@ describe("buildDetachAllAndDeleteCommand", () => {
 				type: "node.update",
 				nodeId: "inst-x",
 				kind: "component-instance",
-				patch: { componentId: "cmp-ghost" },
+				patch: { source: { kind: "local", componentId: "cmp-ghost" } },
 			},
 			{ now: NOW },
 		).ir;

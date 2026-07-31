@@ -7,6 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { localComponentIdOf } from "../../ir/component-source.js";
 import {
 	materializeClipboardNodes,
 	validateClipboardPayload,
@@ -122,7 +123,7 @@ describe("M3-09 same-document clipboard (T-DOC-1)", () => {
 		const pasted = materializeClipboardNodes(payload, ir);
 		const node = pasted.nodes[0] as CanvasComponentInstanceNode;
 		expect(node.id).not.toBe("inst-a");
-		expect(node.componentId).toBe("cmp-a");
+		expect(node.source).toEqual({ kind: "local", componentId: "cmp-a" });
 		expect(node.overrides).toEqual(OVERRIDES);
 		expect(pasted.assetsToAdd).toEqual({});
 	});
@@ -189,7 +190,7 @@ describe("M3-10 page duplicate (T-DOC-2)", () => {
 		expect(copies).toHaveLength(1);
 		const copy = copies[0] as CanvasComponentInstanceNode;
 		expect(copy.id).not.toBe("inst-a");
-		expect(copy.componentId).toBe("cmp-a");
+		expect(copy.source).toEqual({ kind: "local", componentId: "cmp-a" });
 		expect(copy.overrides).toEqual(OVERRIDES);
 	});
 });
@@ -233,7 +234,7 @@ describe("M3-11 template instantiation (T-DOC-3)", () => {
 		const instances = instanceNodes(
 			result.document.pages[0]?.root as CanvasNode,
 		);
-		expect(instances[0]?.componentId).toBe(importedId);
+		expect(instances[0]?.source).toEqual({ kind: "local", componentId: importedId });
 		expect(instances[0]?.overrides).toEqual(OVERRIDES);
 		// The command imports definitions BEFORE pages.
 		expect(result.command.commands[0]?.type).toBe("component.create");
@@ -254,7 +255,11 @@ describe("M3-11 template instantiation (T-DOC-3)", () => {
 		const registry = afterBoth.ir.components ?? {};
 		walkDocument(afterBoth.ir, ({ node }) => {
 			if (node.type === "component-instance") {
-				expect(registry[node.componentId]).toBeDefined();
+				// Every instance the template produced must point at a LOCAL
+				// Source that exists in the remapped registry.
+				const localId = localComponentIdOf(node.source);
+				expect(localId).toBeDefined();
+				expect(registry[localId as string]).toBeDefined();
 			}
 		});
 	});
@@ -306,7 +311,7 @@ describe("M3-12 document kinds (T-DOC-3, D-2)", () => {
 		expect(next.components).toBe(ir.components);
 		const variantInstances = instanceNodes(next.pages[1]?.root as CanvasNode);
 		expect(variantInstances).toHaveLength(1);
-		expect(variantInstances[0]?.componentId).toBe("cmp-a");
+		expect(variantInstances[0]?.source).toEqual({ kind: "local", componentId: "cmp-a" });
 		expect(variantInstances[0]?.id).not.toBe("inst-a");
 	});
 
@@ -352,7 +357,7 @@ describe("M3-12 document kinds (T-DOC-3, D-2)", () => {
 				type: "node.update",
 				nodeId: "inst-a",
 				kind: "component-instance",
-				patch: { componentId: "cmp-ghost" },
+				patch: { source: { kind: "local", componentId: "cmp-ghost" } },
 			},
 			{ now: NOW },
 		).ir;

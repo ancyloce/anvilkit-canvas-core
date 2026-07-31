@@ -12,6 +12,7 @@
  */
 
 import type { CanvasComponentRegistry, CanvasNode } from "../ir/types.js";
+import { localComponentIdOf } from "../ir/component-source.js";
 import { isContainerNode } from "../ir/walkers.js";
 
 /** One pasted-instance-to-be whose Source is absent from the target registry. */
@@ -32,8 +33,14 @@ export function findForeignComponentRefs(
 ): readonly CanvasForeignComponentRef[] {
 	const refs: CanvasForeignComponentRef[] = [];
 	const visit = (node: CanvasNode): void => {
-		if (node.type === "component-instance" && !registry?.[node.componentId]) {
-			refs.push({ instanceId: node.id, componentId: node.componentId });
+		// Local Sources only. An external instance is never "foreign" to the
+		// local registry — it does not belong there at all, and it travels with
+		// its snapshot rather than with a definition (plan 0021 T-014).
+		if (node.type === "component-instance") {
+			const localId = localComponentIdOf(node.source);
+			if (localId !== undefined && !registry?.[localId]) {
+				refs.push({ instanceId: node.id, componentId: localId });
+			}
 		}
 		if (isContainerNode(node)) {
 			for (const child of node.children) visit(child);
