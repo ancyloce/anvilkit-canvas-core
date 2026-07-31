@@ -7,9 +7,18 @@ import {
 	MAX_COMPONENT_RICH_SPANS_PER_PARAGRAPH,
 	MAX_COMPONENT_SOURCE_NODES_PER_DEFINITION,
 	MAX_COMPONENT_TEXT_OVERRIDE_CHARS,
+	MAX_EXTERNAL_DEPENDENCIES_PER_COMPONENT,
+	MAX_EXTERNAL_SNAPSHOTS_PER_DOCUMENT,
 	MAX_FINITE_LAYOUT_MAGNITUDE,
 } from "../limits.js";
+import {
+	CanvasIRComponentSourceRefSchema,
+	CanvasIRExternalComponentRefSchema,
+} from "./component-source.js";
 import { createMigrationRegistry } from "./migrations.js";
+import { CanvasBrandComponentPolicySchema } from "./component-policy.js";
+import { CanvasComponentVariantSetSchema } from "./component-variants.js";
+import { isSnapshotKey, snapshotKey } from "./snapshot-key.js";
 import type {
 	BrandTokenRef,
 	CanvasAnimation,
@@ -22,6 +31,7 @@ import type {
 	CanvasDocumentCompatibility,
 	CanvasDocumentKind,
 	CanvasEffect,
+	CanvasExternalComponentSnapshotRegistry,
 	CanvasFill,
 	CanvasFontFamily,
 	CanvasGradientFill,
@@ -643,6 +653,10 @@ const CanvasComponentPropertyBaseShape = {
 	id: z.string().min(1),
 	name: z.string(),
 	nodeId: z.string().min(1),
+	// Plan 0021 T-028. Shape only: the namespaced-form rule and per-definition
+	// uniqueness are `validateSemanticKeys` in `components/`, reported as a
+	// fixable list rather than rejecting the whole document at parse.
+	semanticKey: z.string().min(1).optional(),
 } as const;
 
 export const CanvasComponentPropertySchema: z.ZodType<CanvasComponentProperty> =
@@ -723,15 +737,18 @@ export const CanvasComponentOverrideSchema: z.ZodType<CanvasComponentOverride> =
 		z.looseObject({ kind: z.literal("visibility"), visible: z.boolean() }),
 	]);
 
-/**
- * The `component-instance` member of BOTH node unions (static below, extended
- * in `buildExtendedSchemas`) — a non-recursive leaf, so one schema object
- * serves both paths and cannot drift.
- */
-export const CanvasComponentInstanceNodeSchema = z.looseObject({
+/** The raw parsed shape, before the legacy-`componentId` normalization below. */
+const CanvasComponentInstanceNodeObject = z.looseObject({
 	...CanvasNodeBaseShape,
 	type: z.literal("component-instance"),
-	componentId: z.string().min(1),
+	/**
+	 * PRD 0015's shape. Optional and legacy-only: the transform below rewrites
+	 * it into `source` and drops it, so no parsed node ever carries both.
+	 */
+	componentId: z.string().min(1).optional(),
+	source: CanvasIRComponentSourceRefSchema.optional(),
+	/** Plan 0021 T-026. Partial and possibly stale by design — see the type. */
+	variantSelection: z.record(z.string().min(1), z.string().min(1)).optional(),
 	overrides: z
 		.record(z.string(), CanvasComponentOverrideSchema)
 		.superRefine((map, ctx) => {
@@ -745,6 +762,48 @@ export const CanvasComponentInstanceNodeSchema = z.looseObject({
 		})
 		.optional(),
 });
+
+/**
+ * The `component-instance` member of BOTH node unions.
+ *
+ * ## The legacy `componentId` migration lives here, not in `CANVAS_IR_MIGRATIONS`
+ *
+ * PRD 0015 shipped instances carrying a bare `componentId`, and it shipped them
+ * **at IR v3** — the same version this build writes. `CANVAS_IR_MIGRATIONS` is
+ * keyed by version and `migrateCanvasIR` short-circuits when a document is
+ * already current, so a `2 -> 3` step would never see those documents. A
+ * version-keyed migration is simply the wrong instrument for a shape change
+ * that does not cross a version boundary.
+ *
+ * Normalizing in the schema instead means every path that parses IR converges
+ * on the canonical shape with no per-caller opt-in: `migrateCanvasIR`, a bare
+ * `CanvasIRSchema.parse`, the collab `decodeCanvasIR` path, and
+ * `instantiateTemplate` all inherit it from one implementation.
+ *
+ * It is idempotent by construction — an already-canonical node takes the first
+ * branch and is returned unchanged — and it preserves unknown keys, because the
+ * object is `looseObject` and the transform spreads the parsed rest (CON-5).
+ */
+export const CanvasComponentInstanceNodeSchema =
+	CanvasComponentInstanceNodeObject.transform((node, ctx) => {
+		// Both fields are destructured OFF and `source` is put back explicitly in
+		// every branch. Returning `rest` directly would keep `source` optional in
+		// the inferred output type — the parsed node would not satisfy
+		// `CanvasComponentInstanceNode`, and the discriminated union it feeds
+		// would stop being assignable to `z.ZodType<CanvasNode>`.
+		const { componentId, source, ...rest } = node;
+		if (source) return { ...rest, source };
+		if (componentId === undefined) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["source"],
+				message:
+					'A component-instance needs a "source" (or the legacy "componentId" it migrates from).',
+			});
+			return z.NEVER;
+		}
+		return { ...rest, source: { kind: "local" as const, componentId } };
+	});
 
 export const CanvasNodeSchema: z.ZodType<CanvasNode> = z.discriminatedUnion(
 	"type",
@@ -898,6 +957,15 @@ export const CanvasComponentDefinitionShape = {
 	properties: z
 		.array(CanvasComponentPropertySchema)
 		.max(MAX_COMPONENT_PROPERTIES_PER_COMPONENT),
+	// Plan 0021 T-024. Shape only here; the cross-field rules (unknown axis,
+	// duplicate canonical selection, default exists) are `validateComponentVariantSet`
+	// in `components/`, because they are reported as a LIST for an author to fix
+	// rather than as a parse failure that rejects the whole document.
+	variants: CanvasComponentVariantSetSchema.optional(),
+	// Plan 0021 T-036 — in the canonical payload, so it participates in the
+	// snapshot digest. Cross-field rules (unknown property ids, identity-shaped
+	// keys) are `validateBrandComponentPolicy`, reported as a fixable list.
+	policy: CanvasBrandComponentPolicySchema.optional(),
 	createdAt: z.string().min(1).optional(),
 	updatedAt: z.string().min(1).optional(),
 } as const;
@@ -950,18 +1018,129 @@ export const CanvasComponentRegistrySchema: z.ZodType<CanvasComponentRegistry> =
 	buildCanvasComponentRegistrySchema(CanvasNodeSchema);
 
 /**
+ * Build the `ir.externalComponentSnapshots` schema against a node union
+ * (plan 0021 T-014), for the same reason the Registry builder exists: a custom
+ * node kind inside an external Source tree must validate exactly like one
+ * inside a local Source tree.
+ *
+ * ## The key assertion is the point of this schema
+ *
+ * Every entry's key must equal `snapshotKey(entry.ref)`. Without it a document
+ * could store component *A*'s bytes under component *B*'s key, and the resolver
+ * — which looks up by key — would hand back the wrong component while every
+ * individual field still validated (TD §22.1, cross-library confusion). This is
+ * why the key codec had to move down to `ir/` (see `ir/snapshot-key.ts`): rank 1
+ * cannot import it from `component-libraries/` at rank 4, so before the move
+ * this check was simply not expressible where the schema lives.
+ *
+ * Entries are `looseObject` like the rest of the IR (CON-5). That is deliberate
+ * and NOT a weakening of the strict Provider envelope: strictness belongs at the
+ * moment untrusted bytes arrive (`component-libraries/admission.ts`), whereas
+ * this schema parses a document that already contains admitted snapshots and
+ * must round-trip a newer peer's unknown fields rather than delete them.
+ */
+export function buildCanvasExternalSnapshotRegistrySchema(
+	nodeSchema: z.ZodType<CanvasNode>,
+): z.ZodType<CanvasExternalComponentSnapshotRegistry> {
+	const snapshot = z.looseObject({
+		ref: CanvasIRExternalComponentRefSchema,
+		definition: z.looseObject({
+			...CanvasComponentDefinitionShape,
+			root: z.lazy(() => nodeSchema),
+		}),
+		dependencies: z
+			.array(CanvasIRExternalComponentRefSchema)
+			.max(MAX_EXTERNAL_DEPENDENCIES_PER_COMPONENT),
+		canonicalFormatVersion: z.int().positive(),
+		fetchedAt: z.string().min(1).optional(),
+	});
+	/**
+	 * Keys are validated against the RAW input, before `z.record` ever sees it.
+	 *
+	 * `z.record` silently drops a `__proto__` key — it never even runs the key
+	 * schema on it (verified against zod@4.4.3). Dropping is the safe direction,
+	 * but it is silent: a document carrying such a key would load "successfully"
+	 * minus that snapshot, and the instance referencing it would then render as an
+	 * unexplained missing component. Checking the raw own-property names first
+	 * turns that into a named parse failure, and routes every bad key — reserved
+	 * or merely malformed — through the same `isSnapshotKey` check.
+	 */
+	const keysChecked = z.unknown().superRefine((raw, ctx) => {
+		if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return;
+		for (const key of Object.getOwnPropertyNames(raw)) {
+			if (isSnapshotKey(key)) continue;
+			ctx.addIssue({
+				code: "custom",
+				path: [key],
+				message: `"${key}" is not a snapshot key. Keys must be libraryId/componentId/version/integrity, each segment URI-component-encoded.`,
+			});
+		}
+	});
+
+	return keysChecked
+		.pipe(z.record(z.string(), snapshot))
+		.superRefine((registry, ctx) => {
+			const entries = Object.entries(registry);
+			if (entries.length > MAX_EXTERNAL_SNAPSHOTS_PER_DOCUMENT) {
+				ctx.addIssue({
+					code: "custom",
+					message: `Document carries ${entries.length} external component snapshots (max ${MAX_EXTERNAL_SNAPSHOTS_PER_DOCUMENT}).`,
+				});
+			}
+			for (const [key, entry] of entries) {
+				let derived: string;
+				try {
+					derived = snapshotKey(entry.ref);
+				} catch (error) {
+					ctx.addIssue({
+						code: "custom",
+						path: [key, "ref"],
+						message: `Snapshot "${key}" has a reference no key can be derived from: ${error instanceof Error ? error.message : String(error)}`,
+					});
+					continue;
+				}
+				if (key !== derived) {
+					ctx.addIssue({
+						code: "custom",
+						path: [key],
+						message: `Snapshot key "${key}" must equal snapshotKey(entry.ref) "${derived}" — a mismatched key lets one component be served under another's identity (TD §22.1).`,
+					});
+				}
+			}
+		}) as unknown as z.ZodType<CanvasExternalComponentSnapshotRegistry>;
+}
+
+export const CanvasExternalComponentSnapshotRegistrySchema: z.ZodType<CanvasExternalComponentSnapshotRegistry> =
+	buildCanvasExternalSnapshotRegistrySchema(CanvasNodeSchema);
+
+/**
  * Normalize an empty Registry to omission (INV-10): `components: {}` and an
  * absent key must be indistinguishable downstream. Shared by BOTH IR schema
  * paths so parity holds by construction.
  */
 export function omitEmptyComponents<
-	T extends { components?: CanvasComponentRegistry },
+	T extends {
+		components?: CanvasComponentRegistry;
+		externalComponentSnapshots?: CanvasExternalComponentSnapshotRegistry;
+	},
 >(ir: T): T {
-	if (ir.components && Object.keys(ir.components).length === 0) {
-		const { components: _empty, ...rest } = ir;
-		return rest as unknown as T;
+	let out = ir;
+	if (out.components && Object.keys(out.components).length === 0) {
+		const { components: _empty, ...rest } = out;
+		out = rest as unknown as T;
 	}
-	return ir;
+	// Same INV-10 rule for the external snapshot registry (plan 0021 T-014):
+	// `{}` and an absent key must be indistinguishable downstream, so a document
+	// that admitted and then removed every external component is byte-identical
+	// to one that never had any.
+	if (
+		out.externalComponentSnapshots &&
+		Object.keys(out.externalComponentSnapshots).length === 0
+	) {
+		const { externalComponentSnapshots: _none, ...rest } = out;
+		out = rest as unknown as T;
+	}
+	return out;
 }
 
 export const CanvasIRShape = {
@@ -982,6 +1161,8 @@ export const CanvasIRSchema: z.ZodType<CanvasIR> = z
 		// Bound per-path, NOT in `CanvasIRShape`: the extended path must bind
 		// its own union or extension kinds inside Source trees get rejected.
 		components: CanvasComponentRegistrySchema.optional(),
+		externalComponentSnapshots:
+			CanvasExternalComponentSnapshotRegistrySchema.optional(),
 	})
 	.transform(omitEmptyComponents) as unknown as z.ZodType<CanvasIR>;
 

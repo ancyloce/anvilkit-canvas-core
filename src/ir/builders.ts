@@ -5,6 +5,7 @@ import type {
 	CanvasBounds,
 	CanvasComponentInstanceNode,
 	CanvasComponentOverrideMap,
+	CanvasComponentSourceRef,
 	CanvasEllipseNode,
 	CanvasFill,
 	CanvasFontFamily,
@@ -575,16 +576,40 @@ export interface CreateComponentInstanceOptions {
 	transform?: Partial<CanvasTransform>;
 	bounds: CanvasBounds;
 	zIndex?: number;
-	componentId: string;
+	/**
+	 * Shorthand for a document-local Source — equivalent to
+	 * `source: { kind: "local", componentId }`. Supply exactly one of this or
+	 * {@link CreateComponentInstanceOptions.source}.
+	 *
+	 * Kept as an authoring convenience (the overwhelmingly common case is a
+	 * local Source) even though the *node* it builds carries only `source`.
+	 * This is a builder ergonomic, not a second persisted field.
+	 */
+	componentId?: string;
+	/** The Source this instance points at — local or external (plan 0021 T-012). */
+	source?: CanvasComponentSourceRef;
 	overrides?: CanvasComponentOverrideMap;
 	/** The instance is ONE item in a parent Auto Layout (LC-INSTANCE-004). */
 	layoutItem?: CanvasLayoutItem;
 }
 
-/** Build a `component-instance` node (plan 0023 M1-09). */
+/** Build a `component-instance` node (plan 0023 M1-09, plan 0021 T-012). */
 export function createComponentInstance(
 	options: CreateComponentInstanceOptions,
 ): CanvasComponentInstanceNode {
+	// Throwing beats defaulting: silently preferring one when both are given
+	// would let a caller believe it built an external instance and get a local
+	// one, and the resulting document is valid — so nothing downstream catches it.
+	if ((options.source === undefined) === (options.componentId === undefined)) {
+		throw new Error(
+			'createComponentInstance: supply exactly one of "source" or the "componentId" shorthand.',
+		);
+	}
+	const source: CanvasComponentSourceRef = options.source ?? {
+		kind: "local",
+		// Narrowed by the check above: exactly one of the two is defined.
+		componentId: options.componentId as string,
+	};
 	return {
 		id: options.id ?? generateId(),
 		...(options.name !== undefined ? { name: options.name } : {}),
@@ -592,7 +617,7 @@ export function createComponentInstance(
 		transform: clonePartialTransform(options.transform),
 		bounds: options.bounds,
 		zIndex: options.zIndex ?? 0,
-		componentId: options.componentId,
+		source,
 		...(options.overrides !== undefined
 			? { overrides: options.overrides }
 			: {}),

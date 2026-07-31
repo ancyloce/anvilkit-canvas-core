@@ -1,3 +1,38 @@
+// Declared in a sibling `ir/` module (rank 1) rather than here so the persisted
+// source-ref shape can sit next to its own schema and version rule; re-exported
+// below so `export type * from "./types.js"` still carries the whole IR surface.
+import type { BrandTokenType } from "./brand-tokens.js";
+import type { CanvasBrandComponentPolicy } from "./component-policy.js";
+
+// Re-exported so `BrandTokenType`'s public import path is unchanged; it lives
+// in a leaf module to break the `types.ts` <-> `component-policy.ts` cycle.
+export type { BrandTokenType } from "./brand-tokens.js";
+import type {
+	CanvasComponentSourceRef,
+	CanvasExternalComponentRef,
+} from "./component-source.js";
+import type {
+	CanvasComponentVariantSelection,
+	CanvasComponentVariantSet,
+} from "./component-variants.js";
+
+export type {
+	CanvasBrandComponentPolicy,
+	CanvasBrandTokenConstraint,
+} from "./component-policy.js";
+export type {
+	CanvasComponentSourceRef,
+	CanvasExternalComponentRef,
+	CanvasLocalComponentSourceRef,
+} from "./component-source.js";
+export type {
+	CanvasComponentVariantAxis,
+	CanvasComponentVariantDefinition,
+	CanvasComponentVariantSelection,
+	CanvasComponentVariantSet,
+	CanvasComponentVariantValue,
+} from "./component-variants.js";
+
 export type CanvasUnit = "px" | "mm" | "in";
 
 export type CanvasBackgroundKind = "solid" | "image" | "gradient";
@@ -164,7 +199,7 @@ export interface CanvasGradientFill {
 	to: { x: number; y: number };
 }
 
-export type BrandTokenType = "color" | "font" | "spacing" | "asset" | "logo";
+
 
 /**
  * A reference to a value owned by an external brand kit (PRD §12.4) — a
@@ -797,14 +832,37 @@ export interface CanvasAudioNode extends CanvasMediaNodeBase {
  */
 export interface CanvasComponentInstanceNode extends CanvasNodeBase {
 	type: "component-instance";
-	/** Registry key of the Source. A missing id degrades to a placeholder (INV-3), never a crash. */
-	componentId: string;
+	/**
+	 * The Source this instance points at — document-local or external library
+	 * (plan 0021 T-012). A Source that does not resolve degrades to a
+	 * placeholder (INV-3), never a crash.
+	 *
+	 * Replaces PRD 0015's bare `componentId`. Documents authored against that
+	 * shape are migrated on read by `CanvasComponentInstanceNodeSchema`, so the
+	 * field is required here: no code downstream of a parse ever sees the
+	 * legacy form, and a union of "either field" would push that branch into
+	 * every consumer forever.
+	 */
+	source: CanvasComponentSourceRef;
 	/**
 	 * Typed overrides keyed by Property ID — never by name or index (INV-6).
 	 * Orphaned entries (property removed/retyped on the Source) are retained
 	 * verbatim and never reassigned. Absent means "all defaults".
 	 */
 	overrides?: CanvasComponentOverrideMap;
+	/**
+	 * Persisted variant selection (plan 0021 T-026). Axis id → value id.
+	 *
+	 * May be PARTIAL: only axes the user actually chose are stored, and the rest
+	 * fill from their axis defaults at resolve time. Storing the normalized form
+	 * instead would freeze today's defaults into the document, so a component
+	 * author changing an axis default would not reach existing instances.
+	 *
+	 * May also be STALE — naming an axis or value a newer version of the
+	 * component no longer declares. That is a normal state, resolved by
+	 * `resolveComponentVariant`'s fallback with a diagnostic, never an error.
+	 */
+	variantSelection?: CanvasComponentVariantSelection;
 }
 
 export type CanvasNode =
@@ -984,6 +1042,22 @@ export interface CanvasComponentPropertyBase {
 	name: string;
 	/** Id of the node inside THIS definition's tree the property binds to. */
 	nodeId: string;
+	/**
+	 * Optional cross-component identity for this property (plan 0021 T-028,
+	 * TD §12.1).
+	 *
+	 * Property `id` is unique only within one definition, so it cannot answer
+	 * "is the `title` of component A the same slot as the `title` of component
+	 * B?" — which is exactly the question an update or a swap must answer to
+	 * carry an override across. `semanticKey` is that answer, supplied by the
+	 * component author.
+	 *
+	 * Must be namespaced (`ns:name`) so it reads as an identifier rather than a
+	 * label. That requirement is what stops a localized display string being
+	 * used here, which would make override migration depend on the authoring
+	 * UI's language. Validated by `validateSemanticKeys`.
+	 */
+	semanticKey?: string;
 }
 
 /** Binds a text-bearing node's content. */
@@ -1066,6 +1140,25 @@ export interface CanvasComponentDefinition {
 	revision: number;
 	root: CanvasNode;
 	properties: readonly CanvasComponentProperty[];
+	/**
+	 * Sparse multi-axis variants (plan 0021 T-024, OD-07).
+	 *
+	 * On the DEFINITION, so a document-local Source may legally carry one even
+	 * though P0 ships no local authoring UI — resolution must not assume
+	 * "variants implies external". Absent on every component that has none, so
+	 * a variant-free document is byte-identical to one written before the field
+	 * existed.
+	 */
+	variants?: CanvasComponentVariantSet;
+	/**
+	 * Portable brand policy for instances of this component (plan 0021 T-036).
+	 *
+	 * Part of the component's canonical payload, so it is covered by the
+	 * integrity digest and replicated with the snapshot — a policy cannot be
+	 * stripped or edited without changing the component's identity. Carries no
+	 * identity of its own; see `ir/component-policy.ts`.
+	 */
+	policy?: CanvasBrandComponentPolicy;
 	createdAt?: string;
 	updatedAt?: string;
 }
@@ -1078,6 +1171,64 @@ export interface CanvasComponentDefinition {
  */
 export type CanvasComponentRegistry = Readonly<
 	Record<string, CanvasComponentDefinition>
+>;
+
+/**
+ * One immutable, integrity-verified copy of an external component version,
+ * stored in the document (plan 0021 T-014, TD 0016 §5.3).
+ *
+ * This is the **render authority**: once admitted, resolution reads only from
+ * here and never contacts a Provider, which is what makes opening, rendering,
+ * and exporting a document work offline and reproducibly (AC-003). A Provider
+ * is consulted to *obtain* a snapshot, never to *use* one.
+ *
+ * Immutability is enforced by the key: a snapshot is stored under
+ * `libraryId/componentId/version/integrity`, so re-publishing different bytes
+ * under the same version yields a **different** key rather than overwriting the
+ * one this document already trusts (TD §22.1).
+ */
+export interface CanvasExternalComponentSnapshot {
+	/** The exact reference this snapshot is a copy of. Also derives its key. */
+	ref: CanvasExternalComponentRef;
+	/**
+	 * The component itself, in the same shape as a document-local Source.
+	 *
+	 * Identical to `CanvasComponentDefinition` on purpose: it is what makes one
+	 * resolver serve both local and external Sources (TD §10) instead of two
+	 * pipelines that drift.
+	 */
+	definition: CanvasComponentDefinition;
+	/**
+	 * Other external components this one references, as exact refs. Every entry
+	 * must itself be present in the registry before the snapshot is usable —
+	 * closure validation is plan 0021 T-017.
+	 */
+	dependencies: readonly CanvasExternalComponentRef[];
+	/**
+	 * The canonicalization format the digest was computed under. Persisted so a
+	 * future format change is detectable rather than silently invalidating every
+	 * stored snapshot.
+	 */
+	canonicalFormatVersion: number;
+	/**
+	 * When this snapshot was admitted. Written **once** and never updated, and
+	 * excluded from the canonical preimage — otherwise re-fetching identical
+	 * bytes would produce a different digest.
+	 *
+	 * Informational only: nothing about resolution or verification depends on it.
+	 */
+	fetchedAt?: string;
+}
+
+/**
+ * The document's external snapshot registry, keyed by
+ * `libraryId/componentId/version/integrity` (see `ir/snapshot-key.ts`).
+ *
+ * A plain persisted map, exactly like {@link CanvasComponentRegistry} and
+ * `CanvasIR.assets` — no `register()` surface, no runtime behavior, just data.
+ */
+export type CanvasExternalComponentSnapshotRegistry = Readonly<
+	Record<string, CanvasExternalComponentSnapshot>
 >;
 
 export interface CanvasIR {
@@ -1106,4 +1257,14 @@ export interface CanvasIR {
 	 * (INV-10). Frozen decision: Sources live HERE, never in a hidden page.
 	 */
 	components?: CanvasComponentRegistry;
+	/**
+	 * Immutable copies of every external component version this document uses
+	 * (plan 0021 T-014, CL-SNAPSHOT-001).
+	 *
+	 * Additive and optional in both directions: absent on every document that
+	 * uses no external components, and an empty map normalizes to omission — so
+	 * a document without external components stays byte-identical to one written
+	 * before this field existed.
+	 */
+	externalComponentSnapshots?: CanvasExternalComponentSnapshotRegistry;
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createCanvasIR, createRect } from "../builders.js";
+import { localComponentIdOf } from "../component-source.js";
 import type {
 	CanvasComponentColorProperty,
 	CanvasComponentDefinition,
@@ -69,12 +70,13 @@ describe("component data-model types (M1-02/03/04)", () => {
 			type: "component-instance",
 			transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
 			bounds: { width: 200, height: 160 },
-			componentId: "cmp-cta",
+			source: { kind: "local", componentId: "cmp-cta" },
 			overrides,
 		};
 
 		const byKind: CanvasNodeByKind<"component-instance"> = instance;
-		expect(byKind.componentId).toBe("cmp-cta");
+		expect(byKind.source).toEqual({ kind: "local", componentId: "cmp-cta" });
+		expect(localComponentIdOf(byKind.source)).toBe("cmp-cta");
 
 		// NOT a container: no children at the type level, leaf at runtime.
 		const leaf: CanvasLeafNode = instance;

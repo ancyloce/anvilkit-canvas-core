@@ -36,7 +36,7 @@ function makeInstance(): CanvasComponentInstanceNode & {
 		type: "component-instance",
 		transform: { x: 10, y: 20, rotation: 0, scaleX: 1, scaleY: 1 },
 		bounds: { width: 200, height: 160 },
-		componentId: "cmp-cta",
+		source: { kind: "local", componentId: "cmp-cta" },
 		overrides: {
 			"prop-title": {
 				kind: "text",
@@ -108,7 +108,7 @@ describe("component schemas in both unions (M1-05)", () => {
 		const instance = parsedRoot?.children.find(
 			(n) => n.type === "component-instance",
 		) as (CanvasComponentInstanceNode & { vendorMark?: unknown }) | undefined;
-		expect(instance?.componentId).toBe("cmp-cta");
+		expect(instance?.source).toEqual({ kind: "local", componentId: "cmp-cta" });
 		expect(instance?.overrides?.["prop-title"]).toEqual({
 			kind: "text",
 			value: { kind: "plain", text: "Hello again" },
@@ -186,11 +186,29 @@ describe("component schemas in both unions (M1-05)", () => {
 		expect("components" in parsedExtended).toBe(false);
 	});
 
-	it("rejects an instance with an empty componentId", () => {
-		const instance = { ...makeInstance(), componentId: "" };
+	it("rejects an instance with an empty source componentId", () => {
+		const instance = {
+			...makeInstance(),
+			source: { kind: "local", componentId: "" },
+		};
 		expect(() =>
 			CanvasComponentInstanceNodeSchema.parse(jsonClone(instance)),
 		).toThrow();
+	});
+
+	it("rejects an instance with an empty LEGACY componentId", () => {
+		const { source: _source, ...rest } = makeInstance();
+		const instance = { ...rest, componentId: "" };
+		expect(() =>
+			CanvasComponentInstanceNodeSchema.parse(jsonClone(instance)),
+		).toThrow();
+	});
+
+	it("rejects an instance carrying neither source nor legacy componentId", () => {
+		const { source: _source, ...rest } = makeInstance();
+		expect(() =>
+			CanvasComponentInstanceNodeSchema.parse(jsonClone(rest)),
+		).toThrow(/A component-instance needs a/);
 	});
 
 	/**
