@@ -175,3 +175,136 @@ export const MAX_COMPONENT_RICH_SPANS_PER_PARAGRAPH = 100;
  * reported alongside, so truncation is never silent.
  */
 export const MAX_RETAINED_DIAGNOSTICS = 1_000;
+
+// --- External Component Library caps (plan 0021 T-009, TD 0016 §22.2) -------
+//
+// These bound an **untrusted remote Provider envelope** before any
+// allocation-heavy work (TD §22.2: "bounded schemas before allocation-heavy
+// work"). They live here rather than in `component-libraries/limits.ts` as the
+// plan proposed, for two reasons: this module already declares itself the one
+// place every cap lives, and rank 0 is the only rank `ir/` (rank 1) can reach —
+// which M1 needs, because the persisted snapshot registry is validated in
+// `ir/validators.ts` and a rank-4 module would be unreachable from there.
+//
+// Where an external component bounds the *same quantity* as a local one, the
+// local constant is reused rather than shadowed by a near-duplicate: definition
+// node count (`MAX_COMPONENT_SOURCE_NODES_PER_DEFINITION`), expanded nodes
+// (`MAX_COMPONENT_EXPANDED_NODES_PER_RESOLUTION`), exposed properties
+// (`MAX_COMPONENT_PROPERTIES_PER_COMPONENT`), and instance overrides
+// (`MAX_COMPONENT_OVERRIDES_PER_INSTANCE`) all apply unchanged to an external
+// definition. Two caps for one quantity is how the looser one silently becomes
+// the real limit.
+
+/**
+ * Ceiling on the serialized byte size of one Provider envelope.
+ *
+ * Anchored to `MAX_CLIPBOARD_BYTES` (also 2 MiB), which is this package's
+ * existing answer to "how many bytes may a single untrusted payload carry".
+ * An envelope is the same kind of object: one-shot, externally supplied, parsed
+ * once. It carries at most one definition (≤
+ * `MAX_COMPONENT_SOURCE_NODES_PER_DEFINITION` nodes) plus its dependency refs,
+ * which is a smaller shape than the ≤1,000-node clipboard payload the figure was
+ * set for — so it is a ceiling with headroom, not a target.
+ *
+ * Checked against the transport-reported length **before** full parse where the
+ * transport provides one (TD §23.3).
+ */
+export const MAX_EXTERNAL_ENVELOPE_BYTES = MAX_CLIPBOARD_BYTES;
+
+/**
+ * Ceiling on entries in one document's `externalComponentSnapshots` registry.
+ *
+ * Anchored to `MAX_COMPONENT_DEFINITIONS_PER_DOCUMENT` (256): a snapshot
+ * registry is the cross-document analogue of the local Component Registry, so it
+ * gets the same budget rather than a second unrelated number. Note that distinct
+ * *versions* of one component occupy distinct entries (the key includes version
+ * and integrity), which is what makes explicit GC (`component-snapshot.collect-unused`)
+ * necessary rather than optional.
+ */
+export const MAX_EXTERNAL_SNAPSHOTS_PER_DOCUMENT =
+	MAX_COMPONENT_DEFINITIONS_PER_DOCUMENT;
+
+/**
+ * Ceiling on **direct** dependency references declared by one external
+ * definition — the fan-out guard against a dependency bomb (TD §22.1).
+ *
+ * Anchored to `MAX_COMPONENT_PROPERTIES_PER_COMPONENT` (64): a definition's
+ * dependency list and its property list are the same order of structural
+ * complexity, and a component needing more than 64 direct dependencies is not a
+ * component.
+ *
+ * Fan-out alone does not bound total work — `MAX_EXTERNAL_DEPENDENCY_DEPTH`
+ * bounds the other axis, and `MAX_COMPONENT_EXPANDED_NODES_PER_RESOLUTION` bounds
+ * the product. All three are enforced **after** expansion, not before, because a
+ * bomb is cheap to declare and expensive to expand.
+ */
+export const MAX_EXTERNAL_DEPENDENCIES_PER_COMPONENT =
+	MAX_COMPONENT_PROPERTIES_PER_COMPONENT;
+
+/**
+ * Ceiling on dependency-closure depth (component → depends on → component …).
+ *
+ * The same axis as `MAX_COMPONENT_NESTED_DEPTH`, measured across libraries
+ * instead of within one document, so it takes the same value: a closure and a
+ * nested-instance chain both expand into the same virtual tree, and that tree is
+ * what must stay clear of the `MAX_TREE_DEPTH` (64) walker guard. Giving them
+ * different values would mean a mixed local/external chain could exceed whichever
+ * limit was checked.
+ */
+export const MAX_EXTERNAL_DEPENDENCY_DEPTH = MAX_COMPONENT_NESTED_DEPTH;
+
+/**
+ * Ceiling on variant axes declared by one component (TD §11.1).
+ *
+ * Chosen for the shape real design systems use — size, tone, state, density,
+ * emphasis — where five or six axes is already unusual. The cap matters because
+ * axes multiply: the canonical selection key sorts and encodes every axis, so
+ * this also bounds key length.
+ */
+export const MAX_COMPONENT_VARIANT_AXES = 8;
+
+/** Ceiling on distinct values one variant axis may declare. */
+export const MAX_COMPONENT_VARIANT_VALUES_PER_AXIS = 16;
+
+/**
+ * Ceiling on **stored** variant definitions for one component.
+ *
+ * This is the load-bearing variant cap, and it is deliberately not the product
+ * of the two above. Variants are *sparse* (PRD §9.6): 8 axes × 16 values is
+ * 16^8 dense combinations, a number no cap on axes or values alone would ever
+ * bound. Only the count actually present in the payload can be checked, so that
+ * is what is capped. Anchored to `MAX_EXTERNAL_SNAPSHOTS_PER_DOCUMENT` (256) as
+ * the package's standing figure for "entries in one keyed registry".
+ */
+export const MAX_COMPONENT_VARIANTS_PER_COMPONENT = 256;
+
+/**
+ * Ceiling on characters in one field of an exact external reference
+ * (`libraryId`, `componentId`, `version`, `integrity`).
+ *
+ * Fixed by TD §5.3, which requires each decoded snapshot-key segment to be
+ * 1–256 characters. Declared once here so the key codec and the reference schema
+ * cannot disagree — they validate the same bound from the same constant.
+ */
+export const MAX_EXTERNAL_REF_FIELD_CHARS = 256;
+
+/**
+ * Ceiling on characters in a Provider-supplied URL (release notes, thumbnail,
+ * deep link).
+ *
+ * 2,048 is the de-facto interoperable URL ceiling across browsers, servers, and
+ * log pipelines. Length is checked in addition to `sanitizeProviderUrl`'s scheme
+ * allowlist, because a scheme-valid megabyte URL is still a denial-of-service
+ * vector against whatever renders or persists it.
+ */
+export const MAX_EXTERNAL_URL_CHARS = 2_048;
+
+/**
+ * Ceiling on characters in a non-authoritative catalog display string (name,
+ * description, publisher, deprecation notice).
+ *
+ * Catalog metadata is excluded from integrity bytes (TD §5.4), so it is the one
+ * part of an envelope no digest constrains — bounding it here is the only guard
+ * it gets.
+ */
+export const MAX_EXTERNAL_DISPLAY_STRING_CHARS = 512;

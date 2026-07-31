@@ -3,6 +3,7 @@ import type {
 	CanvasSvgHookContext,
 	CanvasUnknownNode,
 } from "../extensions/node-kind-registry.js";
+import { componentSourceLabel } from "../ir/component-source.js";
 import { toAffineMatrix } from "../geometry/affine.js";
 import {
 	computePolygonVertices,
@@ -68,6 +69,11 @@ import {
 	type RichTextStyleDefaults,
 	resolveSpanStyle,
 } from "../text-contracts.js";
+import {
+	isSafeDataImageUrl,
+	type NormalizeUriOptions,
+	normalizeUri,
+} from "../uri.js";
 
 /**
  * SVG serializer for `@anvilkit/canvas-core`.
@@ -100,19 +106,6 @@ import {
  *    frame whose `placeholder` has no resolved asset warns with
  *    `FRAME_PLACEHOLDER_UNRESOLVED` and paints a deterministic fallback.
  */
-
-// --- URL / scheme safety -----------------------------------------------------
-
-// `<image href>` uses an ALLOWLIST (not a scheme blocklist), matching the
-// path-`d` discipline: only http(s), scheme-less relative/protocol-relative
-// refs, and — when explicitly permitted — safe raster `data:` URIs are emitted.
-// Any other scheme (javascript:, vbscript:, file:, blob:, filesystem:, ftp:,
-// mailto:, custom:, …) is dropped, so a novel dangerous scheme can't slip past.
-const ALLOWED_URI_SCHEMES: ReadonlySet<string> = new Set(["http", "https"]);
-const URI_SCHEME_RE = /^([a-z][a-z0-9+.-]*):/;
-
-const SAFE_DATA_IMAGE_RE =
-	/^data:image\/(?:png|jpe?g|gif|webp|avif)(?:;[^,]*)?,/i;
 
 const PATH_D_RE = /^[\sMmLlHhVvCcSsQqTtAaZz0-9.,+\-eE]*$/;
 
@@ -165,50 +158,13 @@ export function escapeCssUrl(input: string): string {
 
 // --- URI normalization -------------------------------------------------------
 
-export interface NormalizeUriOptions {
-	readonly allowSafeDataImage?: boolean;
-}
-
-/**
- * Returns a safe URI, or `undefined` when the scheme is not allowlisted.
- * Scheme-less (relative or protocol-relative `//…`) refs and `http(s)` are
- * allowed; `data:` URIs are allowed only when `allowSafeDataImage` is set and
- * the payload is a known raster image type; everything else is dropped.
- */
-export function normalizeUri(
-	input: string,
-	options: NormalizeUriOptions = {},
-): string | undefined {
-	const candidate = input.trim();
-	if (!candidate) return undefined;
-
-	const collapsed = stripControlChars(candidate).toLowerCase();
-
-	if (collapsed.startsWith("data:")) {
-		return options.allowSafeDataImage && isSafeDataImageUrl(candidate)
-			? candidate
-			: undefined;
-	}
-
-	const scheme = URI_SCHEME_RE.exec(collapsed)?.[1];
-	if (scheme && !ALLOWED_URI_SCHEMES.has(scheme)) return undefined;
-
-	return candidate;
-}
-
-export function isSafeDataImageUrl(input: string): boolean {
-	return SAFE_DATA_IMAGE_RE.test(input);
-}
-
-function stripControlChars(input: string): string {
-	let out = "";
-	for (const ch of input) {
-		const cp = ch.charCodeAt(0);
-		if (cp <= 0x20 || cp === 0x7f) continue;
-		out += ch;
-	}
-	return out;
-}
+// The scheme allowlist now lives at `src/uri.ts` (rank 0), because
+// `component-libraries/` (rank 4) needs the same guard for Provider-supplied
+// release-notes and thumbnail URLs and cannot import this rank-5 module.
+// Re-exported here so this file's own tests and any existing importer are
+// unaffected by the move — see plan 0021 T-009 and
+// `docs/architecture/src-layer-map.md`.
+export { isSafeDataImageUrl, type NormalizeUriOptions, normalizeUri };
 
 // --- base64 (web-target; mirrors plugin-export-html `encodeBase64`) ----------
 
@@ -1638,7 +1594,7 @@ function expandComponentsForExport(
 			if (!record || record.node.type === "component-instance") continue;
 			warnings.push({
 				code: "COMPONENT_MEASUREMENT_MISSING",
-				message: `Instance "${instance.id}" of component "${instance.componentId}" was expanded without a text measurer; any Hug sizing inside it falls back to unmeasured intrinsic bounds and may differ from the editor.`,
+				message: `Instance "${instance.id}" of component "${componentSourceLabel(instance.source)}" was expanded without a text measurer; any Hug sizing inside it falls back to unmeasured intrinsic bounds and may differ from the editor.`,
 				nodeId: instance.id,
 				fallback:
 					"Pass `textMeasurer` (the same measurer the editor renders with) to make export geometry match the editor exactly.",
@@ -1768,7 +1724,7 @@ async function emitNode(
 			warn(
 				ctx,
 				"COMPONENT_INSTANCE_UNRESOLVED",
-				`Component instance "${node.id}" (component "${node.componentId}") serializes via the resolved document; the raw instance node has nothing to paint.`,
+				`Component instance "${node.id}" (component "${componentSourceLabel(node.source)}") serializes via the resolved document; the raw instance node has nothing to paint.`,
 				node.id,
 			);
 			return "";

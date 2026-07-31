@@ -13,6 +13,7 @@ import {
 import type { CanvasIR, CanvasNode } from "../ir/types.js";
 import {
 	buildCanvasComponentRegistrySchema,
+	buildCanvasExternalSnapshotRegistrySchema,
 	CANVAS_IR_VERSION,
 	CanvasAiPlaceholderNodeSchema,
 	CanvasAudioNodeSchema,
@@ -281,6 +282,8 @@ function buildExtendedSchemas(
 			// inside a page; same empty-registry normalization as the static
 			// path (INV-10) so the two cannot drift.
 			components: buildCanvasComponentRegistrySchema(union).optional(),
+			externalComponentSnapshots:
+				buildCanvasExternalSnapshotRegistrySchema(union).optional(),
 		})
 		.transform(omitEmptyComponents) as unknown as z.ZodType<CanvasIR>;
 

@@ -1,4 +1,5 @@
 import { nowIso } from "../clock.js";
+import { localComponentIdOf } from "../ir/component-source.js";
 import type {
 	CanvasBatchCommand,
 	CanvasCommand,
@@ -252,8 +253,14 @@ export function instantiateTemplate(
 		// Source trees and instances on the template's pages alike.
 		const rewriteInstanceRefs = (node: CanvasNode): void => {
 			if (node.type === "component-instance") {
-				const mapped = componentIdMap.get(node.componentId);
-				if (mapped) node.componentId = mapped;
+				// Only local Sources are cloned-and-renamed by instantiation; an
+				// external ref addresses a library, not a tree in this template,
+				// so it is carried through untouched.
+				const localId = localComponentIdOf(node.source);
+				if (localId !== undefined) {
+					const mapped = componentIdMap.get(localId);
+					if (mapped) node.source = { kind: "local", componentId: mapped };
+				}
 			}
 			if (isContainerNode(node)) {
 				for (const child of node.children) rewriteInstanceRefs(child);

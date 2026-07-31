@@ -164,6 +164,15 @@ const KNOWN_CAPABILITIES: ReadonlySet<string> = new Set([
 	// it earlier would have declared support the resolver/editor did not yet have.
 	CANVAS_COMPONENTS_LOCAL_CAPABILITY,
 	CANVAS_COMPONENTS_OVERRIDES_CAPABILITY,
+	// `components.external.v1` is deliberately ABSENT after plan 0021 M1.
+	//
+	// M1 makes this build able to *resolve and render* external components
+	// offline, but not to insert, update, or swap them — those are M2/M3. A
+	// document using external components should therefore still route to
+	// read-only materialized preview rather than be opened for editing by a
+	// build that cannot maintain it. This is the same call M3-12 made for Local
+	// Components and M6-06 later flipped; flip it in the milestone that lands the
+	// editing surface, not before.
 ]);
 
 /**

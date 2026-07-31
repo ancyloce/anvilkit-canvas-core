@@ -628,7 +628,7 @@ const componentDocArb = fc
 					transform: { x: 1, y: 1, rotation: 0, scaleX: 1, scaleY: 1 },
 					bounds: { width: 5, height: 5 },
 					zIndex: 0,
-					componentId: `cmp-${i - 1}`,
+					source: { kind: "local" as const, componentId: `cmp-${i - 1}` },
 				});
 			}
 			components[id] = {
@@ -662,7 +662,7 @@ const componentDocArb = fc
 			transform: { x: 3, y: 4, rotation: 0, scaleX: 1, scaleY: 1 },
 			bounds: { width: 30, height: 30 },
 			zIndex: 0,
-			componentId: "cmp-0",
+			source: { kind: "local" as const, componentId: "cmp-0" },
 			overrides,
 			vendorInstanceKey: vendorPayload,
 		};

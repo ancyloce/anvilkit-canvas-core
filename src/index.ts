@@ -6,6 +6,16 @@ export * from "./brand/index.js";
 export * from "./clipboard/index.js";
 export * from "./commands/index.js";
 export * from "./comment-contracts.js";
+// TYPES ONLY, deliberately (plan 0021 §4.5). A consumer needs these to describe
+// a document's external component references, and types are erased at runtime so
+// they cost the 80 KB root budget nothing. Every VALUE in this domain —
+// canonicalizer, schemas, codec, commands — stays behind the
+// `@anvilkit/canvas-core/component-libraries` subpath. Do not widen this to
+// `export *`.
+export type {
+	CanvasComponentSourceRef,
+	CanvasExternalComponentRef,
+} from "./component-libraries/types.js";
 // Curated at `component-ops/index.ts` (plan 0023 M3) — document-operation
 // builders that compose the resolver with the command layer.
 export * from "./component-ops/index.js";
