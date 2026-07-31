@@ -36,4 +36,5 @@ export { CANVAS_ALLOW_ALL_POLICY } from "../policy-contracts.js";
 export * from "./command-policy.js";
 export * from "./compliance-cache.js";
 export * from "./compliance.js";
+export * from "./prepare-export.js";
 export * from "./types.js";
