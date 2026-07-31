@@ -167,7 +167,16 @@ const LAYERS = [
 		rank: 5,
 		match: (p) => p === "ai-design-contracts.ts",
 	},
-	{ domain: "root", rank: 6, match: (p) => p === "index.ts" },
+	// The root barrels. `export-preparation.ts` is a public SUBPATH barrel, not a
+	// domain: it re-exports `brand-governance/prepare-export.ts` (rank 5) so that
+	// module can ship from its own entry without dragging the rank-2 resolver
+	// into the governance bundle (see docs/architecture/component-libraries-bundle-and-perf-decision.md).
+	// Rank 6 like `index.ts` — a barrel may reach anything below it.
+	{
+		domain: "root",
+		rank: 6,
+		match: (p) => p === "index.ts" || p === "export-preparation.ts",
+	},
 ];
 
 const TEST_FILE_PATTERN = /\.(test|spec)\.[cm]?tsx?$/;

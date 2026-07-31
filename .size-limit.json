@@ -4,6 +4,39 @@
 		"path": "dist/index.js",
 		"limit": "80 KB",
 		"gzip": true,
-		"ignore": ["zod", "pdf-lib"]
+		"ignore": [
+			"zod",
+			"pdf-lib"
+		]
+	},
+	{
+		"name": "@anvilkit/canvas-core/component-libraries",
+		"path": "dist/component-libraries/index.js",
+		"limit": "24 KB",
+		"gzip": true,
+		"ignore": [
+			"zod",
+			"pdf-lib"
+		]
+	},
+	{
+		"name": "@anvilkit/canvas-core/brand-governance",
+		"path": "dist/brand-governance/index.js",
+		"limit": "12 KB",
+		"gzip": true,
+		"ignore": [
+			"zod",
+			"pdf-lib"
+		]
+	},
+	{
+		"name": "@anvilkit/canvas-core/export-preparation",
+		"path": "dist/export-preparation.js",
+		"limit": "16 KB",
+		"gzip": true,
+		"ignore": [
+			"zod",
+			"pdf-lib"
+		]
 	}
 ]

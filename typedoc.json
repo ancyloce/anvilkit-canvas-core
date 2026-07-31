@@ -1,7 +1,11 @@
 {
 	"$schema": "https://typedoc.org/schema.json",
 	"extends": ["../../../../typedoc.base.json"],
-	"entryPoints": ["./src/index.ts"],
+	"entryPoints": [
+		"./src/index.ts",
+		"./src/component-libraries/index.ts",
+		"./src/brand-governance/index.ts"
+	],
 	"tsconfig": "./tsconfig.json",
 	"name": "@anvilkit/canvas-core",
 	"intentionallyNotExported": ["Point"]

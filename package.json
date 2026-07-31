@@ -17,6 +17,36 @@
 				"default": "./dist/index.cjs"
 			}
 		},
+		"./component-libraries": {
+			"import": {
+				"types": "./dist/component-libraries/index.d.ts",
+				"default": "./dist/component-libraries/index.js"
+			},
+			"require": {
+				"types": "./dist/cjs/component-libraries/index.d.cts",
+				"default": "./dist/component-libraries/index.cjs"
+			}
+		},
+		"./brand-governance": {
+			"import": {
+				"types": "./dist/brand-governance/index.d.ts",
+				"default": "./dist/brand-governance/index.js"
+			},
+			"require": {
+				"types": "./dist/cjs/brand-governance/index.d.cts",
+				"default": "./dist/brand-governance/index.cjs"
+			}
+		},
+		"./export-preparation": {
+			"import": {
+				"types": "./dist/export-preparation.d.ts",
+				"default": "./dist/export-preparation.js"
+			},
+			"require": {
+				"types": "./dist/cjs/export-preparation.d.cts",
+				"default": "./dist/export-preparation.cjs"
+			}
+		},
 		"./package.json": "./package.json"
 	},
 	"files": [
@@ -44,15 +74,18 @@
 		"bench": "vitest run --config vitest.bench.config.ts",
 		"bench:components": "vitest run --config vitest.bench.config.ts bench/repeated-structures.bench.ts",
 		"bench:layout": "vitest run --config vitest.bench.config.ts bench/layout-resolve.bench.ts",
+		"bench:instances": "vitest run --config vitest.bench.config.ts bench/component-instances.bench.ts",
 		"publint": "publint",
 		"check:publint": "node ./scripts/check-publint.mjs",
+		"check:subpath-exports": "node ./scripts/check-subpath-exports.mjs",
+		"check:canonical-cross-runtime": "node ./scripts/check-canonical-cross-runtime.mjs",
 		"check:circular": "madge --circular --extensions ts src/",
 		"check:layering": "node ./scripts/check-layering.mjs",
 		"check:react-free-runtime": "node ./scripts/check-react-free.mjs",
 		"check:peer-deps": "node ./scripts/check-peer-deps.mjs",
 		"check:bundle-budget": "node ./scripts/check-bundle-budget.mjs",
 		"check:api-snapshot": "node ./scripts/check-api-snapshot.mjs",
-		"check:all": "pnpm check:publint && pnpm check:circular && pnpm check:layering && pnpm check:react-free-runtime && pnpm check:peer-deps && pnpm check:bundle-budget && pnpm check:api-snapshot",
+		"check:all": "pnpm check:publint && pnpm check:subpath-exports && pnpm check:circular && pnpm check:layering && pnpm check:react-free-runtime && pnpm check:peer-deps && pnpm check:bundle-budget && pnpm check:api-snapshot",
 		"verify": "pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build && pnpm check:all",
 		"update:api-snapshot": "node ./scripts/check-api-snapshot.mjs --update",
 		"size": "size-limit"
