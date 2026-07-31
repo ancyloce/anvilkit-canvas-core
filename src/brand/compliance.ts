@@ -2,14 +2,49 @@ import type { CanvasFill, CanvasFontFamily, CanvasIR } from "../ir/types.js";
 import { walkDocument } from "../ir/walkers.js";
 import type { BrandKitDefinition } from "./types.js";
 
+/**
+ * Stable compliance codes.
+ *
+ * The six original members keep their exact meaning (T-041 step 4); the twelve
+ * `brand-component-*` members are added for component-aware findings. GROW-ONLY:
+ * hosts switch on these to phrase user-facing copy, so removing or renaming one
+ * is a breaking change.
+ */
 export type BrandComplianceIssueCode =
 	| "unresolved-color-token"
 	| "unresolved-font-token"
 	| "forbidden-color"
 	| "forbidden-font"
 	| "off-brand-color"
-	| "off-brand-font";
+	| "off-brand-font"
+	// --- Component-aware (plan 0021 T-041) ---
+	| "brand-component-policy-violation"
+	| "brand-component-property-not-editable"
+	| "brand-component-structure-locked"
+	| "brand-component-detach-denied"
+	| "brand-component-flatten-denied"
+	| "brand-component-variant-denied"
+	| "brand-component-token-not-allowed"
+	| "brand-component-override-off-brand"
+	| "brand-component-snapshot-missing"
+	| "brand-component-source-deprecated"
+	| "brand-component-policy-unsatisfiable"
+	| "brand-component-capability-unsupported";
 
+/**
+ * One compliance finding.
+ *
+ * **Widened additively in plan 0021 T-041.** The original four fields stay
+ * REQUIRED and unchanged, because two shipped call sites depend on them —
+ * `panels/BrandPanel.tsx` and `panels/inspector/brand-warnings.tsx`, the latter
+ * filtering on `nodeId`. Everything component-aware is optional, so an existing
+ * consumer compiles and behaves exactly as before.
+ *
+ * There is deliberately **no `message` field** (T-041 step 5): display text is
+ * derived from `code`, which is what keeps the four locale catalogs the single
+ * source of user-facing wording and stops a localized string being used to
+ * identify an issue.
+ */
 export interface BrandComplianceIssue {
 	nodeId: string;
 	code: BrandComplianceIssueCode;
@@ -17,10 +52,32 @@ export interface BrandComplianceIssue {
 	property: string;
 	/** The token id (for token issues) or literal value (for literal issues). */
 	value: string;
+	/**
+	 * How this issue should be treated. Absent means `"warning"` — the shipped
+	 * behaviour, so enabling governance cannot retroactively block an existing
+	 * document (T-042 acceptance).
+	 */
+	severity?: "warning" | "blocking";
+	pageId?: string;
+	/** Page-level instance this issue was found under (OD-08 keying). */
+	instanceId?: string;
+	/** Which component Source the offending node came from. */
+	source?: string;
+	/** Node id INSIDE the Source tree, when the issue is in expanded content. */
+	sourceNodeId?: string;
+	propertyId?: string;
+	variantId?: string;
+	brandId?: string;
 }
 
 export interface BrandComplianceReport {
 	issues: BrandComplianceIssue[];
+	documentId?: string;
+	policyRevision?: string;
+	summary?: {
+		readonly warning: number;
+		readonly blocking: number;
+	};
 }
 
 function caseInsensitiveEquals(a: string, b: string): boolean {
