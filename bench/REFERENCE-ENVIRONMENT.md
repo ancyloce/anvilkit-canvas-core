@@ -23,7 +23,7 @@ environment, by explicit maintainer decision.
 | RAM | 23.5 GB (+16 GB swap) |
 | OS + kernel | Linux `5.15.167.4-microsoft-standard-WSL2`, x86_64 |
 | Node version | `v24.18.0` (major **24**) |
-| Package manager | pnpm 11.17.0 |
+| Package manager | pnpm 11.18.0 |
 | Headless | yes — the harness is pure Node, no browser or renderer |
 | Warm-up passes | **5** (`ANVILKIT_CANVAS_BENCH_WARMUP`) |
 | Samples per figure | **50** (`ANVILKIT_CANVAS_BENCH_RUNS`) |
