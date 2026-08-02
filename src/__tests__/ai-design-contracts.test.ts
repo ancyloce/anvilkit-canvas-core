@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
 	type AiApplyBrandRequest,
@@ -11,16 +13,24 @@ import {
 	validateAiDesignJobResult,
 } from "../ai-design-contracts.js";
 import { applyCommand } from "../commands/runtime.js";
-import type { CanvasNodeUpdateCommand } from "../commands/types.js";
+import type {
+	CanvasCommand,
+	CanvasNodeUpdateCommand,
+} from "../commands/types.js";
 import {
 	createCanvasIR,
+	createFrame,
 	createGroup,
 	createImage,
 	createPage,
 	createText,
 } from "../ir/builders.js";
 import { insertNode } from "../ir/mutations.js";
-import type { CanvasPage } from "../ir/types.js";
+import type {
+	CanvasAutoLayout,
+	CanvasComponentDefinition,
+	CanvasPage,
+} from "../ir/types.js";
 
 function makeDocument() {
 	const page = createPage({ id: "p1" });
@@ -417,5 +427,206 @@ describe("applyCommand — rejects unrecognized command types (P1 C-2)", () => {
 				nodeId: "headline",
 			}),
 		).toThrowError(/Unrecognized command type/);
+	});
+});
+
+/**
+ * C-2's quarantining `default:` only stays correct while the case list above
+ * it covers every REAL built-in. It did not: the Auto Layout and Local
+ * Components commands were never added, so every AI proposal carrying one was
+ * falsely quarantined as "Unrecognized command type" (C-2-R).
+ *
+ * Parity is asserted by scanning both lists from source — the validator's
+ * `case` labels and `BUILTIN_COMMAND_TYPE_FLAGS`'s keys — for the same reason
+ * `commands/__tests__/registry-parity.test.ts` scans `applyCommand`'s switch:
+ * a TypeScript union erases at compile time, and a `switch` with a `default:`
+ * is not exhaustiveness-checked, so a restated array in the test would drift
+ * exactly the way the thing it checks drifted. A 38th command type now fails
+ * this test instead of silently regressing to a false quarantine.
+ */
+function readPackageSource(specifier: string): string {
+	return readFileSync(
+		fileURLToPath(new URL(specifier, import.meta.url)),
+		"utf8",
+	);
+}
+
+function commandTypesClassifiedByValidator(): ReadonlySet<string> {
+	const source = readPackageSource("../ai-design-contracts.ts");
+	const start = source.indexOf("function collectCommandValidationIssues");
+	expect(
+		start,
+		"collectCommandValidationIssues not found in ai-design-contracts.ts — this scan needs updating",
+	).toBeGreaterThan(-1);
+	// Bound the scan to the switch's classified cases: everything after the
+	// `default:` is the quarantine branch, which classifies nothing.
+	const end = source.indexOf("default:", start);
+	expect(
+		end,
+		"the quarantine default: was not found — this scan needs updating",
+	).toBeGreaterThan(start);
+
+	const types = new Set<string>();
+	for (const match of source.slice(start, end).matchAll(/case\s+"([^"]+)":/g)) {
+		const type = match[1];
+		if (type !== undefined) types.add(type);
+	}
+	return types;
+}
+
+function builtinCommandTypes(): ReadonlySet<string> {
+	const source = readPackageSource("../extensions/canvas-runtime.ts");
+	const start = source.indexOf("const BUILTIN_COMMAND_TYPE_FLAGS");
+	expect(
+		start,
+		"BUILTIN_COMMAND_TYPE_FLAGS not found in extensions/canvas-runtime.ts — this scan needs updating",
+	).toBeGreaterThan(-1);
+	const end = source.indexOf("\n};", start);
+	expect(
+		end,
+		"BUILTIN_COMMAND_TYPE_FLAGS's closing brace was not found — this scan needs updating",
+	).toBeGreaterThan(start);
+
+	const types = new Set<string>();
+	for (const match of source
+		.slice(start, end)
+		.matchAll(/(?:"([^"]+)"|([A-Za-z][\w-]*)):\s*true/g)) {
+		const type = match[1] ?? match[2];
+		if (type !== undefined) types.add(type);
+	}
+	return types;
+}
+
+function componentDefinition(): CanvasComponentDefinition {
+	return {
+		id: "cmp-card",
+		name: "Card",
+		revision: 1,
+		properties: [],
+		root: createFrame({
+			id: "cmp-card-root",
+			bounds: { width: 200, height: 120 },
+			children: [
+				createText({
+					id: "cmp-card-title",
+					bounds: { width: 200, height: 40 },
+					text: "Title",
+				}),
+			],
+		}),
+	};
+}
+
+const AUTO_LAYOUT: CanvasAutoLayout = {
+	version: 1,
+	direction: "vertical",
+	padding: { top: 8, right: 8, bottom: 8, left: 8 },
+	gap: 12,
+	primaryAlign: "start",
+	crossAlign: "center",
+};
+
+function validateCommand(command: CanvasCommand) {
+	return validateAiDesignJobResult({
+		jobId: "j1",
+		status: "complete",
+		payload: { kind: "command", command },
+		startedAt: 0,
+	});
+}
+
+describe("collectCommandValidationIssues — built-in command coverage (C-2-R)", () => {
+	it("finds both lists", () => {
+		// Guards the guards: a scan that silently matched nothing would make the
+		// parity assertion below vacuous.
+		expect(commandTypesClassifiedByValidator().size).toBeGreaterThan(20);
+		expect(builtinCommandTypes().size).toBeGreaterThan(20);
+	});
+
+	it("classifies every built-in command type rather than quarantining it", () => {
+		const classified = commandTypesClassifiedByValidator();
+		const builtins = builtinCommandTypes();
+		expect(
+			[...builtins].filter((type) => !classified.has(type)).sort(),
+			"built-in command types that fall through to the quarantining default:",
+		).toEqual([]);
+		expect(
+			[...classified].filter((type) => !builtins.has(type)).sort(),
+			"command types the validator classifies that are not built-ins",
+		).toEqual([]);
+	});
+
+	it("does not quarantine a frame.set-layout proposal", () => {
+		const outcome = validateCommand({
+			type: "frame.set-layout",
+			nodeId: "frame-1",
+			layout: AUTO_LAYOUT,
+			geometry: [
+				{
+					nodeId: "headline",
+					transform: { x: 8, y: 8, rotation: 0, scaleX: 1, scaleY: 1 },
+					bounds: { width: 184, height: 40 },
+				},
+			],
+		});
+		expect(outcome.ok, JSON.stringify(outcome)).toBe(true);
+	});
+
+	it("does not quarantine a component.create proposal", () => {
+		const outcome = validateCommand({
+			type: "component.create",
+			mode: "restore",
+			definition: componentDefinition(),
+		});
+		expect(outcome.ok, JSON.stringify(outcome)).toBe(true);
+	});
+
+	it("does not quarantine a component-instance.insert carrying a partial transform", () => {
+		const outcome = validateCommand({
+			type: "component-instance.insert",
+			componentId: "cmp-card",
+			instanceId: "inst-1",
+			pageId: "p1",
+			bounds: { width: 200, height: 120 },
+			transform: { x: 24 },
+		});
+		expect(outcome.ok, JSON.stringify(outcome)).toBe(true);
+	});
+
+	it("still schema-checks the Source tree a component.create embeds", () => {
+		const definition = componentDefinition();
+		const outcome = validateCommand({
+			type: "component.create",
+			mode: "restore",
+			definition: {
+				...definition,
+				root: {
+					...definition.root,
+					transform: {
+						x: Number.NaN,
+						y: 0,
+						rotation: 0,
+						scaleX: 1,
+						scaleY: 1,
+					},
+				},
+			},
+		});
+		expect(outcome.ok).toBe(false);
+		if (outcome.ok) throw new Error("expected quarantine");
+		expect(outcome.error.code).toBe("invalid-payload");
+		expect(outcome.error.issues?.length).toBeGreaterThan(0);
+	});
+
+	it("still schema-checks the geometry a frame.set-layout writes", () => {
+		const outcome = validateCommand({
+			type: "frame.set-layout",
+			nodeId: "frame-1",
+			layout: { ...AUTO_LAYOUT, gap: Number.NaN },
+		});
+		expect(outcome.ok).toBe(false);
+		if (outcome.ok) throw new Error("expected quarantine");
+		expect(outcome.error.code).toBe("invalid-payload");
+		expect(outcome.error.issues?.length).toBeGreaterThan(0);
 	});
 });

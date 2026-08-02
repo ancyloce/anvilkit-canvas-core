@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { AiImageJobKind, AiLayerContext } from "./ai-contracts.js";
 import type { BrandKitDefinition } from "./brand/types.js";
 import type {
@@ -5,9 +6,18 @@ import type {
 	CanvasCommand,
 	CanvasPageCreateCommand,
 } from "./commands/types.js";
-import type { CanvasAiPlaceholderStatus, CanvasPage } from "./ir/types.js";
+import type {
+	CanvasAiPlaceholderStatus,
+	CanvasPage,
+	CanvasTransform,
+} from "./ir/types.js";
 import {
+	CanvasAutoLayoutSchema,
 	CanvasBoundsSchema,
+	CanvasComponentDefinitionShape,
+	CanvasComponentOverrideSchema,
+	CanvasComponentPropertySchema,
+	CanvasLayoutItemSchema,
 	CanvasNodeSchema,
 	CanvasPageSchema,
 	CanvasTransformSchema,
@@ -198,44 +208,164 @@ export type ValidateAiDesignJobResultOutcome =
 	| { readonly ok: true; readonly command: CanvasBatchCommand }
 	| { readonly ok: false; readonly error: AiDesignQuarantineError };
 
+/** `safeParse` → flat issue messages, the shape every case below reports. */
+function collectSchemaIssues<T>(
+	schema: z.ZodType<T>,
+	value: unknown,
+): string[] {
+	const result = schema.safeParse(value);
+	return result.success
+		? []
+		: result.error.issues.map((issue) => issue.message);
+}
+
 /**
- * Every embedded node (`node.create`) / page (`page.create`) payload, plus
- * the numeric fields a `node.update` patch may carry, validated recursively
- * through a `batch`. Every other built-in command type is whitelisted
- * (returns no issues) rather than falling through a catch-all `default` — an
- * unrecognized `type` (a hostile or future-version AI payload cast to
- * `CanvasCommand`) is quarantined instead of silently passing (P1 C-2).
+ * Per-command payload schemas, composed from the exported `ir/validators.ts`
+ * parts rather than restating a single field. They live here (module-private)
+ * instead of in `ir/validators.ts` because none of them is a persisted
+ * document shape: `ir/validators.ts` publishes the whole-Registry schema,
+ * while these commands each embed ONE definition, ONE property/override, or a
+ * caller-computed geometry list. Each command-level schema is a `looseObject`
+ * over the command itself, so its ids/`type`/`location` fields pass through
+ * untouched and only the poisonable payload is parsed.
+ */
+const ComponentDefinitionPayloadSchema = z.looseObject({
+	...CanvasComponentDefinitionShape,
+	root: CanvasNodeSchema,
+});
+
+const LayoutGeometryWritesSchema = z.array(
+	z.looseObject({
+		nodeId: z.string().min(1),
+		transform: CanvasTransformSchema.optional(),
+		bounds: CanvasBoundsSchema.optional(),
+		layoutItem: CanvasLayoutItemSchema.nullable().optional(),
+	}),
+);
+
+const FrameSetLayoutPayloadSchema = z.looseObject({
+	layout: CanvasAutoLayoutSchema,
+	geometry: LayoutGeometryWritesSchema.optional(),
+});
+
+const FrameRemoveLayoutPayloadSchema = z.looseObject({
+	geometry: LayoutGeometryWritesSchema.optional(),
+});
+
+const WrapInLayoutFramePayloadSchema = z.looseObject({
+	transform: CanvasTransformSchema,
+	bounds: CanvasBoundsSchema,
+	layout: CanvasAutoLayoutSchema,
+	geometry: LayoutGeometryWritesSchema.optional(),
+});
+
+const ComponentInstanceInsertPayloadSchema = z.looseObject({
+	bounds: CanvasBoundsSchema,
+	overrides: z.record(z.string(), CanvasComponentOverrideSchema).optional(),
+	layoutItem: CanvasLayoutItemSchema.optional(),
+});
+
+/**
+ * `component-instance.insert` carries a PARTIAL transform, completed against
+ * the identity transform by `createComponentInstance` at apply time — so it is
+ * completed the same way before parsing. Parsing the partial directly would
+ * quarantine a legitimate `{ x: 10 }` for the fields it omits.
+ */
+const IDENTITY_TRANSFORM: CanvasTransform = {
+	x: 0,
+	y: 0,
+	rotation: 0,
+	scaleX: 1,
+	scaleY: 1,
+};
+
+/**
+ * Every embedded node (`node.create`) / page (`page.create`) / Component
+ * Source (`component.create`) payload, plus the numeric fields a
+ * `node.update` patch, an Auto Layout write, or a component property/override
+ * may carry, validated recursively through a `batch`. Every other built-in
+ * command type is whitelisted (returns no issues) rather than falling through
+ * a catch-all `default` — an unrecognized `type` (a hostile or future-version
+ * AI payload cast to `CanvasCommand`) is quarantined instead of silently
+ * passing (P1 C-2).
+ *
+ * The case list must stay in parity with `BUILTIN_COMMAND_TYPE_FLAGS`
+ * (`extensions/canvas-runtime.ts`): a built-in missing from it hits the
+ * `default:` and is falsely quarantined, which is exactly how the layout and
+ * Local Components commands regressed (C-2-R). `__tests__/
+ * ai-design-contracts.test.ts` scans this switch's `case` labels and asserts
+ * set equality with that list, so a 38th command type fails a test instead of
+ * silently breaking every proposal that carries it.
  */
 function collectCommandValidationIssues(command: CanvasCommand): string[] {
 	switch (command.type) {
-		case "node.create": {
-			const result = CanvasNodeSchema.safeParse(command.node);
-			return result.success
-				? []
-				: result.error.issues.map((issue) => issue.message);
-		}
-		case "page.create": {
-			const result = CanvasPageSchema.safeParse(command.page);
-			return result.success
-				? []
-				: result.error.issues.map((issue) => issue.message);
-		}
+		case "node.create":
+			return collectSchemaIssues(CanvasNodeSchema, command.node);
+		case "page.create":
+			return collectSchemaIssues(CanvasPageSchema, command.page);
 		case "node.update": {
 			const issues: string[] = [];
 			if (command.patch.transform !== undefined) {
-				const result = CanvasTransformSchema.safeParse(command.patch.transform);
-				if (!result.success) {
-					issues.push(...result.error.issues.map((issue) => issue.message));
-				}
+				issues.push(
+					...collectSchemaIssues(
+						CanvasTransformSchema,
+						command.patch.transform,
+					),
+				);
 			}
 			if (command.patch.bounds !== undefined) {
-				const result = CanvasBoundsSchema.safeParse(command.patch.bounds);
-				if (!result.success) {
-					issues.push(...result.error.issues.map((issue) => issue.message));
-				}
+				issues.push(
+					...collectSchemaIssues(CanvasBoundsSchema, command.patch.bounds),
+				);
 			}
 			return issues;
 		}
+		case "frame.set-layout":
+			// Auto Layout intent + caller-computed resolved geometry: numeric
+			// fields written straight into the document, the same poisoning
+			// surface `node.update`'s patch has (C-2-R).
+			return collectSchemaIssues(FrameSetLayoutPayloadSchema, command);
+		case "frame.remove-layout":
+			// Carries no intent, but still bakes caller-computed geometry into
+			// the descendants it un-lays-out (C-2-R).
+			return collectSchemaIssues(FrameRemoveLayoutPayloadSchema, command);
+		case "selection.wrap-in-layout-frame":
+			// Creates a frame from payload-supplied placement + intent, and
+			// rewrites every child's geometry (C-2-R).
+			return collectSchemaIssues(WrapInLayoutFramePayloadSchema, command);
+		case "component.create":
+			// `restore` embeds a whole Component Source definition — a node tree
+			// exactly as poisonable as `node.create`'s, validated through the same
+			// node union. `from-selection` names ids only (C-2-R).
+			return command.mode === "restore"
+				? collectSchemaIssues(
+						ComponentDefinitionPayloadSchema,
+						command.definition,
+					)
+				: [];
+		case "component.add-property":
+			// Embeds a property definition (default value, target binding) (C-2-R).
+			return collectSchemaIssues(
+				CanvasComponentPropertySchema,
+				command.property,
+			);
+		case "component.update-property":
+			// Replaces a property definition wholesale (C-2-R).
+			return collectSchemaIssues(CanvasComponentPropertySchema, command.to);
+		case "component-instance.insert":
+			// Embeds the instance node's bounds/transform/overrides/layout slot —
+			// everything `createComponentInstance` writes into the document (C-2-R).
+			return [
+				...collectSchemaIssues(ComponentInstanceInsertPayloadSchema, command),
+				...collectSchemaIssues(CanvasTransformSchema, {
+					...IDENTITY_TRANSFORM,
+					...command.transform,
+				}),
+			];
+		case "component-instance.set-override":
+			// Embeds an override value — text/rich-text content, an asset id, or a
+			// fill, written verbatim onto the instance (C-2-R).
+			return collectSchemaIssues(CanvasComponentOverrideSchema, command.value);
 		case "batch":
 			return command.commands.flatMap(collectCommandValidationIssues);
 		case "node.delete":
@@ -257,9 +387,17 @@ function collectCommandValidationIssues(command: CanvasCommand): string[] {
 		case "page.set-layout-aids":
 		case "asset.put":
 		case "asset.remove":
+		case "component.rename":
+		case "component.duplicate":
+		case "component.delete":
+		case "component.remove-property":
+		case "component-instance.reset-override":
+		case "component-instance.reset-all-overrides":
+		case "component-instance.detach":
 			// No embedded IR/document payload to schema-check — these commands
-			// only reference existing ids and set primitive fields, which
-			// `applyCommand` validates against live document state at apply time.
+			// only reference existing ids and set primitive fields (including
+			// `component-instance.detach`'s id-to-id map), which `applyCommand`
+			// validates against live document state at apply time.
 			return [];
 		default:
 			return [
