@@ -65,6 +65,40 @@ export function isSafeDataImageUrl(input: string): boolean {
 }
 
 /**
+ * The schemes that name **browser-local bytes**: `blob:` and `filesystem:`.
+ *
+ * Both are deliberately absent from this module's `ALLOWED_URI_SCHEMES` and
+ * stay that way — a `blob:` URI is an opaque handle minted by one document in one
+ * browsing session, so emitting one into an exported SVG (or any other
+ * portable artifact) produces a reference no other machine, and after a reload
+ * not even the same machine, can resolve. Referencing one is always wrong.
+ *
+ * *Resolving* one is not. A caller that can turn the handle back into bytes —
+ * `@anvilkit/canvas-editor`'s browser-local asset store, a host's own blob
+ * registry — can embed those bytes inline, and then the URI itself never
+ * reaches the output at all. This predicate is what lets the SVG serializer
+ * offer exactly that class of URI to an injected `SvgFetchAsset` while every
+ * other blocked scheme (`javascript:`, `file:`, `ftp:`, …) keeps dropping
+ * unconditionally.
+ *
+ * It lives beside the allowlist, not next to either consumer, for the reason
+ * this module exists at all: two places deciding what "browser-local" means is
+ * how they drift. `serialize/svg.ts` and the editor's JSON exporter both call
+ * this one function, so "which assets are unportable" has a single answer.
+ *
+ * Control characters are stripped before the scheme test, so `blo\nb:` cannot
+ * masquerade as something else — and, symmetrically, cannot smuggle a blocked
+ * scheme into the fetchable class.
+ */
+export function isLocalObjectUri(input: string): boolean {
+	if (typeof input !== "string") return false;
+	const scheme = URI_SCHEME_RE.exec(
+		stripControlChars(input.trim()).toLowerCase(),
+	)?.[1];
+	return scheme === "blob" || scheme === "filesystem";
+}
+
+/**
  * Returns a safe **absolute** http(s) URL, or `undefined`.
  *
  * Stricter than `normalizeUri` in exactly one way, and deliberately so:

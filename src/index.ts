@@ -33,3 +33,11 @@ export * from "./limits.js";
 export * from "./serialize/index.js";
 export * from "./templates/index.js";
 export * from "./text-contracts.js";
+// ONE name only, deliberately. `normalizeUri`/`isSafeDataImageUrl` stay behind
+// `serialize/svg.ts`'s re-export (their consumer is the emitter) and
+// `sanitizeProviderUrl` behind the `component-libraries` subpath (its consumer
+// is the Libraries UI). `isLocalObjectUri` is the one predicate a consumer
+// OUTSIDE this package needs at the root: `@anvilkit/canvas-editor`'s exporters
+// ask "is this asset's URI resolvable anywhere but here?" and must answer it
+// with the same function the SVG serializer answers it with (cp1-006).
+export { isLocalObjectUri } from "./uri.js";

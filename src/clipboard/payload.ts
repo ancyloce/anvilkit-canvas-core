@@ -311,6 +311,10 @@ export function materializeClipboardNodes(
 			// Mirrors the reference fields `ir/invariants.ts`'s
 			// `assetIdsReferencedByNode` enumerates, so a rewritten asset id can
 			// never desync from what the invariant checker considers a reference.
+			// `maskAssetId` is deprecated (ADR 0008 decision 3, removal at
+			// `@anvilkit/canvas-core@1.0.0`) and stays in this list until the field
+			// itself goes: a pasted document must not lose a reference merely
+			// because the field it lives on is on its way out.
 			for (const field of ["assetId", "maskAssetId", "poster"] as const) {
 				const value = record[field];
 				if (typeof value === "string" && assetIdRewrites.has(value)) {
