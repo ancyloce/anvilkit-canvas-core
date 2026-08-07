@@ -7,6 +7,7 @@ import type { CanvasBrandComponentPolicy } from "./component-policy.js";
 // Re-exported so `BrandTokenType`'s public import path is unchanged; it lives
 // in a leaf module to break the `types.ts` <-> `component-policy.ts` cycle.
 export type { BrandTokenType } from "./brand-tokens.js";
+
 import type {
 	CanvasComponentSourceRef,
 	CanvasExternalComponentRef,
@@ -199,8 +200,6 @@ export interface CanvasGradientFill {
 	to: { x: number; y: number };
 }
 
-
-
 /**
  * A reference to a value owned by an external brand kit (PRD §12.4) — a
  * color, font, spacing value, asset, or logo — identified by `id` alone.
@@ -343,6 +342,30 @@ export interface CanvasMotionPathAnimation extends CanvasAnimationBase {
 	path: string;
 }
 
+/**
+ * Animation intent carried by a node (`meta.animation`) or a page
+ * (`page.animation`) — FR-080, canvas-m6-001.
+ *
+ * **Metadata-only, exactly as {@link CanvasMediaNodeBase} is
+ * contract-only.** No playback or motion rendering is implemented anywhere in
+ * this repository: canvas-core has no timeline, `@anvilkit/canvas-editor`
+ * never reads this field (no preview, no scrubber), and no motion output
+ * format exists — there is no GIF/APNG/MP4/WebM/Lottie exporter, and the SVG
+ * output contains no SMIL or CSS animation. This is a contract an
+ * export/render worker consumes later, and nothing more.
+ *
+ * Static exports therefore render the node/page in its normal resting state
+ * (its own `transform`/`opacity`/etc., unaffected by this field) and merely
+ * surface `ANIMATION_IGNORED` — `serializePageToSvg` per animated node AND
+ * per animated page, `serializeDocumentToPdf` per animated page (page-scoped
+ * by construction: it embeds a flat raster and cannot see nodes). Raster
+ * captures (PNG/JPEG/WebP) are snapshots of a stage that never animated, so
+ * they carry no warning at all. A `json` export round-trips this metadata
+ * verbatim — losslessly persisted, still never played.
+ *
+ * See {@link CanvasAnimationBase} for the shared `delay`/`duration`/`easing`
+ * timing fields.
+ */
 export type CanvasAnimation =
 	| CanvasFadeAnimation
 	| CanvasSlideAnimation
@@ -484,6 +507,34 @@ export interface FramePlaceholder {
 }
 
 /**
+ * What geometry a clipping frame clips to (ADR 0008 decision 2 — the shape
+ * mask lives on the container, never on the image node).
+ *
+ * **Absent = the rectangle frames have always clipped to**, so every document
+ * written before this field existed keeps its exact geometry with no migration.
+ *
+ * Three constraints are resolved centrally by {@link resolveFrameClipShape} and
+ * must never be re-derived per consumer:
+ *
+ * 1. **`shape` only takes effect when `clip` is `true`.** `clip` remains the
+ *    single on/off switch; `shape` only says what the clip's geometry is. A
+ *    shape on an unclipped frame is inert, not a second silent clip trigger.
+ * 2. **`radius`/`cornerRadii` apply only to `kind: "rect"`** and are ignored by
+ *    every other kind.
+ * 3. **An unhonourable shape degrades to the rectangle, never throws** — see
+ *    the `unsupported-frame-clip-shape` invariant for the diagnostic.
+ *
+ * `kind: "path"` carries raw SVG path data; it is sanitized by the serializer's
+ * existing path guard on the way out rather than by a second validator here.
+ */
+export type CanvasFrameShape =
+	| { kind: "rect" }
+	| { kind: "ellipse" }
+	| { kind: "polygon"; sides: number }
+	| { kind: "star"; points: number; innerRadiusRatio: number }
+	| { kind: "path"; d: string };
+
+/**
  * A layout container. Unlike a group — which is a pure grouping of siblings and
  * derives its bounds from them — a frame has its own bounds, can clip its
  * children to them, and can paint a background. It is the unit a template stamps
@@ -494,6 +545,12 @@ export interface CanvasFrameNode extends CanvasNodeBase {
 	children: CanvasNode[];
 	/** Clip children to the frame's bounds. */
 	clip?: boolean;
+	/**
+	 * The clip's geometry (ADR 0008 decision 2). Only meaningful when `clip` is
+	 * `true`; absent means the rectangle. Resolve it through
+	 * {@link resolveFrameClipShape} — never read it directly.
+	 */
+	shape?: CanvasFrameShape;
 	background?: CanvasFill;
 	placeholder?: FramePlaceholder;
 	/** Corner radius, in local units. Matches `CanvasRectNode["radius"]`. */
@@ -747,6 +804,27 @@ export interface CanvasImageNode extends CanvasNodeBase {
 	 * never modified.
 	 */
 	adjustments?: CanvasImageAdjustments;
+	/**
+	 * @deprecated Since `0.1.2`. **Scheduled for removal in
+	 * `@anvilkit/canvas-core@1.0.0`.** Per ADR 0008
+	 * (`docs/adr/0008-canvas-masking.md`) decision 3, alpha masking on the image
+	 * node is not being implemented: masking lives on the **container**.
+	 *
+	 * The field has never been rendered by anything. The Konva stage does not
+	 * read it, and the SVG serializer refuses it with `IMAGE_MASK_UNSUPPORTED`.
+	 * Setting it changes no pixel on any path.
+	 *
+	 * **Migration:** wrap the image in a clipping {@link CanvasFrameNode} —
+	 * `clip: true` plus a {@link CanvasFrameShape} — with the image as its child.
+	 * That is the supported mask, it is honoured identically by the editor and by
+	 * SVG export (both read {@link resolveFrameClipShape}), and it composes with
+	 * the frame's background, placeholder/image-well and Auto Layout.
+	 *
+	 * Until `1.0.0` the field stays fully wired and is **never** silently
+	 * dropped: it validates (`min(1)`), round-trips through parse/serialize,
+	 * keeps its asset alive through the reference-preservation invariant, and
+	 * survives a cross-document paste with its reference re-keyed.
+	 */
 	maskAssetId?: string;
 	/**
 	 * Live binding to a brand-kit asset/logo token, when this image should track

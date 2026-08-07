@@ -466,6 +466,20 @@ export interface CreateImageOptions {
 	crop?: CanvasImageCrop;
 	filters?: ImageFilter[];
 	adjustments?: CanvasImageAdjustments;
+	/**
+	 * @deprecated Since `0.1.2`. **Scheduled for removal in
+	 * `@anvilkit/canvas-core@1.0.0`** — see
+	 * {@link CanvasImageNode.maskAssetId} and ADR 0008 decision 3
+	 * (`docs/adr/0008-canvas-masking.md`).
+	 *
+	 * The option and its write-through are retained until then, because removing
+	 * them is a compile break for any host that sets it. Passing it still
+	 * produces a node carrying the field — it simply renders nowhere.
+	 *
+	 * **Migration:** create a clipping {@link CanvasFrameNode} via `createFrame`,
+	 * set `clip: true` and a `shape` (`CanvasFrameShape`) on it, and make the
+	 * image its child.
+	 */
 	maskAssetId?: string;
 	assetToken?: BrandTokenRef;
 	alt?: string;

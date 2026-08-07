@@ -8,17 +8,6 @@ export type {
 	CanvasBrandComponentPolicy,
 	CanvasBrandTokenConstraint,
 } from "./component-policy.js";
-// Explicit, not `*`: the schemas are internal wiring for `ir/validators.ts`
-// and would otherwise land on the root barrel. Same curation as component-source.
-export {
-	canonicalVariantKey,
-	type CanvasComponentVariantAxis,
-	type CanvasComponentVariantDefinition,
-	type CanvasComponentVariantSelection,
-	type CanvasComponentVariantSet,
-	CanvasComponentVariantSetSchema,
-	type CanvasComponentVariantValue,
-} from "./component-variants.js";
 // Explicit (not `*`): the ref-field factory, the version-rule helpers, and the
 // digest-shape regex are shared with `component-libraries/schema.ts` so the two
 // strictness variants cannot disagree — they are package-internal plumbing, not
@@ -35,7 +24,19 @@ export {
 	isLocalSourceRef,
 	localComponentIdOf,
 } from "./component-source.js";
+// Explicit, not `*`: the schemas are internal wiring for `ir/validators.ts`
+// and would otherwise land on the root barrel. Same curation as component-source.
+export {
+	type CanvasComponentVariantAxis,
+	type CanvasComponentVariantDefinition,
+	type CanvasComponentVariantSelection,
+	type CanvasComponentVariantSet,
+	CanvasComponentVariantSetSchema,
+	type CanvasComponentVariantValue,
+	canonicalVariantKey,
+} from "./component-variants.js";
 export * from "./effects.js";
+export * from "./frame-clip.js";
 export * from "./image-adjustments.js";
 export * from "./invariants.js";
 export * from "./migrations.js";

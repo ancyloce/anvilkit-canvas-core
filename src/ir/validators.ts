@@ -11,13 +11,13 @@ import {
 	MAX_EXTERNAL_SNAPSHOTS_PER_DOCUMENT,
 	MAX_FINITE_LAYOUT_MAGNITUDE,
 } from "../limits.js";
+import { CanvasBrandComponentPolicySchema } from "./component-policy.js";
 import {
 	CanvasIRComponentSourceRefSchema,
 	CanvasIRExternalComponentRefSchema,
 } from "./component-source.js";
-import { createMigrationRegistry } from "./migrations.js";
-import { CanvasBrandComponentPolicySchema } from "./component-policy.js";
 import { CanvasComponentVariantSetSchema } from "./component-variants.js";
+import { createMigrationRegistry } from "./migrations.js";
 import { isSnapshotKey, snapshotKey } from "./snapshot-key.js";
 import type {
 	BrandTokenRef,
@@ -34,6 +34,7 @@ import type {
 	CanvasExternalComponentSnapshotRegistry,
 	CanvasFill,
 	CanvasFontFamily,
+	CanvasFrameShape,
 	CanvasGradientFill,
 	CanvasGradientStop,
 	CanvasGroupNode,
@@ -556,6 +557,14 @@ export const CanvasImageNodeSchema = z.looseObject({
 	crop: CanvasImageCropSchema.optional(),
 	filters: z.array(ImageFilterSchema).optional(),
 	adjustments: CanvasImageAdjustmentsSchema.optional(),
+	// DEPRECATED (ADR 0008 decision 3), removal scheduled for
+	// `@anvilkit/canvas-core@1.0.0`. Deliberately RETAINED here for the whole
+	// deprecation window: `z.looseObject` above would preserve the key either
+	// way, but dropping the declaration would silently downgrade a typed field
+	// to an unknown key and lose this `min(1)` check. Documents carrying
+	// `maskAssetId` must keep parsing exactly as they always have — deprecation
+	// is a documentation state, never a parse failure. The migration is a
+	// clipping `frame` carrying `shape` (see `CanvasFrameNodeSchema`).
 	maskAssetId: z.string().min(1).optional(),
 	assetToken: BrandTokenRefSchema.optional(),
 	alt: z.string().optional(),
@@ -614,6 +623,32 @@ export const FramePlaceholderSchema: z.ZodType<FramePlaceholder> =
 		assetToken: BrandTokenRefSchema.optional(),
 	});
 
+/**
+ * The clip geometry of a frame (ADR 0008 decision 2). Optional and additive on
+ * `CanvasFrameNode`, so every document written before it existed parses
+ * unchanged and needs no migration.
+ *
+ * A `discriminatedUnion` on `kind` for the same reason `CanvasNodeSchema`
+ * discriminates on `type` — O(1) dispatch and a precise error for an unknown
+ * tag — and the numeric guards are the SAME refinements the `polygon`/`star`
+ * nodes use, so a shape mask and the equivalent drawn shape can never disagree
+ * about what a legal side count or inner radius is. `d` is `min(1)` exactly
+ * like `CanvasPathNodeSchema.d`: the character allowlist is the serializer's
+ * `PATH_D_RE`, applied on the way out, not a second validator here.
+ */
+export const CanvasFrameShapeSchema: z.ZodType<CanvasFrameShape> =
+	z.discriminatedUnion("kind", [
+		z.looseObject({ kind: z.literal("rect") }),
+		z.looseObject({ kind: z.literal("ellipse") }),
+		z.looseObject({ kind: z.literal("polygon"), sides: IntegerAtLeastThree }),
+		z.looseObject({
+			kind: z.literal("star"),
+			points: IntegerAtLeastThree,
+			innerRadiusRatio: UnitInterval,
+		}),
+		z.looseObject({ kind: z.literal("path"), d: z.string().min(1) }),
+	]);
+
 // Recursive members. `CanvasGroupNodeSchema` / `CanvasFrameNodeSchema` stay
 // concrete object schemas (not `z.lazy`-wrapped) so they carry a readable `type`
 // discriminant — only their `children` element is deferred via `z.lazy`, which
@@ -635,6 +670,7 @@ export const CanvasFrameNodeShape = {
 	...CanvasNodeBaseShape,
 	type: z.literal("frame"),
 	clip: z.boolean().optional(),
+	shape: CanvasFrameShapeSchema.optional(),
 	background: CanvasFillSchema.optional(),
 	placeholder: FramePlaceholderSchema.optional(),
 	radius: NonNegativeFiniteNumber.optional(),

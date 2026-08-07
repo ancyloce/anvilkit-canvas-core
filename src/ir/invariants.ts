@@ -1,3 +1,4 @@
+import { resolveFrameClipShape } from "./frame-clip.js";
 import type { CanvasIR, CanvasNode, CanvasPage } from "./types.js";
 import {
 	type CanvasDocumentLocation,
@@ -29,7 +30,8 @@ export type CanvasInvariantIssueCode =
 	| "asset-key-id-mismatch"
 	| "dangling-asset-reference"
 	| "excessive-tree-depth"
-	| "missing-required-capability";
+	| "missing-required-capability"
+	| "unsupported-frame-clip-shape";
 
 /**
  * The capability string a document must declare once any of its content
@@ -65,6 +67,13 @@ export interface CanvasInvariantIssue {
 function assetIdsReferencedByNode(node: CanvasNode): readonly string[] {
 	switch (node.type) {
 		case "image":
+			// `maskAssetId` is deprecated (ADR 0008 decision 3, removal at
+			// `@anvilkit/canvas-core@1.0.0`) but is deliberately STILL READ here: a
+			// deprecated reference is still a reference. Drop it before the field
+			// itself goes and this invariant starts reporting a false
+			// `dangling-asset-reference` — or worse, a host GC treats a live asset
+			// as collectable. `clipboard/payload.ts` mirrors this enumeration, so
+			// the two move together or not at all.
 			return node.maskAssetId
 				? [node.assetId, node.maskAssetId]
 				: [node.assetId];
@@ -194,6 +203,27 @@ export function validateCanvasIRInvariants(
 			if (nodeCarriesLayoutIntent(node)) {
 				layoutIntentCount += 1;
 				firstLayoutNode ??= { nodeId: node.id, location };
+			}
+			// A clip shape this build cannot honour (ADR 0008 decision 2). The
+			// SAME resolver every renderer uses decides this — a second opinion
+			// here is exactly how "what the checker calls broken" and "what the
+			// canvas actually draws" drift apart. Reported per node rather than
+			// once per document because each offender is a separate authoring
+			// mistake, and reported regardless of `clip`: an unhonourable shape
+			// on an unclipped frame is still a shape nothing can ever render, it
+			// is simply not visible yet.
+			if (node.type === "frame") {
+				const { degradation } = resolveFrameClipShape(node);
+				if (degradation !== undefined) {
+					issues.push({
+						code: "unsupported-frame-clip-shape",
+						message: `Frame "${node.id}" declares a clip shape this build cannot honour (kind "${String(node.shape?.kind)}": ${degradation}) — it degrades to the frame's rectangle.`,
+						nodeId: node.id,
+						...(location.kind === "page"
+							? { pageId: location.id }
+							: { location }),
+					});
+				}
 			}
 		});
 	} catch (err) {
