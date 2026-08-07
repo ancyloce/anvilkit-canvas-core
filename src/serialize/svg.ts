@@ -3,14 +3,18 @@ import type {
 	CanvasSvgHookContext,
 	CanvasUnknownNode,
 } from "../extensions/node-kind-registry.js";
-import { componentSourceLabel } from "../ir/component-source.js";
 import { toAffineMatrix } from "../geometry/affine.js";
 import {
 	computePolygonVertices,
 	computeStarVertices,
 } from "../geometry/polygon.js";
 import { fingerprint } from "../hash.js";
+import { componentSourceLabel } from "../ir/component-source.js";
 import { resolveNodeEffects } from "../ir/effects.js";
+import {
+	type ResolvedFrameClipShape,
+	resolveFrameClipShape,
+} from "../ir/frame-clip.js";
 import {
 	adjustmentBlurRadius,
 	computeAdjustmentColorMatrix,
@@ -70,6 +74,7 @@ import {
 	resolveSpanStyle,
 } from "../text-contracts.js";
 import {
+	isLocalObjectUri,
 	isSafeDataImageUrl,
 	type NormalizeUriOptions,
 	normalizeUri,
@@ -99,12 +104,32 @@ import {
  *    (`IMAGE_MASK_UNSUPPORTED` / `IMAGE_FILTERS_UNSUPPORTED`): the node still
  *    serializes, the unrepresentable aspect is reported, and the field survives
  *    in the IR — it is never silently dropped, and the image is never flattened
- *    to hide the gap. A future vector-mask implementation can start emitting
- *    real markup without changing the IR or breaking existing consumers.
+ *    to hide the gap. For `maskAssetId` this is now its PERMANENT state: ADR
+ *    0008 (`docs/adr/0008-canvas-masking.md`) decision 3 deprecates the field —
+ *    removal scheduled for `@anvilkit/canvas-core@1.0.0` — and puts the vector
+ *    mask on the FRAME instead (see the `shape` bullet below), so no alpha-mask
+ *    emitter is coming for this node. `IMAGE_MASK_UNSUPPORTED` is nonetheless
+ *    retained for good (`SvgWarningCode` only ever grows) and its message names
+ *    the frame replacement rather than implying future support.
  *  - Frame `clip` IS fully representable (an SVG `<clipPath>` over the frame's
  *    box, rounded when `radius` is set), so it carries no fidelity warning. A
  *    frame whose `placeholder` has no resolved asset warns with
  *    `FRAME_PLACEHOLDER_UNRESOLVED` and paints a deterministic fallback.
+ *  - Frame `shape` (ADR 0008 decision 2) IS fully representable too, and needs
+ *    no new clipping mechanism: every `CanvasFrameShape` kind becomes a child of
+ *    the SAME `<clipPath>` a rectangular `clip` has always emitted — `rect` the
+ *    frame box, `ellipse` an `<ellipse>` at the box's inscribed radii,
+ *    `polygon`/`star` a `<polygon>` from the shared vertex maths `emitPolygon`/
+ *    `emitStar` already use, and `path` a `<path>` whose `d` must pass the same
+ *    `PATH_D_RE` allowlist `emitPath` applies. Geometry comes from the ONE
+ *    resolver (`resolveFrameClipShape`) the Konva path also reads, so editor and
+ *    export cannot disagree, and an honoured shape carries no fidelity warning
+ *    for the same reason a rectangular clip does not. Only genuinely undrawable
+ *    residue warns — an unimplemented `kind`, numbers describing no outline, or
+ *    rejected `path` data — with `FRAME_CLIP_SHAPE_DEGRADED`, after which the
+ *    frame still clips to its box. This is a container-level clip: it is
+ *    unrelated to the image-node `maskAssetId` bullet above, which stays
+ *    unimplemented (ADR 0008 decision 3 disposes of that field separately).
  */
 
 const PATH_D_RE = /^[\sMmLlHhVvCcSsQqTtAaZz0-9.,+\-eE]*$/;
@@ -298,6 +323,21 @@ export type SvgWarningCode =
 	// emitted would be dead API. Image masks keep warning via
 	// `IMAGE_MASK_UNSUPPORTED`, which is unchanged.
 	| "FRAME_PLACEHOLDER_UNRESOLVED"
+	// Added for frame clip shapes (ADR 0008 decision 2, cp4-002). Same grow-only
+	// rule. An HONOURED `shape` never fires this: every `CanvasFrameShape` kind is
+	// losslessly representable as a `<clipPath>` child, so a shaped clip carries
+	// no fidelity warning for exactly the reason a rectangular one does not. This
+	// code is reserved for the residue that genuinely cannot be drawn — a `kind`
+	// this build does not implement (a newer peer's document), numbers that
+	// describe no outline, or `path` data the `PATH_D_RE` allowlist rejects. In
+	// every case the frame still clips to its box, so the export degrades
+	// visibly-but-safely instead of silently dropping the clip or emitting
+	// unvalidated path data.
+	//
+	// Deliberately ONE code rather than one per reason: the reason is carried in
+	// the message, and a consumer's question is always "did my shape survive the
+	// export", never "which of three ways did it fail".
+	| "FRAME_CLIP_SHAPE_DEGRADED"
 	// Added for rich text (canvas-m1-007). Same grow-only rule.
 	//
 	// `RICH_TEXT_WRAP_APPROXIMATE` — no `textMeasurer` was supplied, so the
@@ -1812,16 +1852,29 @@ function resolveFrameBackground(
 }
 
 /**
+ * Rounding as the frame box should draw it. A `CanvasFrameNode` satisfies this
+ * structurally (its own `radius`/`cornerRadii`), and so does a
+ * {@link ResolvedFrameClipShape} — which is how the background can keep the
+ * frame's literal rounding while the clip uses the rounding the ONE resolver
+ * normalized (per-corner radii win; a zero radius is no radius; non-`rect`
+ * shapes carry none at all).
+ */
+type FrameBoxRounding = Pick<ResolvedFrameClipShape, "radius" | "cornerRadii">;
+
+/**
  * Geometry attributes for the frame's own box — shared by the clip path and the
  * background rect so the two can never disagree about the rounding.
  */
-function frameBoxAttrs(node: CanvasFrameNode): string[] {
+function frameBoxAttrs(
+	node: CanvasFrameNode,
+	rounding: FrameBoxRounding,
+): string[] {
 	const attrs = [
 		`width="${fmt(node.bounds.width)}"`,
 		`height="${fmt(node.bounds.height)}"`,
 	];
-	if (node.radius !== undefined && node.radius > 0) {
-		attrs.push(`rx="${fmt(node.radius)}"`, `ry="${fmt(node.radius)}"`);
+	if (rounding.radius !== undefined && rounding.radius > 0) {
+		attrs.push(`rx="${fmt(rounding.radius)}"`, `ry="${fmt(rounding.radius)}"`);
 	}
 	return attrs;
 }
@@ -1831,11 +1884,98 @@ function frameBoxAttrs(node: CanvasFrameNode): string[] {
  * when per-corner radii are set, else the classic `<rect>`. Shared by the
  * clip path and the background so the two can never disagree.
  */
-function frameBoxElement(node: CanvasFrameNode, extraAttrs: string): string {
-	if (node.cornerRadii) {
-		return `<path d="${roundedRectPath(node.bounds.width, node.bounds.height, node.cornerRadii)}"${extraAttrs} />`;
+function frameBoxElementWith(
+	node: CanvasFrameNode,
+	rounding: FrameBoxRounding,
+	extraAttrs: string,
+): string {
+	if (rounding.cornerRadii) {
+		return `<path d="${roundedRectPath(node.bounds.width, node.bounds.height, rounding.cornerRadii)}"${extraAttrs} />`;
 	}
-	return `<rect ${frameBoxAttrs(node).join(" ")}${extraAttrs} />`;
+	return `<rect ${frameBoxAttrs(node, rounding).join(" ")}${extraAttrs} />`;
+}
+
+/**
+ * The frame box drawn with the frame's OWN rounding.
+ *
+ * The background must use this and not a resolved clip shape: a `shape` on an
+ * unclipped frame is inert (ADR 0008 decision 2), so letting the shape reach the
+ * background would make `shape` a second, silent trigger for a visible change —
+ * the exact mistake the decision rules out. On a frame that IS clipping, the
+ * background is a child of the clipped `<g>`, so the shape trims it anyway and
+ * the two still cannot disagree about what is painted.
+ */
+function frameBoxElement(node: CanvasFrameNode, extraAttrs: string): string {
+	return frameBoxElementWith(node, node, extraAttrs);
+}
+
+/**
+ * The `<clipPath>` child for a frame's clip, resolved through the ONE frame-clip
+ * resolver (ADR 0008 decision 2).
+ *
+ * No fourth clipping mechanism is introduced: this only decides what goes INSIDE
+ * the `<clipPath>` that {@link emitFrame} has emitted since canvas-m1-003, and
+ * every kind reuses geometry that already ships — the frame box for `rect`,
+ * `emitEllipse`'s inscribed radii for `ellipse`, `computePolygonVertices` /
+ * `computeStarVertices` for `polygon` / `star`.
+ *
+ * `path` runs through {@link isValidPathD} — the SAME `PATH_D_RE` allowlist
+ * `emitPath` applies. `cp4-001` deliberately left path data uncharacter-checked
+ * in `ir/`, because rank 1 cannot import this rank-5 guard and ADR 0008 decision
+ * 2 requires reusing it rather than adding a second validator; this is where
+ * that guard runs, so hostile `d` data never reaches the attribute.
+ *
+ * Anything unhonourable degrades to the frame box with a
+ * `FRAME_CLIP_SHAPE_DEGRADED` warning — the frame keeps clipping, and the
+ * document keeps its field (degradation is a rendering decision, never a
+ * mutation).
+ */
+function frameClipElement(
+	node: CanvasFrameNode,
+	clip: ResolvedFrameClipShape,
+	ctx: SvgEmitContext,
+): string {
+	const degrade = (reason: string): string => {
+		warn(
+			ctx,
+			"FRAME_CLIP_SHAPE_DEGRADED",
+			`Frame clip shape ${reason}; clipping to the frame box instead.`,
+			node.id,
+		);
+		// The frame's own rounding, matching what the resolver itself falls back
+		// to when it degrades.
+		return frameBoxElement(node, "");
+	};
+
+	// The resolver has already substituted the rectangle here, so the rejected
+	// kind is not readable off `clip.shape` — `degradation` is the only account
+	// of what went wrong, and it is deliberately the one this message quotes.
+	if (clip.source === "degraded") {
+		return degrade(
+			clip.degradation === "unknown-shape-kind"
+				? "uses a kind this build does not implement"
+				: "does not describe a real outline",
+		);
+	}
+
+	const shape = clip.shape;
+	switch (shape.kind) {
+		case "rect":
+			return frameBoxElementWith(node, clip, "");
+		case "ellipse": {
+			const rx = node.bounds.width / 2;
+			const ry = node.bounds.height / 2;
+			return `<ellipse cx="${fmt(rx)}" cy="${fmt(ry)}" rx="${fmt(rx)}" ry="${fmt(ry)}" />`;
+		}
+		case "polygon":
+			return `<polygon points="${pointsAttr(computePolygonVertices(node.bounds, shape.sides))}" />`;
+		case "star":
+			return `<polygon points="${pointsAttr(computeStarVertices(node.bounds, shape.points, shape.innerRadiusRatio))}" />`;
+		case "path":
+			return isValidPathD(shape.d)
+				? `<path d="${escapeAttr(shape.d)}" />`
+				: degrade("carries path data outside the allowed character set");
+	}
 }
 
 /**
@@ -1860,9 +2000,20 @@ async function emitFrame(
 	const attrs = commonAttrs(node, ctx);
 
 	let clipDefs = "";
-	if (node.clip) {
+	// The ONE frame-clip resolver (ADR 0008 decision 2) answers both questions —
+	// is this frame clipping, and to what — so this path and the editor's Konva
+	// `clipFunc` can never disagree. Note `clipped` means `clip === true`, not
+	// merely truthy: the resolver owns that definition, and `CanvasFrameNodeShape`
+	// already rejects a non-boolean `clip`.
+	const clip = resolveFrameClipShape(node);
+	if (clip.clipped) {
+		// One id namespace per node, and node ids are unique across the WHOLE
+		// document (INV-2, `duplicate-node-id`), so these cannot collide between
+		// pages of a multi-page export either — and `sanitizeId` appends a
+		// fingerprint whenever cleaning changes the id, so two different unsafe
+		// ids cannot clean to the same string.
 		const clipId = `frame-clip-${sanitizeId(node.id)}`;
-		clipDefs = `<defs><clipPath id="${clipId}">${frameBoxElement(node, "")}</clipPath></defs>`;
+		clipDefs = `<defs><clipPath id="${clipId}">${frameClipElement(node, clip, ctx)}</clipPath></defs>`;
 		attrs.push(`clip-path="url(#${clipId})"`);
 	}
 
@@ -1911,6 +2062,13 @@ async function embedRemote(
 	fetchAsset: SvgFetchAsset,
 	ctx: SvgEmitContext,
 	nodeId: string,
+	/**
+	 * What the caller does with a failed fetch, so the warning describes the
+	 * outcome the reader will actually observe. `"reference"` (the default) is
+	 * the remote-URI path, which falls back to an `href`; `"omit"` is the
+	 * browser-local path, where there is no referenceable URI to fall back to.
+	 */
+	onFailure: "reference" | "omit" = "reference",
 ): Promise<string | undefined> {
 	try {
 		const { bytes, contentType } = await fetchAsset(uri);
@@ -1920,7 +2078,11 @@ async function embedRemote(
 		warn(
 			ctx,
 			"MISSING_ASSET",
-			`Failed to fetch image "${uri}" for embedding; referencing instead.`,
+			`Failed to fetch image "${uri}" for embedding; ${
+				onFailure === "reference"
+					? "referencing instead."
+					: "the URI is browser-local and cannot be referenced, so the image is omitted."
+			}`,
 			nodeId,
 		);
 		return undefined;
@@ -1948,6 +2110,38 @@ async function resolveImageHref(
 
 	const safe = normalizeUri(trimmed);
 	if (!safe) {
+		// A browser-local URI (`blob:`/`filesystem:`) names bytes that really
+		// exist — but only inside the session that minted it, which is why the
+		// allowlist rejects it for REFERENCING and always will. Embedding is a
+		// different question: what reaches the output is the fetched bytes as a
+		// sanitized `data:` URI, and the original handle never appears at all.
+		// So when a caller supplied a fetcher that can resolve it, offer it one
+		// chance here rather than dropping an asset the caller can prove it
+		// holds (cp1-006). `images: "reference"` opts out by definition — that
+		// mode asks for hrefs, and there is no href to give.
+		//
+		// Every other blocked scheme (`javascript:`, `file:`, `ftp:`, …) still
+		// drops unconditionally, fetcher or not: those name nothing this process
+		// can resolve into bytes, and handing one to a host callback would widen
+		// what a fetcher can be asked to do for no gain.
+		if (
+			ctx.options.fetchAsset &&
+			ctx.options.images !== "reference" &&
+			isLocalObjectUri(trimmed)
+		) {
+			// `undefined` here means the fetch failed and `embedRemote` already
+			// warned MISSING_ASSET with the accurate "the image is omitted"
+			// wording — deliberately NOT followed by an UNSAFE_URI warning, which
+			// would misdiagnose "your local copy is gone" as "your document uses a
+			// dangerous scheme".
+			return await embedRemote(
+				trimmed,
+				ctx.options.fetchAsset,
+				ctx,
+				nodeId,
+				"omit",
+			);
+		}
 		warn(ctx, "UNSAFE_URI", "Image URI uses a blocked scheme.", nodeId);
 		return undefined;
 	}
@@ -1989,10 +2183,14 @@ async function emitImage(
 		return "";
 	}
 	if (node.maskAssetId) {
+		// The message deliberately does NOT promise future support: ADR 0008
+		// decision 3 deprecates this field rather than implementing it, so it
+		// names the supported replacement instead (cp4-007). The CODE is
+		// unchanged and is never retired — `SvgWarningCode` only ever grows.
 		warn(
 			ctx,
 			"IMAGE_MASK_UNSUPPORTED",
-			"Image masks are not represented in SVG.",
+			"Image masks (deprecated `maskAssetId`) are not represented in SVG and will not be; the field is scheduled for removal in @anvilkit/canvas-core@1.0.0. Use a clipping frame instead: wrap the image in a frame with `clip: true` and a `shape` (ADR 0008), which exports losslessly.",
 			node.id,
 		);
 	}

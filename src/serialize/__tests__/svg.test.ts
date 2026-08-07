@@ -1052,6 +1052,14 @@ describe("serializePageToSvg images", () => {
 		const codes = warnings.map((w) => w.code);
 		expect(codes).toContain("IMAGE_MASK_UNSUPPORTED");
 		expect(codes).toContain("IMAGE_FILTERS_UNSUPPORTED");
+
+		// cp4-007 / ADR 0008 decision 3: the mask warning must point at the
+		// supported replacement and must NOT imply the field is coming.
+		const mask = warnings.find((w) => w.code === "IMAGE_MASK_UNSUPPORTED");
+		expect(mask?.message).toContain("clipping frame");
+		expect(mask?.message).toContain("@anvilkit/canvas-core@1.0.0");
+		expect(mask?.message).toContain("will not be");
+		expect(mask?.message).not.toMatch(/future|planned|not yet|coming/i);
 	});
 });
 

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="320" viewBox="0 0 400 320" role="img">
+	<title>Frame clip shapes</title>
+	<rect x="0" y="0" width="400" height="320" fill="#ffffff" />
+	<defs><clipPath id="frame-clip-ellipse-well"><ellipse cx="50" cy="50" rx="50" ry="50" /></clipPath></defs><g transform="translate(8 8)" clip-path="url(#frame-clip-ellipse-well)">
+		<image width="140" height="140" preserveAspectRatio="none" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" />
+	</g>
+	<defs><clipPath id="frame-clip-hexagon"><polygon points="50,0 93.3013,20 93.3013,60 50,80 6.6987,60 6.6987,20" /></clipPath></defs><g transform="translate(120 8)" clip-path="url(#frame-clip-hexagon)">
+		<rect width="100" height="80" fill="#f1f5f9" />
+	</g>
+	<defs><clipPath id="frame-clip-starred"><polygon points="50,0 64.6946,29.7746 97.5528,34.5492 73.7764,57.7254 79.3893,90.4508 50,75 20.6107,90.4508 26.2236,57.7254 2.4472,34.5492 35.3054,29.7746" /></clipPath></defs><g transform="translate(232 8)" clip-path="url(#frame-clip-starred)">
+		<defs><linearGradient id="grad-starred-bg" gradientUnits="objectBoundingBox" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0ea5e9" /><stop offset="1" stop-color="#8b5cf6" /></linearGradient></defs><rect width="100" height="100" fill="url(#grad-starred-bg)" />
+	</g>
+	<defs><clipPath id="frame-clip-blade"><path d="M 0 0 L 80 0 L 80 60 Z" /></clipPath></defs><g transform="translate(8 120)" clip-path="url(#frame-clip-blade)">
+		<rect transform="translate(20 20)" width="80" height="80" fill="#ef4444" />
+	</g>
+	<defs><clipPath id="frame-clip-declared-rect"><rect width="80" height="60" rx="12" ry="12" /></clipPath></defs><g transform="translate(100 120)" clip-path="url(#frame-clip-declared-rect)">
+		<rect width="80" height="60" rx="12" ry="12" fill="#fde047" />
+	</g>
+	<g transform="translate(192 120)">
+		<rect width="80" height="60" rx="10" ry="10" fill="#e2e8f0" />
+	</g>
+	<defs><clipPath id="frame-clip-nest-outer"><ellipse cx="60" cy="50" rx="60" ry="50" /></clipPath></defs><g transform="translate(8 200)" clip-path="url(#frame-clip-nest-outer)">
+		<defs><clipPath id="frame-clip-nest-inner"><polygon points="40,0 74.641,45 5.359,45" /></clipPath></defs><g transform="translate(10 10)" clip-path="url(#frame-clip-nest-inner)">
+			<rect width="80" height="60" fill="#0ea5e9" />
+		</g>
+	</g>
+	<defs><clipPath id="frame-clip-rect-outer"><rect width="140" height="100" /></clipPath></defs><g transform="translate(160 200)" clip-path="url(#frame-clip-rect-outer)">
+		<rect width="140" height="100" fill="#e2e8f0" />
+		<defs><clipPath id="frame-clip-shape-inner"><polygon points="45,0 54,22.8756 83.9711,17.5 63,35 83.9711,52.5 54,47.1244 45,70 36,47.1244 6.0289,52.5 27,35 6.0289,17.5 36,22.8756" /></clipPath></defs><g transform="translate(12 12)" clip-path="url(#frame-clip-shape-inner)">
+			<rect width="90" height="70" fill="#fb7185" />
+		</g>
+	</g>
+</svg>
