@@ -136,11 +136,13 @@ through a single-pass mutation to a new immutable IR, and simultaneously yields 
 ## The Canvas IR
 
 A document is a `CanvasIR`: a version-tagged tree of pages, each with a root
-group whose `children` are one of 15 built-in node kinds (or a nested `group`
+group whose `children` are one of 16 built-in node kinds (or a nested `group`
 itself) — `group`, `frame`, `rect`, `ellipse`, `polygon`, `star`, `line`,
 `path`, `text`, `rich-text`, `image`, `svg`, `ai-placeholder`, `video`,
-`audio`. Only `group` and `frame` are **containers** (hold `children`); every
-other kind is a leaf.
+`audio`, `component-instance`. Only `group` and `frame` are **containers**
+(hold `children`); every other kind is a leaf. What each kind actually renders
+to differs — see the [built-in node-kind capability
+matrix](#built-in-node-kind-capability-matrix) below.
 
 ```
 CanvasIR
@@ -154,7 +156,8 @@ CanvasIR
 |   `-- root: CanvasGroupNode
 |           `-- children: CanvasNode[]
 |               (group | frame | rect | ellipse | polygon | star | line | path
-|                | text | rich-text | image | svg | ai-placeholder | video | audio)
+|                | text | rich-text | image | svg | ai-placeholder | video
+|                | audio | component-instance)
 |-- assets: Record<id, CanvasAssetRef>
 `-- metadata { createdAt, updatedAt, ownerId?, brandId? }
 ```
@@ -169,6 +172,121 @@ that a consumer (the SVG serializer's `resolveBrandToken` option, or the
 editor's brand kit) resolves; core never resolves one itself. `video`/`audio`
 are asset-reference-only (no inline media bytes, no playback) — see
 [Media support](#media-support-video--audio) below.
+
+## Built-in node-kind capability matrix
+
+Decoding, walking, mutating and the undoable command runtime are **generic** —
+they behave identically for every kind, so they are not columns here. What
+differs per kind is what a consumer actually gets on screen and in a file, and
+that is what this table records.
+
+Read the **Verdict** column first. *Full* means the kind renders everywhere.
+**Contract-only** means the kind is a persisted, validated, round-trippable
+shape that **no renderer in this repository turns into pixels or sound** — it
+exists for a future export/render worker to consume, and nothing more.
+
+| Kind | SVG export (`serializePageToSvg`) | Editor stage · raster · PDF¹ | Verdict |
+|------|-----------------------------------|------------------------------|---------|
+| `group` | ✅ recursed into `children` | ✅ | full |
+| `frame` | ✅ clip + background | ✅ | full |
+| `rect` | ✅ | ✅ | full |
+| `ellipse` | ✅ | ✅ | full |
+| `polygon` | ✅ | ✅ | full |
+| `star` | ✅ | ✅ | full |
+| `line` | ✅ incl. arrowheads (`<marker>`) | ✅ | full |
+| `path` | ✅ incl. arrowheads (`<marker>`) | ✅ | full |
+| `text` | ✅ `<text>`/`<tspan>` | ✅ | full |
+| `rich-text` | ✅ one `<tspan>` per styled run; wrapping needs a host `CanvasTextMeasurer`, otherwise one line per paragraph + `RICH_TEXT_WRAP_APPROXIMATE` | ✅ | full |
+| `image` | ✅ referenced or inlined; missing asset renders nothing + `MISSING_ASSET` | ✅ | full |
+| `svg` | ⚠ emitted as an `<image>` asset reference, never inline vector + `SVG_INLINE_UNSUPPORTED` | ⚠ same (`<image>`) | full, no inline vector |
+| `ai-placeholder` | ❌ skipped + `AI_PLACEHOLDER_SKIPPED` (a pending job has no static representation) | ✅ editor status chrome (pending/complete/error); not exported | editor-chrome-only |
+| `component-instance` | ✅ when the caller supplies a resolved document; a raw unresolved instance is skipped + `COMPONENT_INSTANCE_UNRESOLVED` | ✅ expanded at render time | full when resolved |
+| **`video`** | **poster still only** — the `poster` asset emitted as a static `<image>` if it resolves, **nothing at all otherwise**. Always warns `VIDEO_UNSUPPORTED` | **poster still if it resolves; otherwise an editor-chrome-only placeholder box** that is never exported. No `<video>` element, no decoding, no playback, no timeline, no sound | **contract-only — no playback** |
+| **`audio`** | **nothing, ever.** Always warns `AUDIO_UNSUPPORTED` | **editor-chrome-only placeholder box**, never exported. Audio is never decoded and never played anywhere | **contract-only — inert** |
+| *(field, not a kind)* **`meta.animation` / `page.animation`** | **never represented.** SVG warns `ANIMATION_IGNORED` per animated node **and** per animated page | **never played.** Nothing in `@anvilkit/canvas-editor` reads the field — there is no timeline, no preview, no scrubber. PDF warns `ANIMATION_IGNORED` per animated page; PNG/JPEG/WebP drop it **silently** | **metadata-only — never played, never exported** |
+
+¹ PDF is raster-embed: the caller supplies pre-rendered page rasters (in the
+editor, `rasterizePage` over the same Konva render path), so PDF fidelity
+follows the middle column, not the SVG one. Per-format detail:
+[`@anvilkit/canvas-editor`'s export capability matrix](../editor/docs/export-capability-matrix.md).
+
+### Media support (video & audio)
+
+`video` and `audio` are **contract-only**. They are real, schema-validated,
+undoable, round-trippable IR nodes — and that is the entire feature. Nothing
+in this repository plays them.
+
+- **Placing a video yields a static poster image.** `CanvasVideoNode.poster`
+  is an asset id for a still frame, and that still is the only visual any
+  consumer produces. With no `poster`, an SVG export emits nothing for the
+  node and the live editor draws a placeholder box that is itself never
+  exported (`emitVideo`, `src/serialize/svg.ts`).
+- **Audio is inert.** `CanvasAudioNode` has no visual representation at all
+  and no playback path. An SVG export emits nothing for it; the live editor
+  draws a non-exported placeholder box (`emitAudio`, `src/serialize/svg.ts`).
+- **`trim`, `muted` and `volume` are declarative only.** They are persisted
+  and validated, and no code in this repository consumes them. They describe
+  intent for a future export/render worker.
+- **No media bytes ever enter the IR.** Both kinds hold only an `assetId`,
+  matching the `image`/`svg` asset-reference convention.
+- **Every static export says so.** `serializePageToSvg` always emits
+  `VIDEO_UNSUPPORTED` for a video node and `AUDIO_UNSUPPORTED` for an audio
+  node; `serializeDocumentToPdf` emits the same two codes once per page that
+  contains such a node. Grep those codes to find every site.
+
+If you need real playback, treat these kinds as an authoring/handoff contract
+and render them in your own downstream worker.
+
+### Motion (animation is metadata-only)
+
+`CanvasAnimation` — the seven `kind`s `fade`, `slide`, `scale`, `rotate`,
+`pop`, `typewriter`, `motion-path`, with `delay`/`duration`/`easing` and a
+`direction` on `slide` — is **metadata-only**.
+
+- **Nothing plays it.** There is no timeline, no preview and no playback
+  runtime, in this package or in `@anvilkit/canvas-editor`.
+- **Nothing exports it.** There is no motion output format at all: no
+  GIF/APNG/MP4/WebM/Lottie exporter, and no SMIL/CSS animation in the SVG
+  output. Every export format this repository ships is a still.
+- **Static output is never divergent.** An animated node or page renders in
+  its normal resting state — its own `transform`/`opacity`/etc., exactly as if
+  the field were absent. The metadata is never a second, competing appearance.
+- **The drop is warned on the vector and PDF paths, silent on the raster
+  paths.** `serializePageToSvg` emits `ANIMATION_IGNORED` per animated node and
+  per animated page; `serializeDocumentToPdf` emits `ANIMATION_IGNORED` per
+  animated page (page-scoped by construction — it embeds a flat raster and
+  cannot see nodes). PNG/JPEG/WebP are direct captures of a stage that never
+  animated, so they carry no warning. A `json` export round-trips the metadata
+  verbatim — losslessly persisted, still never played.
+
+Consume `CanvasAnimation` as intent to hand to a downstream motion renderer,
+not as a capability of this package.
+
+### Deprecated surface (scheduled removals)
+
+The tombstone list. Everything here still parses, still validates, still
+round-trips and stays wired until the named version — deprecation in this
+package is a documentation state, never a silent behaviour change.
+
+| Surface | Deprecated in | Removal | Migration |
+|---------|---------------|---------|-----------|
+| `CanvasImageNode.maskAssetId` and `CreateImageOptions.maskAssetId` | `0.1.2` | **`@anvilkit/canvas-core@1.0.0`** | A clipping frame: `CanvasFrameNode` with `clip: true` and a `shape`, holding the image as its child |
+
+**`maskAssetId`** was an alpha-mask hook that nothing ever rendered — the Konva
+stage never read it and `serializePageToSvg` has always refused it with
+`IMAGE_MASK_UNSUPPORTED`. ADR 0008 (`docs/adr/0008-canvas-masking.md`)
+decision 3 resolves it by **deprecating rather than implementing**: masking
+lives on the **container**, where `CanvasFrameNode.shape` gives you rect,
+ellipse, polygon, star and path clips that the editor and SVG export honour
+identically (both read the one `resolveFrameClipShape`).
+
+Until `1.0.0` the field is untouched in every respect that matters for data
+safety: it validates (`min(1)`), round-trips through parse/serialize, keeps its
+asset alive through the reference-preservation invariant
+(`validateCanvasIRInvariants`), and survives a cross-document paste with its
+reference re-keyed. `IMAGE_MASK_UNSUPPORTED` itself is **not** on this list —
+`SvgWarningCode` only ever grows, so the code is permanent; only its message
+changed, to name the frame replacement instead of implying support is coming.
 
 ## Entry points
 
