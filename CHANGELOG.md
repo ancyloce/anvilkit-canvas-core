@@ -1,5 +1,37 @@
 # @anvilkit/canvas-core
 
+<!--
+RELEASE CONVENTION — settled by PLAN-0035 `cp6-005`, 2026-08-11.
+
+This package is versioned by CHANGESETS, like every other published
+`@anvilkit/*` package (`@anvilkit/core`, `@anvilkit/ui` and the plugins all
+carry `changeset version` output). Every user-visible change ships a file in
+the SUPERPROJECT's `.changeset/`; that file is what bumps the version and what
+becomes the released entry. ADR 0008 mandates the same, twice (decision 2 and
+decision 3 item 10).
+
+The prose under `## Unreleased` is the LONG-FORM NARRATIVE for those same
+changes. It is not release metadata and it is not a substitute for a changeset.
+Two operational rules follow, because the two mechanisms collide if nobody
+does anything:
+
+  1. `changeset version` inserts its generated `## <version>` block
+     IMMEDIATELY UNDER THE `#` TITLE — i.e. ABOVE this section. The releaser
+     must then retitle `## Unreleased` to the version just cut and open a
+     fresh empty `## Unreleased`, or the narrative for shipped work goes on
+     claiming to be unreleased. `packages/runtime/core/CHANGELOG.md` shows
+     what a skipped retitle looks like: an `## Unreleased` heading stranded
+     below three released versions. The block lands above THIS COMMENT too —
+     `@changesets/apply-release-plan`'s `prependFile` splices at the file's
+     first newline — so move the comment back under the `#` title in the
+     same pass, or the next editor never sees the rule.
+  2. `.changeset/` lives in the SUPERPROJECT while this package is a
+     SUBMODULE. `changeset version` therefore edits this file and
+     `package.json` inside the submodule working tree, which the superproject
+     records only as a gitlink — the submodule must be committed and pushed
+     on its own before the superproject's release commit.
+-->
+
 ## Unreleased
 
 ### `CanvasImageNode.maskAssetId` deprecated — removal scheduled for `1.0.0` (PLAN-0035 cp4-007)
@@ -53,6 +85,66 @@ Neither is true — the vector mask landed on the frame.
   and no Konva `cache()` + `destination-in` composite was introduced — which is
   also why this change carries no drag-performance risk.
 
+### Frame clip shapes — `CanvasFrameNode.shape` and one resolver (PLAN-0035 cp4-001)
+
+Non-rectangular masking, expressed on the **container** rather than on the
+image, per ADR 0008 (`docs/adr/0008-canvas-masking.md`) decision 2. Before this
+change both clip paths were closed over rect and rounded-rect, so no ellipse,
+polygon, star or path mask could be expressed at all — the capability gap that
+`CanvasImageNode.maskAssetId` had been standing in for without ever rendering.
+
+- **New optional field: `CanvasFrameNode.shape?: CanvasFrameShape`**, declared
+  beside `clip`. `CanvasFrameShape` is a **closed** union —
+  `{ kind: "rect" }`, `{ kind: "ellipse" }`,
+  `{ kind: "polygon", sides }`, `{ kind: "star", points, innerRadiusRatio }`,
+  `{ kind: "path", d }`. Absent by default, and validated by the new
+  `CanvasFrameShapeSchema`, which `CanvasFrameNodeShape` now carries.
+- **`clip` remains the only on/off switch.** A `shape` on a frame with
+  `clip !== true` is **inert** — it is not a second, silent clip trigger, and
+  it does not reach the frame's background rounding either. Adding a shape to
+  an existing document therefore changes nothing until `clip` is turned on.
+- **New resolver: `resolveFrameClipShape(frame)` → `ResolvedFrameClipShape`.**
+  This is the single place the rules live, and both render paths read it (SVG
+  in `cp4-002`, the editor's Konva `clipFunc` in `@anvilkit/canvas-editor`'s
+  `cp4-003`), so the two cannot disagree about geometry, about rounding
+  normalization, or about whether a frame clips at all. An absent `shape`
+  resolves to the rectangle with the frame's own rounding and
+  `source: "default"`; a declared shape wins outright with
+  `source: "declared"` — **including `{ kind: "rect" }`, which means
+  "deliberately no shape mask" and stays distinguishable from absent**.
+  `radius` / `cornerRadii` reach the result for `kind: "rect"` only.
+- **Unhonourable geometry degrades, it never throws.** A `kind` this build does
+  not implement, numbers describing no outline, or empty path data all fall
+  back to the frame's rectangle and are reported on
+  `ResolvedFrameClipShape` as a `FrameClipDegradation`.
+- **New invariant `"unsupported-frame-clip-shape"`** joins
+  `validateCanvasIRInvariants`, matching the reporting posture of
+  `dangling-asset-reference` — it names the problem, it does not reject the
+  document.
+- **Backward and forward compatible.** No `requiredCapabilities` string was
+  added: an older reader keeps the field (the IR schemas are `looseObject`) and
+  simply clips to the rectangle, so there is no data loss and nothing to guard
+  against destructive editing.
+- **Path data is not character-validated here.** `ir/` cannot reach the
+  serializer's `PATH_D_RE` allowlist, so the resolver rejects only an empty
+  `d`; the allowlist runs on the way out, in `cp4-002`.
+- **New public surface (13 declarations, 0 removed):** `CanvasFrameShape`,
+  `CanvasFrameShapeSchema`, `CanvasFrameNode.shape`, `resolveFrameClipShape`,
+  `ResolvedFrameClipShape` (and its members), `FrameClipDegradation`,
+  `FrameClipShapeSource`.
+- **⚠️ Known divergence, open and unowned (`D-1`).** A `{ kind: "path" }` whose
+  `d` passes the character allowlist but draws nothing — `d: "Z"` is the worked
+  example — is handled differently by the two paths: **SVG emits
+  `<path d="Z" />` inside the `<clipPath>`, which is an empty clip region and
+  therefore erases the frame's entire content, and it emits no warning**, while
+  the editor's Konva path degrades to the frame box. Both are non-crashing;
+  only one is a usable render. The recommended fix is for the SVG emitter to
+  adopt a drawability oracle alongside the sanitizer and degrade with the
+  existing `FRAME_CLIP_SHAPE_DEGRADED` warning; that is an ADR-level call and
+  has not been made. It is pinned by an `it.fails` tripwire in
+  `@anvilkit/canvas-editor`'s `frame-clip-parity` suite, so it will report
+  loudly the day it is fixed.
+
 ### SVG export honours frame clip shapes (PLAN-0035 cp4-002)
 
 `cp4-001` added `CanvasFrameNode.shape` and `resolveFrameClipShape`; nothing
@@ -91,6 +183,40 @@ untouched.
   `<mask>` element is emitted and the warning survives this program.
 - The PDF path needs no change: it embeds a raster the caller produced, so frame
   clipping is already baked into those pixels by the editor's rasterizer.
+
+### SVG export can reach browser-local images (PLAN-0035 cp1-006)
+
+`@anvilkit/canvas-editor`'s zero-config asset fallback stores uploaded bytes in
+the browser and references them from `ir.assets` by `blob:` URI. Those
+documents used to export as SVG with **no `<image>` element at all**.
+
+- **Root cause, now fixed:** `resolveImageHref` ran the URI scheme allowlist
+  *before* the embed branch, so a browser-minted handle was rejected as
+  `UNSAFE_URI` and the image was dropped — in **every** `images` mode, and the
+  caller-supplied `fetchAsset` seam was never consulted. Supplying a fetcher
+  could not have helped.
+- **What happens now:** when `fetchAsset` is supplied, `images` is not
+  `"reference"`, and the URI is a browser-local object URI, the bytes are
+  fetched and embedded through the existing `embedRemote` path — the same
+  base64 encoding and the same MIME sanitization every other embedded image
+  gets. **The `blob:` URI itself never reaches the output**; what is emitted is
+  a `data:` URI. Referencing `blob:` from an exported SVG remains impossible.
+- **The allowlist is not weakened.** Exactly two schemes qualify — `blob:` and
+  `filesystem:`, the complete set of opaque, same-origin, non-executable,
+  browser-minted handles. `javascript:`, `file:`, `ftp:` and everything else
+  still drop unconditionally, fetcher or not.
+- **It is purely a recovery path.** It fires only where the previous behaviour
+  was "drop the image entirely", so no export that worked before changes: with
+  `images: "auto"` and a fetcher, a remote URI is still referenced and the
+  fetcher is not called.
+- **Better diagnosis.** A local URI the fetcher cannot resolve now warns
+  `MISSING_ASSET` ("the image is omitted") instead of `UNSAFE_URI` ("blocked
+  scheme"), which was a misdiagnosis, and it is not warned twice.
+  `resolveImageHref` is the single choke point for `image`, `svg` and `video`
+  poster emission, so one change covers all three. **No `SvgWarningCode` was
+  added or removed.**
+- **New public export: `isLocalObjectUri(uri)`** — the one predicate a consumer
+  needs to tell a browser-local handle from an address it can resolve.
 
 ### Documentation — motion and media labelled contract-only (PLAN-0035 cp0-001)
 
