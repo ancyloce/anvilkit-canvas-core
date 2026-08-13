@@ -43,6 +43,15 @@ const LAYERS = [
 	// reasoning that created `limits.ts` and `hash.ts`. `serialize/svg.ts`
 	// re-exports its names, so this consolidation breaks no importer.
 	{ domain: "uri", rank: 0, match: (p) => p === "uri.ts" },
+	// Path-`d` sanitizer, drawability predicate, and scaler. Extracted from
+	// `serialize/svg.ts` (rank 5) because `ir/frame-clip.ts` (rank 1) must decide
+	// whether a `path` clip can be honoured — leaving that question at rank 5 is
+	// what produced defect D-1 (SVG accepted a `d` Konva rejected, blanking a
+	// frame on export) — and `commands/` (rank 3) must rescale a path clip when
+	// its frame resizes. Neither can import upward, and it imports nothing, so
+	// rank 0 is the correct floor. Same reasoning as `hash.ts` and `uri.ts`;
+	// `serialize/svg.ts` re-exports `isValidPathD`, so no importer changed.
+	{ domain: "path-data", rank: 0, match: (p) => p === "path-data.ts" },
 	{ domain: "ir", rank: 1, match: (p) => p.startsWith("ir/") },
 	{ domain: "ai-contracts", rank: 2, match: (p) => p === "ai-contracts.ts" },
 	// The headless text-measurement port. A host-implemented contract over IR

@@ -43,7 +43,7 @@ a conscious decision rather than an accident.
 
 | Rank | Domains | May import |
 | --- | --- | --- |
-| 0 | `clock.ts`, `limits.ts`, `hash.ts`, **`uri.ts`** | nothing |
+| 0 | `clock.ts`, `limits.ts`, `hash.ts`, **`uri.ts`**, **`path-data.ts`** | nothing |
 | 1 | `ir/` | rank 0 (+ `zod`) |
 | 2 | `ai-contracts.ts`, `text-contracts.ts`, `geometry/`, `clipboard/`, `export/`, `comment-contracts.ts`, `components/`, **`policy-contracts.ts`** | ranks 0–1 |
 | 3 | `commands/` | ranks 0–2 |
@@ -68,6 +68,16 @@ strictly-downward edges plus intra-domain ones.
   rank 4 cannot import rank 5, so the primitive moves to the floor rather than
   being duplicated. `serialize/svg.ts` re-exports `normalizeUri` /
   `isSafeDataImageUrl` / `NormalizeUriOptions`, so no importer changed.
+- **`path-data.ts` at rank 0** — the path-`d` sanitizer (`isValidPathD`), the
+  drawability predicate (`hasDrawablePathGeometry`), and the scaler
+  (`scalePathData`). Extracted from `serialize/svg.ts` (rank 5) for two
+  consumers that cannot import upward: `ir/frame-clip.ts` (rank 1), whose
+  resolver must decide whether a `path` clip can be honoured, and `commands/`
+  (rank 3), which rescales a path clip when its frame resizes. Leaving
+  drawability at rank 5 is what produced defect **D-1** — the SVG emitter
+  accepted a `d` the Konva renderer rejected, so an export blanked a frame the
+  editor drew normally. `serialize/svg.ts` re-exports `isValidPathD`, so no
+  importer changed.
 - **`text-contracts.ts` at rank 2** — a host-implemented port over IR types,
   exactly like `ai-contracts.ts`; it reads `ir/` and nothing above.
 - **`export/` at rank 2** — the headless export *job contract*. It defines
