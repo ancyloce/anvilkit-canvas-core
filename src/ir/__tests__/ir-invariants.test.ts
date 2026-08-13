@@ -356,3 +356,84 @@ describe("missing-required-capability (capability completeness, AC-013)", () => 
 		expect(validateCanvasIRInvariants(migrated)).toEqual([]);
 	});
 });
+
+/**
+ * Severity — the distinction that keeps a rendering diagnostic from rejecting a
+ * document at the trust boundary.
+ *
+ * `unsupported-frame-clip-shape` is the code that forced this: the frame-clip
+ * resolver is documented as "pure, total, and never throwing — a frame it
+ * cannot honour degrades rather than failing", and the IR's `looseObject`
+ * posture exists so a newer peer's shape kind survives a round trip. Throwing
+ * on that issue rejected exactly the forward-compatible documents both of those
+ * were built to admit, and rejected them with the same violence as a duplicate
+ * node id.
+ */
+describe("invariant severity", () => {
+	function withUnhonourableClipShape(): CanvasIR {
+		const page = createPage({ id: "p1" });
+		let ir = createCanvasIR({ id: "doc", title: "t", pages: [page] });
+		ir = insertNode(ir, {
+			parentId: page.root.id,
+			node: {
+				...createFrame({ id: "f1", bounds: { width: 10, height: 10 } }),
+				clip: true,
+				// A kind from a build that shipped after this one.
+				shape: { kind: "squircle" } as never,
+			},
+		});
+		return ir;
+	}
+
+	it("stamps every issue with a severity", () => {
+		const issues = validateCanvasIRInvariants(withUnhonourableClipShape());
+		expect(issues).toHaveLength(1);
+		expect(issues[0]).toMatchObject({
+			code: "unsupported-frame-clip-shape",
+			severity: "warning",
+		});
+	});
+
+	it("does NOT throw at the trust boundary for a warning-only document", () => {
+		expect(() =>
+			assertCanvasIRInvariants(withUnhonourableClipShape()),
+		).not.toThrow();
+	});
+
+	it("still throws for structural corruption, and reports only the errors", () => {
+		// A duplicate node id AND an unhonourable clip shape in one document.
+		const page = createPage({ id: "p1" });
+		let ir = createCanvasIR({ id: "doc", title: "t", pages: [page] });
+		ir = insertNode(ir, {
+			parentId: page.root.id,
+			node: {
+				...createFrame({ id: "dupe", bounds: { width: 10, height: 10 } }),
+				clip: true,
+				shape: { kind: "squircle" } as never,
+			},
+		});
+		ir = insertNode(ir, {
+			parentId: page.root.id,
+			node: createRect({ id: "dupe", bounds: { width: 10, height: 10 } }),
+		});
+
+		const issues = validateCanvasIRInvariants(ir);
+		expect(issues.map((i) => i.code).sort()).toEqual([
+			"duplicate-node-id",
+			"unsupported-frame-clip-shape",
+		]);
+
+		let thrown: unknown;
+		try {
+			assertCanvasIRInvariants(ir);
+		} catch (err) {
+			thrown = err;
+		}
+		expect(thrown).toBeInstanceOf(CanvasIRInvariantError);
+		// The warning rode along in `validate`, but it is not why the document was
+		// rejected, so it is not in the error.
+		expect((thrown as CanvasIRInvariantError).issues.map((i) => i.code)).toEqual(
+			["duplicate-node-id"],
+		);
+	});
+});

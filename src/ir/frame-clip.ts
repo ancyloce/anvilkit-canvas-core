@@ -1,17 +1,21 @@
+import { hasDrawablePathGeometry, isValidPathD } from "../path-data.js";
 import type { CanvasCornerRadii, CanvasFrameShape } from "./types.js";
 
 /**
- * Why a declared {@link CanvasFrameShape} could not be honoured. Both cases are
- * reachable at runtime even though {@link CanvasFrameShapeSchema} rejects them:
- * nodes are routinely constructed in TypeScript without going through the
- * schema, and the IR's `looseObject` posture means a newer peer's shape kind
- * survives a round-trip through a build that has never heard of it.
+ * Why a declared {@link CanvasFrameShape} could not be honoured. Every case is
+ * reachable at runtime even though {@link CanvasFrameShapeSchema} rejects some
+ * of them: nodes are routinely constructed in TypeScript without going through
+ * the schema, the schema itself only requires a non-empty `d`, and the IR's
+ * `looseObject` posture means a newer peer's shape kind survives a round-trip
+ * through a build that has never heard of it.
  */
 export type FrameClipDegradation =
 	/** A `kind` this build does not implement (a newer peer, or a hand-built node). */
 	| "unknown-shape-kind"
 	/** A known `kind` whose numbers/path data cannot describe a real outline. */
-	| "invalid-shape-geometry";
+	| "invalid-shape-geometry"
+	/** `path` data carrying characters the SVG attribute allowlist rejects. */
+	| "unsafe-path-data";
 
 /**
  * Where the resolved geometry came from.
@@ -91,11 +95,25 @@ function frameShapeDegradation(
 				? undefined
 				: "invalid-shape-geometry";
 		case "path":
-			// Only emptiness is decided here. The path DATA is sanitized by the
-			// serializer's existing `PATH_D_RE` guard on the way out (ADR 0008
-			// decision 2) — a second path validator in `ir/` is exactly the
-			// duplication this resolver exists to prevent.
-			return typeof shape.d === "string" && shape.d.trim().length > 0
+			// EVERY reason a `path` cannot be honoured is decided here, by the ONE
+			// resolver, because each consumer that decided one of them for itself
+			// disagreed with the others. `cp4-001` originally left path data to
+			// "the serializer's existing `PATH_D_RE` guard on the way out" on the
+			// grounds that rank 1 could not import rank 5's regex; that split is
+			// what produced defect D-1 — SVG vetted the CHARACTERS and Konva vetted
+			// the GEOMETRY, so `d: "Z"` passed one and failed the other, and the
+			// export emitted an empty `<clipPath>` that erased the frame's whole
+			// content while the editor drew it normally. Both predicates now live
+			// at rank 0 (`path-data.ts`), so this is one decision both renderers
+			// read rather than two they each make.
+			//
+			// The three outcomes stay distinct because they are genuinely different
+			// authoring mistakes, and the SVG warning quotes them.
+			if (typeof shape.d !== "string" || shape.d.trim().length === 0) {
+				return "invalid-shape-geometry";
+			}
+			if (!isValidPathD(shape.d)) return "unsafe-path-data";
+			return hasDrawablePathGeometry(shape.d)
 				? undefined
 				: "invalid-shape-geometry";
 		default:

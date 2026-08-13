@@ -465,3 +465,106 @@ describe("ADR 0008: radius = half the side already clips a square frame to a cir
 		);
 	});
 });
+
+/**
+ * The `path` kind, whose "can this be honoured" question the resolver did NOT
+ * own until defect D-1 forced the issue.
+ *
+ * D-1: the SVG emitter vetted path CHARACTERS (`PATH_D_RE`) and the Konva
+ * renderer vetted path GEOMETRY (Konva's parser), so `d: "Z"` passed one and
+ * failed the other — the export emitted an empty `<clipPath>` that erased the
+ * frame's whole content while the stage drew it normally. `cp4-001` had left
+ * both checks outside `ir/` because rank 1 could not import rank 5's regex;
+ * both now live at rank 0 (`path-data.ts`) and BOTH are applied here, so no
+ * renderer decides for itself any more.
+ */
+describe("resolveFrameClipShape — path clip vetting (D-1)", () => {
+	const shaped = (d: string): CanvasFrameNode =>
+		frame({ clip: true, shape: { kind: "path", d } });
+
+	it("honours a path that describes real geometry", () => {
+		const resolved = resolveFrameClipShape(shaped("M 100 0 L 200 100 Z"));
+		expect(resolved.source).toBe("declared");
+		expect(resolved.degradation).toBeUndefined();
+		expect(resolved.shape).toEqual({
+			kind: "path",
+			d: "M 100 0 L 200 100 Z",
+		});
+	});
+
+	it('degrades an UNDRAWABLE path ("Z") to the rectangle instead of an empty region', () => {
+		const resolved = resolveFrameClipShape(shaped("Z"));
+		expect(resolved).toMatchObject({
+			clipped: true,
+			shape: { kind: "rect" },
+			source: "degraded",
+			degradation: "invalid-shape-geometry",
+		});
+	});
+
+	it("degrades every other shape of undrawable data the schema still admits", () => {
+		// `CanvasFrameShapeSchema` requires only a non-empty `d`, so each of these
+		// is a legal document reachable from an import, a template, AI output or a
+		// peer.
+		for (const d of ["M", "garbage", "M0 0 L10", "   "]) {
+			expect(resolveFrameClipShape(shaped(d)).source, d).toBe("degraded");
+		}
+	});
+
+	it("degrades HOSTILE data with its own reason, distinct from undrawable", () => {
+		// Kept distinct because they are different authoring mistakes and the SVG
+		// warning quotes the reason — "outside the allowed character set" must not
+		// become "does not describe a real outline".
+		const resolved = resolveFrameClipShape(shaped('M0 0" onload="alert(1)'));
+		expect(resolved).toMatchObject({
+			shape: { kind: "rect" },
+			source: "degraded",
+			degradation: "unsafe-path-data",
+		});
+	});
+
+	it("carries the frame's OWN rounding into the degraded rectangle", () => {
+		// This is what makes the two render paths agree on a degraded frame: SVG's
+		// fallback is `frameBoxElement(node)` (the frame's own rounding) and
+		// Konva's is the resolved rect, so the resolver has to supply it.
+		const resolved = resolveFrameClipShape(
+			frame({ clip: true, radius: 16, shape: { kind: "path", d: "Z" } }),
+		);
+		expect(resolved.radius).toBe(16);
+	});
+
+	it("still never throws — degradation is a rendering decision, not a failure", () => {
+		expect(() =>
+			resolveFrameClipShape(shaped(undefined as unknown as string)),
+		).not.toThrow();
+		expect(resolveFrameClipShape(shaped(undefined as unknown as string)).source).toBe(
+			"degraded",
+		);
+	});
+});
+
+describe("SVG ↔ resolver agreement on a degraded path clip", () => {
+	it("emits the frame box and warns, rather than an empty clip region", async () => {
+		const { svg, warnings } = await serializePageToSvg(
+			makeIR([
+				frame({
+					id: "undrawable",
+					clip: true,
+					shape: { kind: "path", d: "Z" },
+					bounds: { width: 60, height: 40 },
+				}),
+			]),
+			0,
+		);
+		expect(svg).toContain(
+			'<clipPath id="frame-clip-undrawable"><rect width="60" height="40" /></clipPath>',
+		);
+		// The bug was that this was silent: `isValidPathD("Z")` is true, so nothing
+		// on the SVG path knew the region it had just written was empty.
+		const degraded = warnings.filter(
+			(w) => w.code === "FRAME_CLIP_SHAPE_DEGRADED",
+		);
+		expect(degraded).toHaveLength(1);
+		expect(degraded[0]?.message).toContain("does not describe a real outline");
+	});
+});

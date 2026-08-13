@@ -48,8 +48,48 @@ export const CANVAS_LAYOUT_AUTO_CAPABILITY = "layout.auto.v1";
 export const CANVAS_COMPONENTS_LOCAL_CAPABILITY = "components.local.v1";
 export const CANVAS_COMPONENTS_OVERRIDES_CAPABILITY = "components.overrides.v1";
 
+/**
+ * How much an issue means.
+ *
+ * `"error"` is structural corruption — a document a reader cannot process
+ * correctly. Duplicate ids make every walker silently resolve to the wrong node;
+ * a non-group page root breaks the tree's shape; a dangling asset reference
+ * points at bytes that are not there. Rejecting those at a trust boundary is the
+ * point of {@link assertCanvasIRInvariants}.
+ *
+ * `"warning"` is a document that IS processable, reported because a human should
+ * know. `unsupported-frame-clip-shape` is the whole reason this distinction
+ * exists: `resolveFrameClipShape` is documented as "pure, total, and never
+ * throwing — a frame it cannot honour degrades rather than failing", and the
+ * IR's `looseObject` posture exists so "a newer peer's shape kind survives a
+ * round-trip through a build that has never heard of it". Throwing on one would
+ * reject exactly the forward-compatible documents both of those were built to
+ * let through, and would do it with the same violence as real corruption.
+ */
+export type CanvasInvariantSeverity = "error" | "warning";
+
+/**
+ * The severity of each code. Exhaustive by type, so a new code cannot be added
+ * without deciding whether it rejects a document or merely annotates one.
+ */
+const SEVERITY_BY_CODE: Readonly<
+	Record<CanvasInvariantIssueCode, CanvasInvariantSeverity>
+> = {
+	"duplicate-page-id": "error",
+	"duplicate-node-id": "error",
+	"invalid-page-root": "error",
+	"asset-key-id-mismatch": "error",
+	"dangling-asset-reference": "error",
+	"excessive-tree-depth": "error",
+	"missing-required-capability": "error",
+	// Rendering degrades; nothing about the document is unreadable.
+	"unsupported-frame-clip-shape": "warning",
+};
+
 export interface CanvasInvariantIssue {
 	readonly code: CanvasInvariantIssueCode;
+	/** Whether this issue makes the document unprocessable, or merely annotates it. */
+	readonly severity: CanvasInvariantSeverity;
 	readonly message: string;
 	/** The page the issue was found on, when the issue is page-scoped. */
 	readonly pageId?: string;
@@ -150,7 +190,10 @@ export function pageCarriesLayoutIntent(page: CanvasPage): boolean {
 export function validateCanvasIRInvariants(
 	ir: CanvasIR,
 ): CanvasInvariantIssue[] {
-	const issues: CanvasInvariantIssue[] = [];
+	// Collected without a severity and stamped once on the way out — the severity
+	// of a code is a property of the CODE, not of the site that raised it, so
+	// deciding it at each `push` is how two sites would come to disagree.
+	const issues: Omit<CanvasInvariantIssue, "severity">[] = [];
 
 	const pageIdCounts = new Map<string, number>();
 	for (const page of ir.pages) {
@@ -298,7 +341,17 @@ export function validateCanvasIRInvariants(
 		});
 	}
 
-	return issues;
+	return issues.map((issue) => ({
+		...issue,
+		severity: SEVERITY_BY_CODE[issue.code],
+	}));
+}
+
+/** The issues that make a document unprocessable — see {@link CanvasInvariantSeverity}. */
+export function canvasInvariantErrors(
+	issues: readonly CanvasInvariantIssue[],
+): CanvasInvariantIssue[] {
+	return issues.filter((issue) => issue.severity === "error");
 }
 
 /** Thrown by {@link assertCanvasIRInvariants}; carries every issue found, not just the first. */
@@ -316,10 +369,21 @@ export class CanvasIRInvariantError extends Error {
 	}
 }
 
-/** Throwing wrapper around {@link validateCanvasIRInvariants} for a hard trust-boundary check. */
+/**
+ * Throwing wrapper around {@link validateCanvasIRInvariants} for a hard
+ * trust-boundary check.
+ *
+ * Throws on `"error"` issues ONLY. A `"warning"` is a document this build can
+ * process — it renders, it round-trips, it is merely degraded somewhere — and
+ * rejecting one here would turn the forward-compatibility the `looseObject`
+ * schemas and the never-throwing clip resolver were built for into a hard
+ * failure at the one place documents arrive from other peers. Callers that want
+ * every issue, warnings included, call {@link validateCanvasIRInvariants}
+ * directly; the thrown error carries the errors that caused the rejection.
+ */
 export function assertCanvasIRInvariants(ir: CanvasIR): void {
-	const issues = validateCanvasIRInvariants(ir);
-	if (issues.length > 0) {
-		throw new CanvasIRInvariantError(issues);
+	const errors = canvasInvariantErrors(validateCanvasIRInvariants(ir));
+	if (errors.length > 0) {
+		throw new CanvasIRInvariantError(errors);
 	}
 }
