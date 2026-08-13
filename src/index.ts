@@ -33,11 +33,22 @@ export * from "./limits.js";
 export * from "./serialize/index.js";
 export * from "./templates/index.js";
 export * from "./text-contracts.js";
-// ONE name only, deliberately. `normalizeUri`/`isSafeDataImageUrl` stay behind
-// `serialize/svg.ts`'s re-export (their consumer is the emitter) and
+// Two names, deliberately — `isSafeDataImageUrl` stays behind
+// `serialize/svg.ts`'s re-export (its consumer is the emitter) and
 // `sanitizeProviderUrl` behind the `component-libraries` subpath (its consumer
-// is the Libraries UI). `isLocalObjectUri` is the one predicate a consumer
-// OUTSIDE this package needs at the root: `@anvilkit/canvas-editor`'s exporters
-// ask "is this asset's URI resolvable anywhere but here?" and must answer it
-// with the same function the SVG serializer answers it with (cp1-006).
-export { isLocalObjectUri } from "./uri.js";
+// is the Libraries UI). These two are the predicates a consumer OUTSIDE this
+// package needs at the root, and both are here for the same reason: the answer
+// must be THIS package's answer, not a second allowlist that drifts from it.
+//
+// - `isLocalObjectUri` — `@anvilkit/canvas-editor`'s exporters ask "is this
+//   asset's URI resolvable anywhere but here?" and must answer it with the same
+//   function the SVG serializer answers it with (cp1-006).
+// - `normalizeUri` — the editor's Elements panel puts a host-supplied
+//   `preview.src` in an `<img src>`. `elementProvider` is an open extension
+//   point, so that URI is untrusted catalog metadata, exactly like the
+//   Provider-supplied thumbnails `sanitizeProviderUrl` already guards.
+export {
+	isLocalObjectUri,
+	type NormalizeUriOptions,
+	normalizeUri,
+} from "./uri.js";

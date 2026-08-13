@@ -1,5 +1,4 @@
 import { resolveNow } from "../clock.js";
-import { componentSourceLabel, localComponentIdOf } from "../ir/component-source.js";
 import {
 	buildComponentGraph,
 	buildComponentReferenceIndex,
@@ -16,6 +15,10 @@ import {
 	transformedBoundsExtent,
 } from "../geometry/affine.js";
 import { createComponentInstance, createFrame } from "../ir/builders.js";
+import {
+	componentSourceLabel,
+	localComponentIdOf,
+} from "../ir/component-source.js";
 import {
 	CanvasIRMutationError,
 	insertNode,
@@ -36,6 +39,7 @@ import type {
 	CanvasComponentProperty,
 	CanvasContainerNode,
 	CanvasFrameNode,
+	CanvasFrameShape,
 	CanvasGroupNode,
 	CanvasImageNode,
 	CanvasIR,
@@ -45,10 +49,6 @@ import type {
 	CanvasPage,
 	CanvasTransform,
 } from "../ir/types.js";
-import type {
-	CanvasPolicyDecision,
-	CanvasPolicyQuery,
-} from "../policy-contracts.js";
 import type { CanvasDocumentLocation } from "../ir/walkers.js";
 import {
 	CanvasIRDepthError,
@@ -65,6 +65,11 @@ import {
 	MAX_COMPONENT_PROPERTIES_PER_COMPONENT,
 	MAX_COMPOSITE_COMMAND_DESCENDANTS,
 } from "../limits.js";
+import { scalePathData } from "../path-data.js";
+import type {
+	CanvasPolicyDecision,
+	CanvasPolicyQuery,
+} from "../policy-contracts.js";
 import { computeStylePatch } from "./apply-style.js";
 import type {
 	CanvasAnyNodeUpdateCommand,
@@ -516,6 +521,41 @@ function applyNodeMove(
 	return { ir: next, inverse };
 }
 
+/**
+ * The rescaled `shape` a frame needs so its `path` clip stays glued to its box,
+ * or `undefined` when nothing needs rewriting.
+ *
+ * WHY THE COMMAND LAYER OWNS THIS. Four of the five `CanvasFrameShape` kinds are
+ * derived from `bounds` at render time, so they track a resize for free. `path`
+ * cannot be: its `d` is authored in the frame's LOCAL units (both render paths
+ * draw it inside the frame's group), so the mask silently desyncs the moment the
+ * box changes — a frame resized 200→400 keeps a 200-unit mask and clips away
+ * three quarters of its own content. The only way to keep the two in step is to
+ * rewrite `d` with the box, and this is the ONE place every resize passes
+ * through: the editor's transformer, its keyboard nudges, the inspector's size
+ * fields, a collab peer, and a host script all arrive here. Doing it at any of
+ * those call sites instead would leave the others desynced.
+ *
+ * Degenerate boxes are left alone: a zero or non-finite dimension has no scale
+ * factor, and `scalePathData` refuses those anyway.
+ */
+function framePathShapeForResize(
+	node: CanvasNode,
+	next: CanvasBounds,
+): CanvasFrameShape | undefined {
+	if (node.type !== "frame") return undefined;
+	const shape = node.shape;
+	if (shape?.kind !== "path") return undefined;
+	const { width, height } = node.bounds;
+	if (!(width > 0) || !(height > 0)) return undefined;
+	if (!(next.width > 0) || !(next.height > 0)) return undefined;
+	if (next.width === width && next.height === height) return undefined;
+	const d = scalePathData(shape.d, next.width / width, next.height / height);
+	// Preserve the declared object's other keys: the IR's schemas are loose, so a
+	// newer peer's extra fields on the shape must survive a resize.
+	return d === shape.d ? undefined : { ...shape, d };
+}
+
 function applyNodeResize(
 	ir: CanvasIR,
 	cmd: CanvasNodeResizeCommand,
@@ -527,6 +567,10 @@ function applyNodeResize(
 	const currentY = node.transform.y;
 	const currentW = node.bounds.width;
 	const currentH = node.bounds.height;
+	const rescaledShape = framePathShapeForResize(node, {
+		width: cmd.to.width,
+		height: cmd.to.height,
+	});
 	let next: CanvasIR;
 	try {
 		next = updateNode<CanvasNodeKind>(ir, {
@@ -534,6 +578,7 @@ function applyNodeResize(
 			patch: {
 				transform: { ...node.transform, x: cmd.to.x, y: cmd.to.y },
 				bounds: { width: cmd.to.width, height: cmd.to.height },
+				...(rescaledShape ? { shape: rescaledShape } : {}),
 			} as Partial<Omit<CanvasNode, "id" | "type">>,
 			...locationSpread(cmd),
 			now: options.now,
@@ -541,7 +586,7 @@ function applyNodeResize(
 	} catch (err) {
 		rethrowMutationError(err);
 	}
-	const inverse: CanvasNodeResizeCommand = {
+	const resizeBack: CanvasNodeResizeCommand = {
 		type: "node.resize",
 		nodeId: cmd.nodeId,
 		from: {
@@ -557,6 +602,25 @@ function applyNodeResize(
 			height: currentH,
 		},
 		...locationSpread(cmd),
+	};
+	if (!rescaledShape) return { ir: next, inverse: resizeBack };
+	// Undoing the resize rescales `d` a second time, and `k` then `1/k` is not
+	// exactly 1 in floating point — so the inverse RESTORES the prior string
+	// rather than trusting the round trip. Ordering matters: the resize runs
+	// first (rewriting `d` approximately), then the update overwrites it with the
+	// exact bytes the document had, so undo is lossless.
+	const inverse: CanvasBatchCommand = {
+		type: "batch",
+		commands: [
+			resizeBack,
+			{
+				type: "node.update",
+				nodeId: cmd.nodeId,
+				kind: "frame",
+				patch: { shape: (node as CanvasFrameNode).shape },
+				...locationSpread(cmd),
+			} as CanvasAnyNodeUpdateCommand,
+		],
 	};
 	return { ir: next, inverse };
 }
@@ -614,8 +678,23 @@ function applyNodeUpdate(
 			`Node "${cmd.nodeId}" is of kind "${node.type}", not "${cmd.kind}"`,
 		);
 	}
-	// Capture inverse patch: for each key in cmd.patch, record the prior value.
-	const patch = cmd.patch as Record<string, unknown>;
+	// A patch that resizes a frame carries its `path` clip along, exactly as
+	// `node.resize` does — the auto-layout reflow, the inspector's size fields
+	// and `transformer-helpers`' auto-layout branch all resize through THIS
+	// command, so leaving it out here would desync the mask on three of the
+	// editor's four resize paths. A patch that sets `shape` itself is authoring
+	// the mask deliberately and is never second-guessed.
+	const patchedBounds = (cmd.patch as { bounds?: CanvasBounds }).bounds;
+	const rescaledShape =
+		patchedBounds && !("shape" in cmd.patch)
+			? framePathShapeForResize(node, patchedBounds)
+			: undefined;
+	// Capture inverse patch: for each key in the EFFECTIVE patch, record the
+	// prior value — so a rescaled `shape` is restored to its exact prior bytes
+	// rather than re-derived by scaling back.
+	const patch = (
+		rescaledShape ? { ...cmd.patch, shape: rescaledShape } : cmd.patch
+	) as Record<string, unknown>;
 	const inversePatch: Record<string, unknown> = {};
 	const nodeRecord = node as unknown as Record<string, unknown>;
 	for (const key of Object.keys(patch)) {
@@ -625,7 +704,7 @@ function applyNodeUpdate(
 	try {
 		next = updateNode<CanvasNodeKind>(ir, {
 			id: cmd.nodeId,
-			patch: cmd.patch as Partial<Omit<CanvasNode, "id" | "type">>,
+			patch: patch as Partial<Omit<CanvasNode, "id" | "type">>,
 			...locationSpread(cmd),
 			now: options.now,
 		});
@@ -2659,7 +2738,6 @@ function writeOverrideMap(
 		rethrowMutationError(err);
 	}
 }
-
 
 /**
  * Consult brand policy through the rank-2 port (plan 0021 T-039).

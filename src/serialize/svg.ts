@@ -12,6 +12,7 @@ import { fingerprint } from "../hash.js";
 import { componentSourceLabel } from "../ir/component-source.js";
 import { resolveNodeEffects } from "../ir/effects.js";
 import {
+	type FrameClipDegradation,
 	type ResolvedFrameClipShape,
 	resolveFrameClipShape,
 } from "../ir/frame-clip.js";
@@ -65,6 +66,7 @@ import { CanvasIRDepthError, MAX_TREE_DEPTH, walkPage } from "../ir/walkers.js";
 import { resolveCanvasDocument } from "../layout/resolve-document.js";
 import type { CanvasResolvedDocument } from "../layout/types.js";
 import { toResolvedNodeId } from "../layout/types.js";
+import { isValidPathD } from "../path-data.js";
 import {
 	type CanvasTextMeasurer,
 	DEFAULT_RICH_TEXT_STYLE as DEFAULT_RICH_TEXT_STYLE_DEFAULTS,
@@ -79,6 +81,12 @@ import {
 	type NormalizeUriOptions,
 	normalizeUri,
 } from "../uri.js";
+
+// `isValidPathD` moved to rank 0 (`path-data.ts`) so `ir/frame-clip.ts` could
+// share the allowlist instead of the emitter deciding path safety alone — see
+// that module's header and defect D-1. Re-exported here because this is where
+// every existing importer (and this file's own tests) look for it.
+export { isValidPathD };
 
 /**
  * SVG serializer for `@anvilkit/canvas-core`.
@@ -120,8 +128,9 @@ import {
  *    the SAME `<clipPath>` a rectangular `clip` has always emitted — `rect` the
  *    frame box, `ellipse` an `<ellipse>` at the box's inscribed radii,
  *    `polygon`/`star` a `<polygon>` from the shared vertex maths `emitPolygon`/
- *    `emitStar` already use, and `path` a `<path>` whose `d` must pass the same
- *    `PATH_D_RE` allowlist `emitPath` applies. Geometry comes from the ONE
+ *    `emitStar` already use, and `path` a `<path>` whose `d` the resolver has
+ *    already vetted against both the `PATH_D_RE` allowlist `emitPath` applies
+ *    and a drawability check. Geometry comes from the ONE
  *    resolver (`resolveFrameClipShape`) the Konva path also reads, so editor and
  *    export cannot disagree, and an honoured shape carries no fidelity warning
  *    for the same reason a rectangular clip does not. Only genuinely undrawable
@@ -131,8 +140,6 @@ import {
  *    unrelated to the image-node `maskAssetId` bullet above, which stays
  *    unimplemented (ADR 0008 decision 3 disposes of that field separately).
  */
-
-const PATH_D_RE = /^[\sMmLlHhVvCcSsQqTtAaZz0-9.,+\-eE]*$/;
 
 const BTOA_CHUNK_SIZE = 0x8000;
 
@@ -234,15 +241,6 @@ export function sanitizeId(id: string): string {
 	if (cleaned === id) return cleaned.length > 0 ? cleaned : "id";
 	const base = cleaned.length > 0 ? cleaned : "id";
 	return `${base}-${fingerprint(id)}`;
-}
-
-/**
- * Allowlist check for an SVG path `d` string — the one free-text field that
- * flows into an attribute. Rejects anything outside path commands, numbers,
- * separators, and scientific-notation exponents.
- */
-export function isValidPathD(d: string): boolean {
-	return PATH_D_RE.test(d);
 }
 
 // --- units -------------------------------------------------------------------
@@ -1485,9 +1483,23 @@ export type SvgResolveBrandToken = (
 ) => string | CanvasGradientFill | undefined;
 
 /**
- * - `auto` (default): inline `data:` URIs, reference everything else.
+ * - `auto` (default): inline `data:` URIs, reference everything else — with ONE
+ *   exception, below.
  * - `embed`: fetch + base64-embed remote URIs (requires `fetchAsset`).
- * - `reference`: always emit `href` referencing the original URI.
+ * - `reference`: always emit `href` referencing the original URI. The only mode
+ *   that never invokes `fetchAsset`.
+ *
+ * THE `auto` EXCEPTION, stated here because callers were reading "reference
+ * everything else" as "never calls me": a browser-local URI (`blob:`,
+ * `filesystem:`) has no href worth emitting — the handle resolves in exactly one
+ * session on one machine — so under `auto` and `embed` alike, a supplied
+ * `fetchAsset` IS consulted for those, and the fetched bytes are inlined as a
+ * sanitized `data:` URI (cp1-006). Without a fetcher, or under `reference`, they
+ * drop with `UNSAFE_URI` as any other blocked scheme does. This is what makes
+ * `@anvilkit/canvas-editor`'s default SVG export carry browser-local images
+ * without switching to `embed` and thereby fetching every REMOTE image too.
+ * Passing `fetchAsset` is therefore consent to be called on the default path;
+ * a caller that wants no I/O at all passes `reference` or omits the fetcher.
  */
 export type SvgImageMode = "auto" | "embed" | "reference";
 
@@ -1909,6 +1921,13 @@ function frameBoxElement(node: CanvasFrameNode, extraAttrs: string): string {
 	return frameBoxElementWith(node, node, extraAttrs);
 }
 
+/** Why a degraded clip degraded, in the words the emitted warning uses. */
+const DEGRADATION_REASONS: Readonly<Record<FrameClipDegradation, string>> = {
+	"unknown-shape-kind": "uses a kind this build does not implement",
+	"invalid-shape-geometry": "does not describe a real outline",
+	"unsafe-path-data": "carries path data outside the allowed character set",
+};
+
 /**
  * The `<clipPath>` child for a frame's clip, resolved through the ONE frame-clip
  * resolver (ADR 0008 decision 2).
@@ -1919,16 +1938,23 @@ function frameBoxElement(node: CanvasFrameNode, extraAttrs: string): string {
  * `emitEllipse`'s inscribed radii for `ellipse`, `computePolygonVertices` /
  * `computeStarVertices` for `polygon` / `star`.
  *
- * `path` runs through {@link isValidPathD} — the SAME `PATH_D_RE` allowlist
- * `emitPath` applies. `cp4-001` deliberately left path data uncharacter-checked
- * in `ir/`, because rank 1 cannot import this rank-5 guard and ADR 0008 decision
- * 2 requires reusing it rather than adding a second validator; this is where
- * that guard runs, so hostile `d` data never reaches the attribute.
+ * `path` is vetted by the RESOLVER, not here: `cp4-001` originally left both the
+ * character allowlist and the emptiness check to this file on the grounds that
+ * rank 1 could not import a rank-5 guard, and defect D-1 is what that cost —
+ * `d: "Z"` passed the allowlist, so this emitter wrote an empty `<clipPath>`
+ * that erased the frame's entire content while the Konva path, applying its own
+ * drawability oracle, degraded to the box. Both predicates now live at rank 0
+ * (`path-data.ts`) and `resolveFrameClipShape` applies both, so the two render
+ * paths reach the same verdict by construction rather than by agreement. The
+ * `isValidPathD` call that remains below is the sanitizer's last line before the
+ * string reaches an attribute — never the deciding vote.
  *
  * Anything unhonourable degrades to the frame box with a
  * `FRAME_CLIP_SHAPE_DEGRADED` warning — the frame keeps clipping, and the
  * document keeps its field (degradation is a rendering decision, never a
- * mutation).
+ * mutation). The box carries the frame's OWN rounding, which is exactly what the
+ * resolver's degraded result carries, so a degraded frame is rounded identically
+ * on both paths.
  */
 function frameClipElement(
 	node: CanvasFrameNode,
@@ -1952,9 +1978,7 @@ function frameClipElement(
 	// of what went wrong, and it is deliberately the one this message quotes.
 	if (clip.source === "degraded") {
 		return degrade(
-			clip.degradation === "unknown-shape-kind"
-				? "uses a kind this build does not implement"
-				: "does not describe a real outline",
+			DEGRADATION_REASONS[clip.degradation ?? "unknown-shape-kind"],
 		);
 	}
 
