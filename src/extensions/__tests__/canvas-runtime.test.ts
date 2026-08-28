@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { CanvasDocumentBudgetError } from "../../ir/document-budget.js";
 import {
 	createAudio,
 	createCanvasIR,
@@ -22,6 +23,7 @@ import { insertNode } from "../../ir/mutations.js";
 import type { CanvasIR, CanvasNode } from "../../ir/types.js";
 import { CanvasIRSchema, CanvasNodeSchema } from "../../ir/validators.js";
 import { isContainerNode } from "../../ir/walkers.js";
+import { MAX_DOCUMENT_PAGES } from "../../limits.js";
 import {
 	type CanvasExtension,
 	createCanvasRuntime,
@@ -471,6 +473,38 @@ describe("createCanvasRuntime — migrate", () => {
 		const migrated = rt.migrate(old);
 		expect(migrated.version).toBe("3");
 	});
+
+	it("rejects a migration that expands beyond the canonical budget", () => {
+		const ext: CanvasExtension = {
+			id: "expanding-migration",
+			migrations: [
+				{
+					from: "0",
+					to: "1",
+					up: (raw) => ({
+						...(raw as object),
+						version: "1",
+						pages: Array.from({ length: MAX_DOCUMENT_PAGES + 1 }, (_, index) =>
+							createPage({ id: `page-${index}` }),
+						),
+					}),
+				},
+			],
+		};
+		const runtime = createCanvasRuntime([ext]);
+
+		try {
+			runtime.migrate({ ...fixtureIR(), version: "0" });
+			expect.unreachable("migration output must be budget-admitted");
+		} catch (error) {
+			expect(error).toBeInstanceOf(CanvasDocumentBudgetError);
+			expect(
+				(error as CanvasDocumentBudgetError).issues.some(
+					(issue) => issue.code === "document-pages-exceeded",
+				),
+			).toBe(true);
+		}
+	});
 });
 
 describe("container predicate ↔ kind-registry parity", () => {
@@ -654,34 +688,34 @@ describe("createCanvasRuntime — built-in kind protection", () => {
 		}
 	});
 
-	it.each([
-		"polygon",
-		"star",
-	] as const)("rejects an extension that registers `%s` (now a built-in kind)", (kind) => {
-		const shadow: CanvasExtension = {
-			id: `hostile-${kind}`,
-			nodeKinds: [
-				{
-					kind,
-					schema: z.looseObject({
-						id: z.string(),
-						type: z.literal(kind),
-					}) as unknown as z.ZodType<CanvasUnknownNode>,
-				},
-			],
-		};
-		expect(() => createCanvasRuntime([shadow])).toThrowError(
-			/built-in kinds cannot be shadowed/,
-		);
-		try {
-			createCanvasRuntime([shadow]);
-			expect.unreachable("registering a built-in kind must throw");
-		} catch (error) {
-			expect((error as CanvasExtensionError).code).toBe(
-				"builtin-kind-shadowed",
+	it.each(["polygon", "star"] as const)(
+		"rejects an extension that registers `%s` (now a built-in kind)",
+		(kind) => {
+			const shadow: CanvasExtension = {
+				id: `hostile-${kind}`,
+				nodeKinds: [
+					{
+						kind,
+						schema: z.looseObject({
+							id: z.string(),
+							type: z.literal(kind),
+						}) as unknown as z.ZodType<CanvasUnknownNode>,
+					},
+				],
+			};
+			expect(() => createCanvasRuntime([shadow])).toThrowError(
+				/built-in kinds cannot be shadowed/,
 			);
-		}
-	});
+			try {
+				createCanvasRuntime([shadow]);
+				expect.unreachable("registering a built-in kind must throw");
+			} catch (error) {
+				expect((error as CanvasExtensionError).code).toBe(
+					"builtin-kind-shadowed",
+				);
+			}
+		},
+	);
 
 	it("rejects two extensions claiming the same custom kind", () => {
 		const kindDef: CanvasNodeKindDefinition = {

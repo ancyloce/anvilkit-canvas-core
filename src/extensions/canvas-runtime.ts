@@ -10,6 +10,7 @@ import {
 	type CanvasMigrationRegistry,
 	createMigrationRegistry,
 } from "../ir/migrations.js";
+import { assertCanvasDocumentBudget } from "../ir/document-budget.js";
 import type { CanvasIR, CanvasNode } from "../ir/types.js";
 import {
 	buildCanvasComponentRegistrySchema,
@@ -379,8 +380,14 @@ export function createCanvasRuntime(
 		({ nodeSchema, irSchema } = buildExtendedSchemas(extraSchemas));
 	}
 
-	const migrate = (raw: unknown): CanvasIR =>
-		irSchema.parse(migrations.migrate(raw, CANVAS_IR_VERSION));
+	const migrate = (raw: unknown): CanvasIR => {
+		assertCanvasDocumentBudget(raw);
+		const migrated = migrations.migrate(raw, CANVAS_IR_VERSION);
+		assertCanvasDocumentBudget(migrated);
+		const parsed = irSchema.parse(migrated);
+		assertCanvasDocumentBudget(parsed);
+		return parsed;
+	};
 
 	return {
 		nodeKinds,
