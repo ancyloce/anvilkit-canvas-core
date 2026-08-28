@@ -6,7 +6,11 @@ import type {
 	CanvasPageSize,
 	CanvasTransform,
 } from "../../ir/types.js";
-import { serializeDocumentToPdf, unitToPt } from "../pdf.js";
+import {
+	PdfSerializationCancelledError,
+	serializeDocumentToPdf,
+	unitToPt,
+} from "../pdf.js";
 
 /** A valid 1×1 transparent PNG (verified to embed via pdf-lib's decoder). */
 const PNG_1X1 =
@@ -258,6 +262,102 @@ describe("serializeDocumentToPdf", () => {
 		await expect(
 			serializeDocumentToPdf(ir, { rasters: [], validate: true }),
 		).rejects.toThrow();
+	});
+
+	it("requests, embeds, and releases incremental rasters one page at a time", async () => {
+		const ir = makeIr([
+			makePage("p1", { width: 72, height: 72, unit: "px", dpi: 72 }),
+			makePage("p2", { width: 72, height: 72, unit: "px", dpi: 72 }),
+		]);
+		const events: string[] = [];
+		let retained = 0;
+
+		const { pdf } = await serializeDocumentToPdf(ir, {
+			rasterProvider: async (page) => {
+				expect(retained).toBe(0);
+				retained += 1;
+				events.push(`render:${page.id}`);
+				return { pageId: page.id, image: PNG_1X1_DATA_URL };
+			},
+			onRasterReleased: (page) => {
+				retained -= 1;
+				events.push(`release:${page.id}`);
+			},
+		});
+
+		expect(events).toEqual([
+			"render:p1",
+			"release:p1",
+			"render:p2",
+			"release:p2",
+		]);
+		expect(retained).toBe(0);
+		expect((await PDFDocument.load(pdf)).getPageCount()).toBe(2);
+	});
+
+	it("honors cancellation after a long raster provider and releases that page", async () => {
+		const ir = makeIr([
+			makePage("p1", { width: 72, height: 72, unit: "px", dpi: 72 }),
+			makePage("p2", { width: 72, height: 72, unit: "px", dpi: 72 }),
+		]);
+		let cancelled = false;
+		const rendered: string[] = [];
+		const released: string[] = [];
+
+		await expect(
+			serializeDocumentToPdf(ir, {
+				isCancelled: () => cancelled,
+				rasterProvider: async (page) => {
+					rendered.push(page.id);
+					cancelled = true;
+					return { pageId: page.id, image: PNG_1X1_DATA_URL };
+				},
+				onRasterReleased: (page) => released.push(page.id),
+			}),
+		).rejects.toBeInstanceOf(PdfSerializationCancelledError);
+		expect(rendered).toEqual(["p1"]);
+		expect(released).toEqual(["p1"]);
+	});
+
+	it("retains zero page rasters after repeated cancelled exports", async () => {
+		const ir = makeIr([
+			makePage("p1", { width: 72, height: 72, unit: "px", dpi: 72 }),
+			makePage("p2", { width: 72, height: 72, unit: "px", dpi: 72 }),
+		]);
+		const runs = 50;
+		let retained = 0;
+		let peakRetained = 0;
+		let rendered = 0;
+		let released = 0;
+
+		for (let run = 0; run < runs; run += 1) {
+			let cancelled = false;
+			await expect(
+				serializeDocumentToPdf(ir, {
+					isCancelled: () => cancelled,
+					rasterProvider: async (page) => {
+						expect(retained).toBe(0);
+						retained += 1;
+						peakRetained = Math.max(peakRetained, retained);
+						rendered += 1;
+						cancelled = true;
+						return { pageId: page.id, image: PNG_1X1_DATA_URL };
+					},
+					onRasterReleased: () => {
+						retained -= 1;
+						released += 1;
+					},
+				}),
+			).rejects.toBeInstanceOf(PdfSerializationCancelledError);
+			expect(retained).toBe(0);
+		}
+
+		// Deterministic E2 memory tolerance: at most one incremental raster may
+		// be live, and zero raster resources may survive each cancelled run.
+		expect(peakRetained).toBe(1);
+		expect(rendered).toBe(runs);
+		expect(released).toBe(runs);
+		expect(retained).toBe(0);
 	});
 });
 

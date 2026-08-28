@@ -4,10 +4,8 @@ import type { CanvasIR, CanvasPage, CanvasUnit } from "../ir/types.js";
 import { CanvasIRSchema } from "../ir/validators.js";
 import { walkPage } from "../ir/walkers.js";
 import type { CanvasResolvedDocument } from "../layout/types.js";
+import { DEFAULT_PRINT_MIN_DPI } from "../print-preflight.js";
 import { DEFAULT_DPI } from "./svg.js";
-
-/** Fallback minimum DPI for the print-safety check when `print.dpi` is unset. */
-const DEFAULT_PRINT_MIN_DPI = 150;
 
 /**
  * Raster-embed PDF serializer for `@anvilkit/canvas-core`.
@@ -215,9 +213,32 @@ export interface PdfRasterPage {
 	mimeType?: PdfRasterMimeType;
 }
 
+/** Lazily render one selected PDF page. The returned raster is released after embedding. */
+export type PdfRasterProvider = (
+	page: CanvasPage,
+	index: number,
+) => PdfRasterPage | undefined | Promise<PdfRasterPage | undefined>;
+
+export class PdfSerializationCancelledError extends Error {
+	constructor(message = "PDF serialization was cancelled.") {
+		super(message);
+		this.name = "PdfSerializationCancelledError";
+	}
+}
+
 export interface PdfSerializeOptions {
 	/** Pre-rendered page rasters. A selected page with no matching entry is blank. */
-	rasters: PdfRasterPage[];
+	rasters?: PdfRasterPage[];
+	/**
+	 * Incremental alternative to `rasters`. When provided, it wins and is called
+	 * only for the page currently being embedded, so callers need not retain
+	 * every page-sized buffer before serialization starts.
+	 */
+	rasterProvider?: PdfRasterProvider;
+	/** Polled before/after page rendering, embedding, and final save. */
+	isCancelled?: () => boolean;
+	/** Test/host lifecycle hook fired once an incremental page raster is releasable. */
+	onRasterReleased?: (page: CanvasPage, index: number) => void;
 	/**
 	 * Pages to emit, by id or index, in order. Defaults to every page in IR order.
 	 * An unknown selector throws; an explicitly empty list throws (no PDF pages).
@@ -304,6 +325,10 @@ export interface PdfSerializeResult {
 	warnings: PdfSerializeWarning[];
 }
 
+function throwIfPdfCancelled(options: PdfSerializeOptions): void {
+	if (options.isCancelled?.()) throw new PdfSerializationCancelledError();
+}
+
 /**
  * Every `video`/`audio` node kind present on `page`, deduped — used to emit at
  * most one `VIDEO_UNSUPPORTED`/`AUDIO_UNSUPPORTED` warning per page regardless
@@ -373,7 +398,7 @@ export async function serializeDocumentToPdf(
 
 	// Index rasters by page id (last entry wins on duplicate ids).
 	const rastersByPage = new Map<string, PdfRasterPage>();
-	for (const raster of options.rasters) {
+	for (const raster of options.rasters ?? []) {
 		rastersByPage.set(raster.pageId, raster);
 	}
 
@@ -381,7 +406,8 @@ export async function serializeDocumentToPdf(
 	if (options.title !== undefined) doc.setTitle(options.title);
 	if (options.author !== undefined) doc.setAuthor(options.author);
 
-	for (const page of pages) {
+	for (const [pageIndex, page] of pages.entries()) {
+		throwIfPdfCancelled(options);
 		const dpi = page.size.dpi ?? fallbackDpi;
 		const widthPt = unitToPt(page.size.width, page.size.unit, dpi);
 		const heightPt = unitToPt(page.size.height, page.size.unit, dpi);
@@ -421,27 +447,33 @@ export async function serializeDocumentToPdf(
 			});
 		}
 
-		const raster = rastersByPage.get(page.id);
-		if (!raster) {
-			warnings.push({
-				code: "RASTER_MISSING",
-				message: `No raster supplied for page "${page.id}"; emitted a blank page.`,
-				pageId: page.id,
-			});
-			continue;
-		}
-
-		const decoded = decodeRaster(raster);
-		if (!decoded.ok) {
-			warnings.push({
-				code: decoded.code,
-				message: decoded.message,
-				pageId: page.id,
-			});
-			continue;
-		}
-
+		const incremental = options.rasterProvider !== undefined;
+		let rasterResolved = false;
 		try {
+			const raster = options.rasterProvider
+				? await options.rasterProvider(page, pageIndex)
+				: rastersByPage.get(page.id);
+			rasterResolved = true;
+			throwIfPdfCancelled(options);
+			if (!raster) {
+				warnings.push({
+					code: "RASTER_MISSING",
+					message: `No raster supplied for page "${page.id}"; emitted a blank page.`,
+					pageId: page.id,
+				});
+				continue;
+			}
+
+			const decoded = decodeRaster(raster);
+			if (!decoded.ok) {
+				warnings.push({
+					code: decoded.code,
+					message: decoded.message,
+					pageId: page.id,
+				});
+				continue;
+			}
+
 			const embedded =
 				decoded.mime === "image/jpeg"
 					? await doc.embedJpg(decoded.bytes)
@@ -470,15 +502,24 @@ export async function serializeDocumentToPdf(
 					});
 				}
 			}
+			throwIfPdfCancelled(options);
 		} catch (error) {
+			if (error instanceof PdfSerializationCancelledError) throw error;
+			// A lazy renderer/provider failure is an execution failure, not corrupt
+			// image bytes. Preserve the old eager path's rejection semantics.
+			if (!rasterResolved) throw error;
 			warnings.push({
 				code: "RASTER_DECODE_FAILED",
 				message: `Failed to embed raster for page "${page.id}": ${(error as Error).message}`,
 				pageId: page.id,
 			});
+		} finally {
+			if (incremental) options.onRasterReleased?.(page, pageIndex);
 		}
 	}
 
+	throwIfPdfCancelled(options);
 	const pdf = await doc.save();
+	throwIfPdfCancelled(options);
 	return { pdf, warnings };
 }
