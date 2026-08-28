@@ -17,6 +17,7 @@ import {
 	CanvasIRExternalComponentRefSchema,
 } from "./component-source.js";
 import { CanvasComponentVariantSetSchema } from "./component-variants.js";
+import { assertCanvasDocumentBudget } from "./document-budget.js";
 import { createMigrationRegistry } from "./migrations.js";
 import { isSnapshotKey, snapshotKey } from "./snapshot-key.js";
 import type {
@@ -1220,6 +1221,7 @@ const DEFAULT_MIGRATIONS = createMigrationRegistry();
  * peer-supplied IR.
  */
 export function migrateCanvasIR(raw: unknown): CanvasIR {
+	assertCanvasDocumentBudget(raw);
 	const version =
 		raw && typeof raw === "object"
 			? (raw as { version?: unknown }).version
@@ -1232,7 +1234,12 @@ export function migrateCanvasIR(raw: unknown): CanvasIR {
 			`Unsupported CanvasIR version ${JSON.stringify(version)} (current is "${CANVAS_IR_VERSION}"). No migration path is registered.`,
 		);
 	}
-	return CanvasIRSchema.parse(
-		DEFAULT_MIGRATIONS.migrate(raw, CANVAS_IR_VERSION),
-	);
+	const migrated = DEFAULT_MIGRATIONS.migrate(raw, CANVAS_IR_VERSION);
+	// Migration implementations run on untrusted objects. Admit their output
+	// before recursive schema parsing so an expansion cannot move the payload
+	// beyond the document-wide ceiling.
+	assertCanvasDocumentBudget(migrated);
+	const parsed = CanvasIRSchema.parse(migrated);
+	assertCanvasDocumentBudget(parsed);
+	return parsed;
 }

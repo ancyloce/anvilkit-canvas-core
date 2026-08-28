@@ -1,6 +1,7 @@
 /** Public face of the `ir/` domain — imported only by the root barrel. */
 export * from "./builders.js";
 export * from "./capabilities.js";
+export * from "./document-budget.js";
 // Persisted policy shapes only. The command-time half (capabilities, context,
 // validation) is `@anvilkit/canvas-core/brand-governance` — governance is
 // opt-in and must not cost the root budget.
