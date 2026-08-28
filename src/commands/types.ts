@@ -290,6 +290,17 @@ export interface CanvasAssetRemoveCommand {
 	assetId: string;
 }
 
+/**
+ * Atomically move an asset to a durable reference and rewrite every document
+ * reference to its new id. The inverse migrates it back, so one history entry
+ * restores both the asset table and all page/Component Source references.
+ */
+export interface CanvasAssetMigrateCommand {
+	type: "asset.migrate";
+	fromAssetId: string;
+	asset: CanvasAssetRef;
+}
+
 // ---------------------------------------------------------------------------
 // Local Components — registry + instance commands (plan 0023 M3-02, LC-CMD).
 // Registry commands manage their definition's `revision` themselves: a
@@ -603,6 +614,7 @@ export type CanvasCommand =
 	| CanvasPageDeleteCommand
 	| CanvasAssetPutCommand
 	| CanvasAssetRemoveCommand
+	| CanvasAssetMigrateCommand
 	| CanvasComponentCreateCommand
 	| CanvasComponentRenameCommand
 	| CanvasComponentDuplicateCommand

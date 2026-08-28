@@ -51,6 +51,12 @@ export type CanvasChange =
 	  }
 	| { kind: "asset"; assetId: string; op: "put" | "remove" }
 	| {
+			kind: "asset";
+			assetId: string;
+			op: "migrate";
+			toAssetId: string;
+	  }
+	| {
 			kind: "component";
 			componentId: string;
 			op: CanvasComponentChangeOp;
@@ -92,6 +98,13 @@ export function commandToChange(cmd: CanvasCommand): CanvasChange | null {
 			return { kind: "asset", assetId: cmd.asset.id, op: "put" };
 		case "asset.remove":
 			return { kind: "asset", assetId: cmd.assetId, op: "remove" };
+		case "asset.migrate":
+			return {
+				kind: "asset",
+				assetId: cmd.fromAssetId,
+				op: "migrate",
+				toAssetId: cmd.asset.id,
+			};
 		case "node.move":
 			return {
 				kind: "transform",

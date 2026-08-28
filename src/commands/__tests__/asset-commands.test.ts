@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { createCanvasIR, createPage } from "../../ir/builders.js";
-import type { CanvasIR } from "../../ir/types.js";
+import {
+	createAudio,
+	createCanvasIR,
+	createComponentInstance,
+	createFrame,
+	createImage,
+	createPage,
+	createSvg,
+	createVideo,
+} from "../../ir/builders.js";
+import type {
+	CanvasComponentInstanceNode,
+	CanvasFrameNode,
+	CanvasIR,
+	CanvasVideoNode,
+} from "../../ir/types.js";
 import { commandToChangeRecord } from "../change-events.js";
 import { applyCommand, CanvasCommandError } from "../runtime.js";
 
@@ -60,5 +74,124 @@ describe("asset.put / asset.remove commands", () => {
 			change: { kind: "asset", assetId: "a1", op: "put" },
 		});
 		expect(record?.pageId).toBeUndefined();
+	});
+
+	it("migrates every reference atomically, including locked nodes and Component Sources", () => {
+		const ir0 = makeIR();
+		ir0.assets.local = { id: "local", uri: "blob:local" };
+		const page = ir0.pages[0]!;
+		page.root.children = [
+			{
+				...createImage({
+					id: "image",
+					assetId: "local",
+					maskAssetId: "local",
+					bounds: { width: 10, height: 10 },
+				}),
+				locked: true,
+			},
+			createFrame({
+				id: "frame",
+				bounds: { width: 10, height: 10 },
+				placeholder: { kind: "image", assetId: "local" },
+				children: [
+					createSvg({
+						id: "svg",
+						assetId: "local",
+						bounds: { width: 10, height: 10 },
+					}),
+				],
+			}),
+			createVideo({
+				id: "video",
+				assetId: "local",
+				poster: "local",
+				bounds: { width: 10, height: 10 },
+			}),
+			createAudio({
+				id: "audio",
+				assetId: "local",
+				bounds: { width: 10, height: 10 },
+			}),
+			createComponentInstance({
+				id: "instance",
+				componentId: "component",
+				bounds: { width: 10, height: 10 },
+				overrides: {
+					image: { kind: "image", assetId: "local" },
+				},
+			}),
+		];
+		ir0.components = {
+			component: {
+				id: "component",
+				name: "Component",
+				revision: 1,
+				root: createSvg({
+					id: "component-svg",
+					assetId: "local",
+					bounds: { width: 10, height: 10 },
+				}),
+				properties: [],
+			},
+		};
+
+		const { ir: ir1, inverse } = applyCommand(
+			ir0,
+			{
+				type: "asset.migrate",
+				fromAssetId: "local",
+				asset: { id: "hosted", uri: "https://cdn.example.com/hosted.png" },
+			},
+			{ enforceLocked: true },
+		);
+		expect(ir1.assets.local).toBeUndefined();
+		expect(ir1.assets.hosted?.uri).toContain("cdn.example.com");
+		const [image, frame, video, audio, instance] = ir1.pages[0]!.root.children;
+		expect(image).toMatchObject({
+			type: "image",
+			assetId: "hosted",
+			maskAssetId: "hosted",
+			locked: true,
+		});
+		expect((frame as CanvasFrameNode).placeholder?.assetId).toBe("hosted");
+		expect((frame as CanvasFrameNode).children[0]).toMatchObject({
+			assetId: "hosted",
+		});
+		expect(video as CanvasVideoNode).toMatchObject({
+			assetId: "hosted",
+			poster: "hosted",
+		});
+		expect(audio).toMatchObject({ assetId: "hosted" });
+		expect(
+			(instance as CanvasComponentInstanceNode).overrides?.image,
+		).toMatchObject({ assetId: "hosted" });
+		expect(ir1.components?.component?.root).toMatchObject({
+			assetId: "hosted",
+		});
+		expect(ir1.components?.component?.revision).toBe(2);
+
+		const { ir: restored } = applyCommand(ir1, inverse);
+		expect(restored.assets.local?.uri).toBe("blob:local");
+		expect(restored.assets.hosted).toBeUndefined();
+		expect(restored.pages[0]!.root.children[0]).toMatchObject({
+			assetId: "local",
+			maskAssetId: "local",
+		});
+		expect(restored.components?.component?.root).toMatchObject({
+			assetId: "local",
+		});
+	});
+
+	it("refuses to overwrite another asset id during migration", () => {
+		const ir = makeIR();
+		ir.assets.local = { id: "local", uri: "blob:local" };
+		expect(() =>
+			applyCommand(ir, {
+				type: "asset.migrate",
+				fromAssetId: "local",
+				asset: { id: "existing", uri: "https://cdn.example.com/new.png" },
+			}),
+		).toThrow(/already exists/);
 	});
 });

@@ -14,6 +14,7 @@ import {
 	toAffineMatrix,
 	transformedBoundsExtent,
 } from "../geometry/affine.js";
+import { replaceDocumentAssetReferences } from "../ir/asset-references.js";
 import { createComponentInstance, createFrame } from "../ir/builders.js";
 import {
 	componentSourceLabel,
@@ -73,6 +74,7 @@ import type {
 import { computeStylePatch } from "./apply-style.js";
 import type {
 	CanvasAnyNodeUpdateCommand,
+	CanvasAssetMigrateCommand,
 	CanvasAssetPutCommand,
 	CanvasAssetRemoveCommand,
 	CanvasBatchCommand,
@@ -133,6 +135,7 @@ export type CanvasCommandErrorCode =
 	| "kind-mismatch"
 	| "asset-mismatch"
 	| "asset-not-found"
+	| "asset-id-conflict"
 	| "index-out-of-range"
 	| "invariant-violated"
 	| "node-locked"
@@ -1995,6 +1998,44 @@ function applyAssetRemove(
 	return { ir: next, inverse };
 }
 
+function applyAssetMigrate(
+	ir: CanvasIR,
+	cmd: CanvasAssetMigrateCommand,
+	options: CommandApplyOptions,
+): CommandApplyResult {
+	const previous = ir.assets[cmd.fromAssetId];
+	if (!previous) {
+		throw new CanvasCommandError(
+			"asset-not-found",
+			`Asset id "${cmd.fromAssetId}" not found`,
+		);
+	}
+	if (
+		cmd.asset.id !== cmd.fromAssetId &&
+		ir.assets[cmd.asset.id] !== undefined
+	) {
+		throw new CanvasCommandError(
+			"asset-id-conflict",
+			`Asset id "${cmd.asset.id}" already exists`,
+		);
+	}
+	const referenced = replaceDocumentAssetReferences(
+		ir,
+		cmd.fromAssetId,
+		cmd.asset.id,
+	);
+	const assets = { ...referenced.assets };
+	if (cmd.asset.id !== cmd.fromAssetId) delete assets[cmd.fromAssetId];
+	assets[cmd.asset.id] = cmd.asset;
+	const next = bumpMetadata({ ...referenced, assets }, options);
+	const inverse: CanvasAssetMigrateCommand = {
+		type: "asset.migrate",
+		fromAssetId: cmd.asset.id,
+		asset: previous,
+	};
+	return { ir: next, inverse };
+}
+
 // ---------------------------------------------------------------------------
 // Local Components — registry + instance command handlers (plan 0023 M3-02).
 // ---------------------------------------------------------------------------
@@ -3126,6 +3167,8 @@ export function applyCommandCore(
 			return applyAssetPut(ir, cmd, options);
 		case "asset.remove":
 			return applyAssetRemove(ir, cmd, options);
+		case "asset.migrate":
+			return applyAssetMigrate(ir, cmd, options);
 		case "component.create":
 			return applyComponentCreate(ir, cmd, options);
 		case "component.rename":
