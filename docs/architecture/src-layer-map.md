@@ -2,9 +2,9 @@
 
 **Status:** living record. This file is the companion the layering gate cites.
 **Gate:** `scripts/check-layering.mjs` (`pnpm check:layering`, part of `check:all`).
-**Last updated:** 2026-07-30 (PLAN 0021 M0 — `uri.ts`, `policy-contracts.ts`,
-`component-libraries/`, `brand-governance/` registered; `hash.ts` added to the
-rank table it had been missing from).
+**Last updated:** 2026-08-27 (PLAN 0039 E0 — executable release capability
+registry and live rollback controls at rank 3, privacy-safe telemetry at rank
+0, and dashboard policy at rank 1).
 
 ## Why this file exists here
 
@@ -43,10 +43,10 @@ a conscious decision rather than an accident.
 
 | Rank | Domains | May import |
 | --- | --- | --- |
-| 0 | `clock.ts`, `limits.ts`, `hash.ts`, **`uri.ts`**, **`path-data.ts`** | nothing |
-| 1 | `ir/` | rank 0 (+ `zod`) |
+| 0 | `clock.ts`, `limits.ts`, `hash.ts`, **`uri.ts`**, **`path-data.ts`**, **`telemetry.ts`** | nothing |
+| 1 | `ir/`, **`release-dashboard.ts`** | rank 0 (+ `zod` for `ir/`) |
 | 2 | `ai-contracts.ts`, `text-contracts.ts`, `geometry/`, `clipboard/`, `export/`, `comment-contracts.ts`, `components/`, **`policy-contracts.ts`** | ranks 0–1 |
-| 3 | `commands/` | ranks 0–2 |
+| 3 | `commands/`, **`release-capabilities.ts`**, **`release-controls.ts`**, **`print-preflight.ts`** | ranks 0–2 |
 | 4 | `extensions/`, `templates/` (incl. `component-ops/`, folded in per plan 0023 D-1), `brand/`, `layout/`, **`component-libraries/`** | ranks 0–3 |
 | 5 | `serialize/`, `ai-design-contracts.ts`, **`brand-governance/`** | ranks 0–4 |
 | 6 | `index.ts` (root barrel) | domain barrels only |
@@ -78,11 +78,26 @@ strictly-downward edges plus intra-domain ones.
   accepted a `d` the Konva renderer rejected, so an export blanked a frame the
   editor drew normally. `serialize/svg.ts` re-exports `isValidPathD`, so no
   importer changed.
+- **`telemetry.ts` at rank 0** — a content-free operational event vocabulary
+  and privacy gate imported by load, save, export, collaboration, AI, and
+  performance paths. It imports nothing, so every domain can reuse one
+  redaction policy without creating an upward edge.
+- **`release-dashboard.ts` at rank 1** — deterministic aggregation and alert
+  policy over the rank-0 telemetry vocabulary. It stays below product and
+  mutation domains so release monitoring never depends on editor behavior.
 - **`text-contracts.ts` at rank 2** — a host-implemented port over IR types,
   exactly like `ai-contracts.ts`; it reads `ir/` and nothing above.
 - **`export/` at rank 2** — the headless export *job contract*. It defines
   types and a document-resolution helper; it never calls the rank-5
   serializers.
+- **`release-capabilities.ts` and `release-controls.ts` at rank 3** —
+  cross-cutting product/release metadata over the rank-2 export-format
+  vocabulary. The controls share this domain so they can consume the registry
+  while remaining separate from document mutation semantics.
+- **`print-preflight.ts` at rank 3** — a pure advisory algorithm over the
+  rank-2 export contract, geometry, and text defaults. Rank 3 is the smallest
+  legal position for those three same-rank inputs and leaves it available to
+  the rank-5 PDF serializer without coupling it to serialization.
 - **`brand/` at rank 4** — raised from 2 when `applyBrandColors` began wrapping
   its edits as a reversible `commands/` batch.
 - **`serialize/` → `extensions/` must stay `import type`** — exporters read
