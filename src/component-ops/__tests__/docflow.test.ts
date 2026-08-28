@@ -7,7 +7,6 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { localComponentIdOf } from "../../ir/component-source.js";
 import {
 	materializeClipboardNodes,
 	validateClipboardPayload,
@@ -24,6 +23,8 @@ import {
 	createRect,
 	createText,
 } from "../../ir/builders.js";
+import { localComponentIdOf } from "../../ir/component-source.js";
+import { CanvasDocumentBudgetError } from "../../ir/document-budget.js";
 import type {
 	CanvasComponentDefinition,
 	CanvasComponentInstanceNode,
@@ -234,7 +235,10 @@ describe("M3-11 template instantiation (T-DOC-3)", () => {
 		const instances = instanceNodes(
 			result.document.pages[0]?.root as CanvasNode,
 		);
-		expect(instances[0]?.source).toEqual({ kind: "local", componentId: importedId });
+		expect(instances[0]?.source).toEqual({
+			kind: "local",
+			componentId: importedId,
+		});
 		expect(instances[0]?.overrides).toEqual(OVERRIDES);
 		// The command imports definitions BEFORE pages.
 		expect(result.command.commands[0]?.type).toBe("component.create");
@@ -264,7 +268,7 @@ describe("M3-11 template instantiation (T-DOC-3)", () => {
 		});
 	});
 
-	it("a template with a broken component graph degrades with a typed warning", () => {
+	it("rejects a recursive template component before expansion", () => {
 		const template = makeTemplate();
 		const cyclic = makeIR();
 		const def = cyclic.components?.["cmp-a"] as CanvasComponentDefinition;
@@ -287,10 +291,9 @@ describe("M3-11 template instantiation (T-DOC-3)", () => {
 				},
 			},
 		};
-		const result = instantiateTemplate(template, { nowFactory: NOW });
-		expect(
-			result.warnings.some((w) => w.code === "component-graph-invalid"),
-		).toBe(true);
+		expect(() => instantiateTemplate(template, { nowFactory: NOW })).toThrow(
+			CanvasDocumentBudgetError,
+		);
 	});
 });
 
@@ -311,7 +314,10 @@ describe("M3-12 document kinds (T-DOC-3, D-2)", () => {
 		expect(next.components).toBe(ir.components);
 		const variantInstances = instanceNodes(next.pages[1]?.root as CanvasNode);
 		expect(variantInstances).toHaveLength(1);
-		expect(variantInstances[0]?.source).toEqual({ kind: "local", componentId: "cmp-a" });
+		expect(variantInstances[0]?.source).toEqual({
+			kind: "local",
+			componentId: "cmp-a",
+		});
 		expect(variantInstances[0]?.id).not.toBe("inst-a");
 	});
 

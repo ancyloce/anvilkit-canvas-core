@@ -1,5 +1,4 @@
 import { nowIso } from "../clock.js";
-import { localComponentIdOf } from "../ir/component-source.js";
 import type {
 	CanvasBatchCommand,
 	CanvasCommand,
@@ -7,6 +6,8 @@ import type {
 	CanvasPageCreateCommand,
 } from "../commands/types.js";
 import { validateComponentGraph } from "../components/validate.js";
+import { localComponentIdOf } from "../ir/component-source.js";
+import { assertCanvasDocumentBudget } from "../ir/document-budget.js";
 import { regenerateNodeIds } from "../ir/regenerate-ids.js";
 import type {
 	CanvasComponentDefinition,
@@ -186,6 +187,9 @@ export function instantiateTemplate(
 	const nowFactory = options.nowFactory ?? nowIso;
 	const warnings: InstantiateTemplateWarning[] = [];
 
+	// A provider-supplied template is untrusted input. Admit it before cloning,
+	// id regeneration, variable resolution, or any other document-wide work.
+	assertCanvasDocumentBudget(definition.document);
 	const cloned = structuredClone(definition.document);
 
 	// Remap every page id and node id to a fresh one, keeping an old->new map

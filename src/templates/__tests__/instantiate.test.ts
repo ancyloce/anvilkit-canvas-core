@@ -9,6 +9,8 @@ import {
 	createRichText,
 	createText,
 } from "../../ir/builders.js";
+import { CanvasDocumentBudgetError } from "../../ir/document-budget.js";
+import { MAX_DOCUMENT_PAGES } from "../../limits.js";
 import { instantiateTemplate } from "../instantiate.js";
 import type { CanvasTemplateDefinition } from "../types.js";
 
@@ -367,6 +369,20 @@ describe("instantiateTemplate — variable substitution", () => {
 });
 
 describe("migrate seam (T-M1-10, TS-05)", () => {
+	it("rejects an oversized template before cloning or id regeneration", () => {
+		const oversized = makeTemplate({
+			document: {
+				...makeDocument(),
+				pages: Array.from({ length: MAX_DOCUMENT_PAGES + 1 }, (_, index) =>
+					createPage({ id: `page-${index}` }),
+				),
+			},
+		});
+		expect(() => instantiateTemplate(oversized)).toThrow(
+			CanvasDocumentBudgetError,
+		);
+	});
+
 	it("instantiates a template whose stored document is an OLDER IR version", () => {
 		// Before T-M1-10 this ended in a bare `CanvasIRSchema.parse`, so a
 		// template authored against v1/v2 was rejected outright instead of being
