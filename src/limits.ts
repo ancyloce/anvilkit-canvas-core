@@ -59,6 +59,41 @@ export const MAX_FINITE_LAYOUT_MAGNITUDE = 1e9;
 export const MAX_DOCUMENT_NODES = 10_000;
 
 /**
+ * Maximum compact UTF-8 JSON size accepted for one complete document.
+ *
+ * Ten clipboard/envelope payloads fit inside this ceiling. That leaves room
+ * for the page trees, both component registries, and document metadata while
+ * still rejecting a payload before parsing or rendering can turn tens or
+ * hundreds of megabytes into substantially more live objects.
+ */
+export const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
+
+/** Maximum number of pages accepted in one document. */
+export const MAX_DOCUMENT_PAGES = 100;
+
+/** Maximum number of asset references accepted in one document. */
+export const MAX_DOCUMENT_ASSETS = 1_000;
+
+/**
+ * Maximum combined local definitions and immutable external snapshots.
+ *
+ * Each registry already admits at most 256 entries. The document budget
+ * counts both because every stored definition participates in validation and
+ * can retain a Source tree even when it is not currently instantiated.
+ */
+export const MAX_DOCUMENT_COMPONENTS = 512;
+
+/**
+ * Maximum combined UTF-16 code units carried by JSON property names and
+ * string values in one document.
+ *
+ * Bytes and characters are intentionally separate budgets: a payload made of
+ * tiny JSON tokens can be structurally large, while one text field can retain
+ * millions of characters without approaching the node ceiling.
+ */
+export const MAX_DOCUMENT_STRING_CHARACTERS = 5_000_000;
+
+/**
  * Ceiling on direct children of a single container.
  *
  * A layout pass over one container is O(children) with a small constant, so

@@ -30,7 +30,12 @@ export * from "./ir/index.js";
 // re-exported here (T-M1-13). See that file's comment before adding a name.
 export * from "./layout/index.js";
 export * from "./limits.js";
+export * from "./print-preflight.js";
+export * from "./release-capabilities.js";
+export * from "./release-controls.js";
+export * from "./release-dashboard.js";
 export * from "./serialize/index.js";
+export * from "./telemetry.js";
 export * from "./templates/index.js";
 export * from "./text-contracts.js";
 // Two names, deliberately — `isSafeDataImageUrl` stays behind
