@@ -3,6 +3,11 @@
 Companion record for `bench/layout-resolve.bench.ts`, required by
 plan 0022 T-M0-07 (PRD 0014 §6.3, §13.1; Technical Design §15.1).
 
+This file owns the exact headless Core fingerprint. The wider desktop,
+low-tier, touch, browser, and representative-document matrix is versioned in
+[`REFERENCE-SUITE.md`](./REFERENCE-SUITE.md) and
+`bench/reference-suite.ts` (PLAN-0039 E0-T2).
+
 ## Why this file gates the targets
 
 PRD §13.1 states p95 **≤ 50 ms cold** and **≤ 16 ms warm** "on the reference

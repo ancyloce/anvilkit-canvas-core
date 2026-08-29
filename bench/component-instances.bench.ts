@@ -37,6 +37,7 @@ import {
 	spreadOf,
 	WARMUP,
 } from "./harness.js";
+import { canvasReferenceSuiteLabel } from "./reference-suite.js";
 
 interface Row {
 	readonly instances: number;
@@ -104,6 +105,8 @@ describe("component-instance resolution vs the pre-component baseline (M6-04)", 
 			[
 				"",
 				"Component-instance resolution vs pre-component baseline (plan 0023 M6-04)",
+				`  suite:       ${canvasReferenceSuiteLabel()}`,
+				"  fixtures:    canvas-component-instances-v1[count=1,10,100,500]",
 				"  resolver:    resolveCanvasDocument (component expansion → Auto Layout)",
 				`  host:        ${cpu?.model ?? "unknown"} · ${cpus().length} cores · ${(totalmem() / 1024 ** 3).toFixed(1)} GB`,
 				`  node:        ${process.version} · ${platform()}-${arch()}`,

@@ -78,6 +78,11 @@ import {
 	spreadOf,
 	WARMUP,
 } from "./harness.js";
+import {
+	type CanvasReferenceDocumentFixtureId,
+	canvasReferenceFixtureLabel,
+	canvasReferenceSuiteLabel,
+} from "./reference-suite.js";
 
 /** PRD §13.1 targets, in milliseconds. Reported, never enforced here. */
 const TARGET_COLD_MS = 50;
@@ -238,12 +243,14 @@ describe("Auto Layout resolver benchmark (T-M0-07)", () => {
 
 		const workloads: {
 			name: string;
+			fixtureId: CanvasReferenceDocumentFixtureId;
 			ir: CanvasIR;
 			/** The localized edit whose re-resolution the warm figure measures. */
 			edit: (ir: CanvasIR) => CanvasIR;
 		}[] = [
 			{
 				name: "1k-nodes-30pct-frames",
+				fixtureId: "canvas-layout-mixed-1000-v1",
 				ir: buildLargeDocument(),
 				edit: (ir) =>
 					updateNode(ir, {
@@ -253,6 +260,7 @@ describe("Auto Layout resolver benchmark (T-M0-07)", () => {
 			},
 			{
 				name: "100-text-20-keys",
+				fixtureId: "canvas-layout-text-100-v1",
 				ir: buildTextDocument(),
 				edit: (ir) => updateNode(ir, { id: "t7", patch: { text: "edited" } }),
 			},
@@ -260,6 +268,7 @@ describe("Auto Layout resolver benchmark (T-M0-07)", () => {
 				// TD §15.1 workload 3 exactly: one localized text edit
 				// invalidating a three-level Hug chain.
 				name: "hug-chain-depth-3",
+				fixtureId: "canvas-layout-hug-depth-3-v1",
 				ir: buildHugChain(),
 				edit: (ir) =>
 					updateNode(ir, {
@@ -302,6 +311,8 @@ describe("Auto Layout resolver benchmark (T-M0-07)", () => {
 			[
 				"",
 				"Auto Layout resolver benchmark (plan 0022 T-M0-07)",
+				`  suite:       ${canvasReferenceSuiteLabel()}`,
+				`  fixtures:    ${workloads.map(({ fixtureId }) => canvasReferenceFixtureLabel(fixtureId)).join(", ")}`,
 				`  resolver:    ${resolver.id}${resolver.isStub ? "  [STUB — not the real resolver]" : ""}`,
 				`  host:        ${cpu?.model ?? "unknown"} · ${cpus().length} cores · ${(totalmem() / 1024 ** 3).toFixed(1)} GB`,
 				`  node:        ${process.version} · ${platform()}-${arch()}`,

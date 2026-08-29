@@ -19,8 +19,8 @@
 
 import { arch, cpus, platform, totalmem } from "node:os";
 import { describe, expect, it } from "vitest";
-import { resolveCanvasLayout } from "../src/layout/index.js";
 import type { CanvasNode } from "../src/ir/types.js";
+import { resolveCanvasLayout } from "../src/layout/index.js";
 import {
 	buildRepeatedStructures,
 	editOneStructure,
@@ -29,12 +29,13 @@ import {
 } from "./fixtures/repeated-structures.js";
 import {
 	measure,
-	referenceEnvironmentStatus,
 	RUNS,
+	referenceEnvironmentStatus,
 	type Summary,
 	spreadOf,
 	WARMUP,
 } from "./harness.js";
+import { canvasReferenceSuiteLabel } from "./reference-suite.js";
 
 interface Row {
 	readonly structures: number;
@@ -73,6 +74,8 @@ describe("repeated-structures pre-component baseline (M0-03)", () => {
 			[
 				"",
 				"Repeated-structures pre-component baseline (plan 0023 M0-03)",
+				`  suite:       ${canvasReferenceSuiteLabel()}`,
+				"  fixtures:    canvas-repeated-structures-v1[count=1,10,100,500]",
 				"  resolver:    resolveCanvasLayout (pre-component — plain-node copies)",
 				`  host:        ${cpu?.model ?? "unknown"} · ${cpus().length} cores · ${(totalmem() / 1024 ** 3).toFixed(1)} GB`,
 				`  node:        ${process.version} · ${platform()}-${arch()}`,
@@ -109,8 +112,7 @@ describe("repeated-structures pre-component baseline (M0-03)", () => {
 		// The fixtures are the measurement's independent variable; if they
 		// silently shrink, every later figure improves for the wrong reason.
 		const countNodes = (node: CanvasNode): number => {
-			const children = (node as { children?: readonly CanvasNode[] })
-				.children;
+			const children = (node as { children?: readonly CanvasNode[] }).children;
 			return 1 + (children?.reduce((sum, c) => sum + countNodes(c), 0) ?? 0);
 		};
 		for (const count of REPEATED_STRUCTURE_COUNTS) {

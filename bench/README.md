@@ -18,6 +18,11 @@ environment live in `harness.ts` — both harnesses import them so their
 figures stay comparable. The reference-host nomination and its tradeoffs are
 documented in `REFERENCE-ENVIRONMENT.md`.
 
+The product-wide environment and representative-document matrix is
+`canvas-reference-suite@1.0.0`, declared in `reference-suite.ts` and documented
+in `REFERENCE-SUITE.md`. Every benchmark report prints that version and its
+fixture IDs; reports missing either are not release evidence.
+
 ## Baselines
 
 `baselines/pre-component.json` is the committed M0-03 record (medians + p95 of
