@@ -52,6 +52,18 @@ const LAYERS = [
 	// rank 0 is the correct floor. Same reasoning as `hash.ts` and `uri.ts`;
 	// `serialize/svg.ts` re-exports `isValidPathD`, so no importer changed.
 	{ domain: "path-data", rank: 0, match: (p) => p === "path-data.ts" },
+	// Privacy-safe operational telemetry contract (PLAN 0039 E0-T3). It imports
+	// nothing so every domain can emit through the same vocabulary without an
+	// upward dependency or a second redaction policy.
+	{ domain: "telemetry", rank: 0, match: (p) => p === "telemetry.ts" },
+	// Release dashboard aggregation and alert policy (PLAN 0039 E0-T4). It
+	// consumes only the rank-0 telemetry vocabulary, so rank 1 is the smallest
+	// legal layer and keeps operational policy below product capability wiring.
+	{
+		domain: "release-dashboard",
+		rank: 1,
+		match: (p) => p === "release-dashboard.ts",
+	},
 	{ domain: "ir", rank: 1, match: (p) => p.startsWith("ir/") },
 	{ domain: "ai-contracts", rank: 2, match: (p) => p === "ai-contracts.ts" },
 	// The headless text-measurement port. A host-implemented contract over IR
@@ -96,6 +108,24 @@ const LAYERS = [
 		domain: "policy-contracts",
 		rank: 2,
 		match: (p) => p === "policy-contracts.ts",
+	},
+	// Cross-cutting release metadata (PLAN 0039 E0-T1). It reads the rank-2
+	// export-format vocabulary but contains no command or implementation logic,
+	// so rank 3 is the lowest legal position. Keeping it outside `commands/`
+	// prevents release policy from becoming part of document mutation semantics.
+	{
+		domain: "release-capabilities",
+		rank: 3,
+		match: (p) =>
+			p === "release-capabilities.ts" || p === "release-controls.ts",
+	},
+	// Pure print-preflight algorithm (PLAN 0039 E2-T5). It composes the rank-2
+	// export contract, geometry, and text defaults without mutating documents,
+	// so rank 3 is the smallest legal position and keeps it below serializers.
+	{
+		domain: "print-preflight",
+		rank: 3,
+		match: (p) => p === "print-preflight.ts",
 	},
 	{ domain: "commands", rank: 3, match: (p) => p.startsWith("commands/") },
 	{ domain: "extensions", rank: 4, match: (p) => p.startsWith("extensions/") },
@@ -272,12 +302,18 @@ function selfTest() {
 		["geometry/affine.ts", "ai-contracts.ts", true], // equal rank, cross-domain
 		["ir/builders.ts", "ir/validators.ts", false], // same domain
 		["commands/runtime.ts", "clock.ts", false], // downward to leaf
+		["commands/runtime.ts", "telemetry.ts", false],
+		["release-dashboard.ts", "telemetry.ts", false],
+		["telemetry.ts", "release-dashboard.ts", true],
 		["clock.ts", "unmapped-thing.ts", true], // unmapped importee
 		// --- plan 0021 M0 (T-003) -------------------------------------------
 		// The port is reachable from the command layer: this is the whole
 		// reason `policy-contracts.ts` sits at rank 2 rather than beside
 		// `brand-governance/`.
 		["commands/runtime.ts", "policy-contracts.ts", false],
+		["release-capabilities.ts", "export/types.ts", false],
+		["export/types.ts", "release-capabilities.ts", true],
+		["component-ops/__layering-probe.ts", "serialize/svg.ts", true],
 		// ...but the gateway that USES the port is not. An enforcement helper
 		// must never be imported downward into `commands/`.
 		["commands/runtime.ts", "brand-governance/gateway.ts", true],
