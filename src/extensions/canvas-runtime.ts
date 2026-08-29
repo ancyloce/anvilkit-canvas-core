@@ -5,12 +5,12 @@ import type {
 	CommandApplyOptions,
 	CommandApplyResult,
 } from "../commands/types.js";
+import { assertCanvasDocumentBudget } from "../ir/document-budget.js";
 import {
 	type CanvasMigration,
 	type CanvasMigrationRegistry,
 	createMigrationRegistry,
 } from "../ir/migrations.js";
-import { assertCanvasDocumentBudget } from "../ir/document-budget.js";
 import type { CanvasIR, CanvasNode } from "../ir/types.js";
 import {
 	buildCanvasComponentRegistrySchema,
@@ -148,6 +148,7 @@ const BUILTIN_COMMAND_TYPE_FLAGS: Readonly<
 	"page.set-layout-aids": true,
 	"asset.put": true,
 	"asset.remove": true,
+	"asset.migrate": true,
 	"component.create": true,
 	"component.rename": true,
 	"component.duplicate": true,

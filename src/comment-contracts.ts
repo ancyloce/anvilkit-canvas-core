@@ -12,6 +12,12 @@ import { findNode } from "./ir/walkers.js";
  * external comment-storage system keys its threads on.
  */
 
+export interface CanvasCommentDocumentAnchor {
+	kind: "document";
+	version: string;
+	documentId: string;
+}
+
 export interface CanvasCommentPageAnchor {
 	kind: "page";
 	version: string;
@@ -47,6 +53,7 @@ export interface CanvasCommentSelectionAnchor {
 }
 
 export type CanvasCommentAnchor =
+	| CanvasCommentDocumentAnchor
 	| CanvasCommentPageAnchor
 	| CanvasCommentNodeAnchor
 	| CanvasCommentCoordinateAnchor
@@ -54,23 +61,31 @@ export type CanvasCommentAnchor =
 
 const CanvasCommentAnchorBaseShape = {
 	version: z.string().min(1),
-	pageId: z.string().min(1),
 } as const;
+
+export const CanvasCommentDocumentAnchorSchema = z.looseObject({
+	...CanvasCommentAnchorBaseShape,
+	kind: z.literal("document"),
+	documentId: z.string().min(1),
+});
 
 export const CanvasCommentPageAnchorSchema = z.looseObject({
 	...CanvasCommentAnchorBaseShape,
 	kind: z.literal("page"),
+	pageId: z.string().min(1),
 });
 
 export const CanvasCommentNodeAnchorSchema = z.looseObject({
 	...CanvasCommentAnchorBaseShape,
 	kind: z.literal("node"),
+	pageId: z.string().min(1),
 	nodeId: z.string().min(1),
 });
 
 export const CanvasCommentCoordinateAnchorSchema = z.looseObject({
 	...CanvasCommentAnchorBaseShape,
 	kind: z.literal("coordinate"),
+	pageId: z.string().min(1),
 	x: z.number(),
 	y: z.number(),
 });
@@ -78,12 +93,14 @@ export const CanvasCommentCoordinateAnchorSchema = z.looseObject({
 export const CanvasCommentSelectionAnchorSchema = z.looseObject({
 	...CanvasCommentAnchorBaseShape,
 	kind: z.literal("selection"),
+	pageId: z.string().min(1),
 	nodeIds: z.array(z.string().min(1)),
 });
 
-/** A discriminated union over the four anchor kinds (FR-072), dispatched on `kind`. */
+/** A discriminated union over the five anchor kinds (FR-072), dispatched on `kind`. */
 export const CanvasCommentAnchorSchema: z.ZodType<CanvasCommentAnchor> =
 	z.discriminatedUnion("kind", [
+		CanvasCommentDocumentAnchorSchema,
 		CanvasCommentPageAnchorSchema,
 		CanvasCommentNodeAnchorSchema,
 		CanvasCommentCoordinateAnchorSchema,
@@ -95,7 +112,9 @@ export type CanvasCommentAnchorStatus = "active" | "archived";
 export interface CanvasCommentAnchorResolution {
 	status: CanvasCommentAnchorStatus;
 	/** Present only when `status: "archived"`. */
-	reason?: "page-deleted" | "node-deleted";
+	reason?: "document-deleted" | "page-deleted" | "node-deleted";
+	/** Current page after a node or selection moves across pages. */
+	resolvedPageId?: string;
 	/**
 	 * `selection` anchors only: ids from `nodeIds` that no longer exist, even
 	 * while the anchor as a whole is still `"active"` (at least one survives).
@@ -122,29 +141,51 @@ export function resolveCommentAnchor(
 	anchor: CanvasCommentAnchor,
 	ir: CanvasIR,
 ): CanvasCommentAnchorResolution {
-	const pageExists = ir.pages.some((page) => page.id === anchor.pageId);
-	if (!pageExists) return { status: "archived", reason: "page-deleted" };
-
 	switch (anchor.kind) {
-		case "page":
-			return { status: "active" };
-		case "coordinate":
-			return { status: "active" };
-		case "node":
-			return findNode(ir, anchor.nodeId)
+		case "document":
+			return anchor.documentId === ir.id
 				? { status: "active" }
-				: { status: "archived", reason: "node-deleted" };
+				: { status: "archived", reason: "document-deleted" };
+		case "page":
+			return ir.pages.some((page) => page.id === anchor.pageId)
+				? { status: "active" }
+				: { status: "archived", reason: "page-deleted" };
+		case "coordinate":
+			return ir.pages.some((page) => page.id === anchor.pageId)
+				? { status: "active" }
+				: { status: "archived", reason: "page-deleted" };
+		case "node": {
+			const found = findNode(ir, anchor.nodeId);
+			if (!found) return { status: "archived", reason: "node-deleted" };
+			return found.page.id === anchor.pageId
+				? { status: "active" }
+				: { status: "active", resolvedPageId: found.page.id };
+		}
 		case "selection": {
-			if (anchor.nodeIds.length === 0) return { status: "active" };
-			const missingNodeIds = anchor.nodeIds.filter(
-				(id) => findNode(ir, id) === null,
-			);
+			if (anchor.nodeIds.length === 0) {
+				return ir.pages.some((page) => page.id === anchor.pageId)
+					? { status: "active" }
+					: { status: "archived", reason: "page-deleted" };
+			}
+			const resolved = anchor.nodeIds.map((id) => ({ id, found: findNode(ir, id) }));
+			const missingNodeIds = resolved
+				.filter(({ found }) => found === null)
+				.map(({ id }) => id);
 			if (missingNodeIds.length === anchor.nodeIds.length) {
 				return { status: "archived", reason: "node-deleted" };
 			}
-			return missingNodeIds.length > 0
-				? { status: "active", missingNodeIds }
-				: { status: "active" };
+			const activePages = new Set(
+				resolved.flatMap(({ found }) => (found ? [found.page.id] : [])),
+			);
+			const resolvedPageId =
+				activePages.size === 1 ? [...activePages][0] : undefined;
+			return {
+				status: "active",
+				...(missingNodeIds.length > 0 ? { missingNodeIds } : {}),
+				...(resolvedPageId && resolvedPageId !== anchor.pageId
+					? { resolvedPageId }
+					: {}),
+			};
 		}
 	}
 }

@@ -91,15 +91,71 @@ export type AiImageJobKind = AiImageJobRequest["kind"];
 
 export type AiImageJobStatus = CanvasAiPlaceholderStatus | "cancelled";
 
+/** Stable provider-error categories used by UI, telemetry, and recovery policy. */
+export type AiImageJobErrorCategory =
+	| "authentication"
+	| "authorization"
+	| "input"
+	| "malformed-output"
+	| "network"
+	| "provider-policy"
+	| "rate-limit"
+	| "timeout"
+	| "unavailable"
+	| "unknown";
+
 export interface AiImageJobError {
 	code: string;
 	message: string;
+	/** Machine-readable family; provider-specific detail remains in `code`. */
+	category?: AiImageJobErrorCategory;
+	/** Whether the same normalized request can be retried safely. */
+	retryable?: boolean;
+	/** Provider-directed retry delay for rate limits and transient failures. */
+	retryAfterMs?: number;
+}
+
+/** A provider-neutral progress update. Progress values are in the inclusive 0..1 range. */
+export interface AiImageJobProgress {
+	phase: "queued" | "uploading" | "processing" | "finalizing";
+	progress?: number;
+	message?: string;
+	updatedAt: number;
+}
+
+/** Safety review attached to a completed provider result. */
+export type AiImageSafetyOutcome =
+	| { status: "approved" | "not-evaluated" }
+	| {
+			status: "blocked" | "review-required";
+			code: string;
+			message: string;
+	  };
+
+/** Provider cost information. Providers may report currency, credits, or both. */
+export interface AiImageCostMetadata {
+	status: "estimated" | "final" | "unknown";
+	currency?: string;
+	amountMicros?: number;
+	credits?: number;
+}
+
+/** Normalized output metadata used before an asset enters the document. */
+export interface AiImageResultMetadata {
+	mimeType?: string;
+	width?: number;
+	height?: number;
+	byteLength?: number;
+	providerAssetId?: string;
+	safety: AiImageSafetyOutcome;
+	cost?: AiImageCostMetadata;
 }
 
 interface AiImageJobResultBase {
 	jobId: string;
 	startedAt: number;
 	finishedAt?: number;
+	progress?: AiImageJobProgress;
 }
 
 /**
@@ -113,9 +169,41 @@ interface AiImageJobResultBase {
  */
 export type AiImageJobResult =
 	| (AiImageJobResultBase & { status: "pending" })
-	| (AiImageJobResultBase & { status: "complete"; resultAssetId: string })
+	| (AiImageJobResultBase & {
+			status: "complete";
+			resultAssetId: string;
+			metadata?: AiImageResultMetadata;
+	  })
 	| (AiImageJobResultBase & { status: "error"; error: AiImageJobError })
 	| (AiImageJobResultBase & { status: "cancelled" });
+
+/** Normalized constraints for one advertised provider capability. */
+export interface AiImageInputConstraints {
+	acceptedSourceMimeTypes?: readonly string[];
+	maxSourceBytes?: number;
+	maxPromptCharacters?: number;
+	minWidth?: number;
+	minHeight?: number;
+	maxWidth?: number;
+	maxHeight?: number;
+	maxPixels?: number;
+}
+
+/** One discoverable image operation and the limits that govern its inputs. */
+export interface AiImageCapability {
+	kind: AiImageJobKind;
+	available: boolean;
+	unavailableReason?: string;
+	constraints?: AiImageInputConstraints;
+	estimatedCost?: AiImageCostMetadata;
+}
+
+/** Provider identity and capability snapshot returned before a job starts. */
+export interface AiImageProviderDescriptor {
+	providerId: string;
+	displayName?: string;
+	capabilities: readonly AiImageCapability[];
+}
 
 export interface AiLayerBounds {
 	x: number;
@@ -141,6 +229,8 @@ export interface AiLayerContext {
 
 export interface AiImageProviderOptions {
 	signal?: AbortSignal;
+	/** Receives normalized progress without requiring a provider-specific stream API. */
+	onProgress?: (progress: AiImageJobProgress) => void;
 }
 
 export type AiImageProvider = (
@@ -148,3 +238,36 @@ export type AiImageProvider = (
 	context: AiLayerContext,
 	options?: AiImageProviderOptions,
 ) => Promise<AiImageJobResult>;
+
+/**
+ * Full provider-neutral job lifecycle. The legacy function-shaped
+ * {@link AiImageProvider} remains supported for synchronous adapters; new hosts
+ * should expose this interface so discovery, polling, cancellation, and retry
+ * all have explicit contracts.
+ */
+export interface AiImageProviderAdapter {
+	discoverCapabilities(options?: {
+		signal?: AbortSignal;
+	}): Promise<AiImageProviderDescriptor>;
+	startJob(
+		request: AiImageJobRequest,
+		context: AiLayerContext,
+		options?: AiImageProviderOptions,
+	): Promise<AiImageJobResult>;
+	getJob(
+		jobId: string,
+		options?: AiImageProviderOptions,
+	): Promise<AiImageJobResult>;
+	/** Idempotent: repeated cancellation returns the current terminal state. */
+	cancelJob(
+		jobId: string,
+		options?: { signal?: AbortSignal },
+	): Promise<AiImageJobResult>;
+	/** Starts a new attempt associated with a prior terminal failure. */
+	retryJob(
+		jobId: string,
+		request: AiImageJobRequest,
+		context: AiLayerContext,
+		options?: AiImageProviderOptions,
+	): Promise<AiImageJobResult>;
+}

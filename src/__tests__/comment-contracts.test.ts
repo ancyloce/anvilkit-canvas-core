@@ -22,8 +22,9 @@ function makeIR(): { ir: CanvasIR; pageId: string } {
 }
 
 describe("CanvasCommentAnchorSchema", () => {
-	it("validates each of the four anchor kinds", () => {
+	it("validates each of the five anchor kinds", () => {
 		const anchors: CanvasCommentAnchor[] = [
+			{ kind: "document", version: "1", documentId: "doc" },
 			{ kind: "page", version: "1", pageId: "p1" },
 			{ kind: "node", version: "1", pageId: "p1", nodeId: "r1" },
 			{ kind: "coordinate", version: "1", pageId: "p1", x: 5, y: 12 },
@@ -50,6 +51,22 @@ describe("CanvasCommentAnchorSchema", () => {
 });
 
 describe("resolveCommentAnchor", () => {
+	it("resolves only the matching document anchor", () => {
+		const { ir } = makeIR();
+		expect(
+			resolveCommentAnchor(
+				{ kind: "document", version: "1", documentId: "doc" },
+				ir,
+			),
+		).toEqual({ status: "active" });
+		expect(
+			resolveCommentAnchor(
+				{ kind: "document", version: "1", documentId: "other" },
+				ir,
+			),
+		).toEqual({ status: "archived", reason: "document-deleted" });
+	});
+
 	it("resolves page/coordinate anchors as active while the page exists", () => {
 		const { ir } = makeIR();
 		expect(
@@ -63,18 +80,44 @@ describe("resolveCommentAnchor", () => {
 		).toEqual({ status: "active" });
 	});
 
-	it("archives any anchor kind when the page no longer exists", () => {
+	it("archives a page anchor when the page no longer exists", () => {
 		const { ir } = makeIR();
 		const anchor: CanvasCommentAnchor = {
-			kind: "node",
+			kind: "page",
 			version: "1",
 			pageId: "ghost-page",
-			nodeId: "r1",
 		};
 		expect(resolveCommentAnchor(anchor, ir)).toEqual({
 			status: "archived",
 			reason: "page-deleted",
 		});
+	});
+
+	it("a node anchor follows its stable id across pages", () => {
+		const { ir: ir0 } = makeIR();
+		const secondPage = createPage({ id: "p2" });
+		const irWithSecondPage = {
+			...ir0,
+			pages: [...ir0.pages, secondPage],
+		};
+		const { ir: removed } = applyCommand(irWithSecondPage, {
+			type: "node.delete",
+			nodeId: "r1",
+		});
+		const moved = insertNode(removed, {
+			parentId: secondPage.root.id,
+			node: createRect({
+				id: "r1",
+				bounds: { width: 10, height: 10 },
+				transform: { x: 2, y: 3 },
+			}),
+		});
+		expect(
+			resolveCommentAnchor(
+				{ kind: "node", version: "1", pageId: "p1", nodeId: "r1" },
+				moved,
+			),
+		).toEqual({ status: "active", resolvedPageId: "p2" });
 	});
 
 	it("a node anchor survives a move/transform command (keyed by stable id, not position)", () => {

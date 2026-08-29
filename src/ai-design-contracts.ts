@@ -387,6 +387,7 @@ function collectCommandValidationIssues(command: CanvasCommand): string[] {
 		case "page.set-layout-aids":
 		case "asset.put":
 		case "asset.remove":
+		case "asset.migrate":
 		case "component.rename":
 		case "component.duplicate":
 		case "component.delete":
