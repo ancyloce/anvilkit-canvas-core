@@ -215,6 +215,8 @@ export interface AiLayerBounds {
 export interface AiLayerContext {
 	artboardId: string;
 	selectedNodeId?: string;
+	/** Selected image asset, when the host can resolve it without another lookup. */
+	selectedAssetId?: string;
 	/**
 	 * The selected node's kind (FR-053, canvas-m4-004) — lets a host UI
 	 * decide whether an action that only makes sense for certain node kinds
