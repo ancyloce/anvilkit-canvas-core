@@ -34,6 +34,73 @@ does anything:
 
 ## Unreleased
 
+### Collaboration anchors (PLAN-0039 E6)
+
+- Added versioned document anchors alongside page, coordinate, node, and
+  selection anchors for comment storage outside Canvas IR.
+- Node and selection resolution now follows stable node IDs across page moves,
+  reports current page identity, and archives/restores deterministically when
+  targets disappear or return.
+
+### Interactive preview performance (PLAN-0039 E4-T1–T3)
+
+- Added non-load-bearing phase observation for component resolution and Auto
+  Layout so hosts can attribute interactive preview cost without recording
+  document content.
+- Added conservative dirty-page and dirty-node resolution hints that retain
+  untouched page records, widen Auto Layout dependency closures, and preserve
+  component provenance across incremental passes.
+
+### Document input safety (PLAN-0039 E1)
+
+- Added one iterative document-budget validator for transport bytes, pages,
+  nodes, depth, container width, assets, components, strings, and expanded
+  component nodes, with stable diagnostics and recovery actions.
+- Bounded built-in and extension migrations before recursive schema parsing and
+  after normalization, including rejection of recursive component graphs.
+- Added default-boundary and adversarial fixtures for deep, wide, string-heavy,
+  recursive, page-heavy, and asset-heavy documents.
+
+### Live release controls and rollback ownership (PLAN-0039 E0-T6)
+
+- Added host-supplied live feature and operational flag snapshots with
+  dependency-aware capability evaluation, so incident switches take effect
+  without a new package release.
+- Added tested kill switches for every P0 capability and each supported IR
+  migration step.
+- Assigned disable authority, fallback behavior, and verification ownership
+  for collaboration, both AI providers, high-resolution export, and new
+  migrations.
+
+### Release dashboard and alert policy (PLAN-0039 E0-T4)
+
+- Added deterministic aggregation for load, save, export, collaboration, AI,
+  cancellation, crash, resource rejection, and interaction-latency signals.
+- Added owned warning and critical thresholds with minimum sample sizes, plus
+  zero-tolerance collaboration convergence alerts.
+
+### Privacy-safe operational telemetry contract (PLAN-0039 E0-T3)
+
+- Added versioned, typed events for load, save, recovery, export,
+  collaboration, AI jobs, performance phases, and classified errors.
+- Added a runtime privacy gate that drops raw content, binary/media data,
+  prompts, tokens, URLs, and personal identifiers before a host sink runs.
+- Telemetry delivery is non-load-bearing: absent or throwing sinks cannot break
+  an editor operation.
+
+### Executable release capability registry (PLAN-0039 E0-T1)
+
+- Added `CANVAS_RELEASE_CAPABILITIES`, stable capability and feature-flag IDs,
+  provider requirements, dependency declarations, supported export formats,
+  release ownership, maturity, priority, and public descriptions.
+- Added `CANVAS_RELEASE_FEATURE_FLAG_DEFAULTS` and
+  `getCanvasReleaseCapability()` so host configuration, release gates, and
+  generated documentation can consume the same registry.
+- The print-PDF row is explicitly experimental and disabled by default until
+  its editor type, default registration, UI, preflight, and documentation are
+  reconciled by E2-T4; the registry does not promote the existing headless
+  format vocabulary into a false editor availability claim.
+
 ### `CanvasImageNode.maskAssetId` deprecated — removal scheduled for `1.0.0` (PLAN-0035 cp4-007)
 
 **No runtime behaviour is removed.** ADR 0008

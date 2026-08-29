@@ -70,6 +70,8 @@
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
 		"test:coverage": "vitest run --coverage",
+		"test:migrations": "vitest run src/ir/__tests__/migration-v3.test.ts src/extensions/__tests__/canvas-runtime.test.ts src/extensions/__tests__/extension-registries.test.ts",
+		"test:stress": "vitest run src/__tests__/limits.test.ts src/__tests__/property-roundtrips.test.ts src/component-libraries/__tests__/perf.test.ts",
 		"test:watch": "vitest",
 		"bench": "vitest run --config vitest.bench.config.ts",
 		"bench:components": "vitest run --config vitest.bench.config.ts bench/repeated-structures.bench.ts",
