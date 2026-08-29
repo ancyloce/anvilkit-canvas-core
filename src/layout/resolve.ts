@@ -268,6 +268,8 @@ interface ResolveState {
 	readonly nextPlaced: Map<string, unknown>;
 	/** Subtrees reused from the prior resolution this pass — for tests and telemetry. */
 	readonly reusedSubtrees: Set<string>;
+	/** Nodes whose source/constraints changed and must bypass a signature hit. */
+	readonly dirtyNodeIds?: ReadonlySet<string>;
 }
 
 function isAutoLayoutFrame(node: CanvasNode): node is CanvasFrameNode & {
@@ -333,7 +335,9 @@ function resolveNode(
 	// without recursing — this is the compute saving the ≤16 ms warm target
 	// needs, and it is what `reuseRecord` then turns into reference identity.
 	const cacheKey = `${node.id}\u0000${subtreeSignature(node, state.cache)}\u0000${allocation.width ?? "-"}\u0000${allocation.height ?? "-"}\u0000${depth}`;
-	const hit = state.cache.placed.get(cacheKey) as PlacedNode | undefined;
+	const hit = state.dirtyNodeIds?.has(node.id)
+		? undefined
+		: (state.cache.placed.get(cacheKey) as PlacedNode | undefined);
 	if (hit) {
 		state.reusedSubtrees.add(node.id);
 		return hit;
@@ -773,12 +777,20 @@ function emitRecords(
 	parentId: CanvasResolvedNodeId | undefined,
 	records: Map<CanvasResolvedNodeId, CanvasResolvedNodeRecord>,
 	cache: LayoutCacheState,
+	nextCacheRecords: Map<CanvasResolvedNodeId, CanvasResolvedNodeRecord>,
 ): CanvasResolvedNodeId {
 	const id = toResolvedNodeId(placed.source.id);
 	const local = toAffineMatrix(placed.transform);
 	const worldTransform = multiplyMatrix(parentWorld, local);
 	const childIds = placed.children.map((child) =>
-		emitRecords(child, worldTransform, id, records, cache),
+		emitRecords(
+			child,
+			worldTransform,
+			id,
+			records,
+			cache,
+			nextCacheRecords,
+		),
 	);
 	const candidate: CanvasResolvedNodeRecord = {
 		id,
@@ -804,11 +816,39 @@ function emitRecords(
 	};
 	// Hand back the PREVIOUS object when nothing observable changed, so a
 	// renderer can memoise on record identity (TD §5.4).
-	records.set(id, reuseRecord(candidate, cache.records.get(placed.source.id)));
+	const record = reuseRecord(candidate, cache.records.get(placed.source.id));
+	records.set(id, record);
+	nextCacheRecords.set(id, record);
 	return id;
 }
 
 const IDENTITY: AffineMatrix = [1, 0, 0, 1, 0, 0];
+
+interface IncrementalLayoutResolveOptions extends CanvasLayoutResolveOptions {
+	readonly dirtyPageIds?: readonly string[];
+	readonly dirtyNodeIds?: readonly string[];
+}
+
+function deleteRecordSubtree(
+	id: CanvasResolvedNodeId,
+	records: Map<CanvasResolvedNodeId, CanvasResolvedNodeRecord>,
+): void {
+	const record = records.get(id);
+	if (!record) return;
+	for (const childId of record.childIds) deleteRecordSubtree(childId, records);
+	records.delete(id);
+}
+
+function layoutIssueKey(issue: CanvasLayoutIssue): string {
+	return [
+		issue.code,
+		issue.severity,
+		issue.nodeId ?? "",
+		issue.axis ?? "",
+		issue.fallback ?? "",
+		issue.message,
+	].join("\u0000");
+}
 
 /**
  * Resolve a document's Auto Layout into one shared geometry tree.
@@ -821,10 +861,27 @@ export function resolveCanvasLayout(
 	ir: CanvasIR,
 	options: CanvasLayoutResolveOptions,
 ): CanvasResolvedDocument {
-	const opts = options ?? {};
+	const opts = (options ?? {}) as IncrementalLayoutResolveOptions;
 	const pages = opts.pageIds
 		? ir.pages.filter((page) => opts.pageIds?.includes(page.id))
 		: ir.pages;
+	const dirtyPageIds = opts.dirtyPageIds
+		? new Set(opts.dirtyPageIds)
+		: undefined;
+	const previous = opts.previous;
+	const incremental =
+		!opts.pageIds &&
+		dirtyPageIds !== undefined &&
+		previous !== undefined &&
+		previous.source.id === ir.id &&
+		previous.truncatedDiagnostics === 0;
+	const previousPageRoots = incremental ? previous.pageRoots : undefined;
+	const pagesToResolve = incremental
+		? pages.filter(
+				(page) =>
+					dirtyPageIds.has(page.id) || !previousPageRoots?.has(page.id),
+			)
+		: pages;
 
 	const manifestHash = opts.measurement?.manifestHash ?? "";
 	// The warm state is looked up from the caller-supplied previous document
@@ -852,8 +909,11 @@ export function resolveCanvasLayout(
 		lastResult: new Map(),
 		reportedOverflow: new Set(),
 		cache,
-		nextPlaced: new Map(),
+		nextPlaced: incremental ? new Map(cache.placed) : new Map(),
 		reusedSubtrees: new Set(),
+		...(opts.dirtyNodeIds
+			? { dirtyNodeIds: new Set(opts.dirtyNodeIds) }
+			: {}),
 	};
 
 	// A stamp whose inputs no longer hash the same describes geometry from an
@@ -871,12 +931,46 @@ export function resolveCanvasLayout(
 		);
 	}
 
-	const records = new Map<CanvasResolvedNodeId, CanvasResolvedNodeRecord>();
-	const pageRoots = new Map<string, readonly CanvasResolvedNodeId[]>();
-	for (const page of pages) {
+	const records = incremental
+		? new Map(previous.records)
+		: new Map<CanvasResolvedNodeId, CanvasResolvedNodeRecord>();
+	const nextCacheRecords = incremental
+		? new Map<CanvasResolvedNodeId, CanvasResolvedNodeRecord>(
+				cache.records as ReadonlyMap<
+					CanvasResolvedNodeId,
+					CanvasResolvedNodeRecord
+				>,
+			)
+		: new Map<CanvasResolvedNodeId, CanvasResolvedNodeRecord>();
+	const pageRoots = incremental
+		? new Map(previous.pageRoots)
+		: new Map<string, readonly CanvasResolvedNodeId[]>();
+	if (incremental) {
+		const currentPageIds = new Set(ir.pages.map((page) => page.id));
+		for (const [pageId, roots] of pageRoots) {
+			if (currentPageIds.has(pageId)) continue;
+			for (const rootId of roots) {
+				deleteRecordSubtree(rootId, records);
+				deleteRecordSubtree(rootId, nextCacheRecords);
+			}
+			pageRoots.delete(pageId);
+		}
+	}
+	for (const page of pagesToResolve) {
+		for (const rootId of pageRoots.get(page.id) ?? []) {
+			deleteRecordSubtree(rootId, records);
+			deleteRecordSubtree(rootId, nextCacheRecords);
+		}
 		const placed = resolveNode(page.root, {}, 0, state);
 		pageRoots.set(page.id, [
-			emitRecords(placed, IDENTITY, undefined, records, cache),
+			emitRecords(
+				placed,
+				IDENTITY,
+				undefined,
+				records,
+				cache,
+				nextCacheRecords,
+			),
 		]);
 	}
 
@@ -885,10 +979,20 @@ export function resolveCanvasLayout(
 	// fully specified TD §14 key — concatenating them would leave the output
 	// dependent on the order the solver happened to visit nodes, which is
 	// exactly what AC-008's determinism contract forbids.
-	const ordered = orderLayoutIssues(
-		[...state.graph.issues, ...state.issues],
-		buildDocumentOrder(ir),
-	);
+	const documentOrder = buildDocumentOrder(ir);
+	const retained = incremental
+		? previous.diagnostics.filter(
+				(issue) =>
+					issue.nodeId !== undefined &&
+					documentOrder.has(issue.nodeId) &&
+					!state.dirtyNodeIds?.has(issue.nodeId),
+			)
+		: [];
+	const uniqueIssues = new Map<string, CanvasLayoutIssue>();
+	for (const issue of [...state.graph.issues, ...retained, ...state.issues]) {
+		uniqueIssues.set(layoutIssueKey(issue), issue);
+	}
+	const ordered = orderLayoutIssues([...uniqueIssues.values()], documentOrder);
 	const diagnostics = ordered.slice(0, MAX_RETAINED_DIAGNOSTICS);
 
 	const resolved: CanvasResolvedDocument = {
@@ -905,7 +1009,7 @@ export function resolveCanvasLayout(
 	};
 	documentCaches.set(
 		resolved,
-		advanceCacheState(cache, state.nextPlaced, records),
+		advanceCacheState(cache, state.nextPlaced, nextCacheRecords),
 	);
 	reuseCounts.set(resolved, state.reusedSubtrees.size);
 	return resolved;

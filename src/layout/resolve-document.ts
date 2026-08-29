@@ -48,7 +48,35 @@ export interface CanvasComponentResolveOptions
 	readonly maxExpandedNodes?: number;
 	/** Nested component depth cap. Defaults to `MAX_COMPONENT_NESTED_DEPTH`. */
 	readonly maxComponentDepth?: number;
+	/**
+	 * Conservative editor hint: every page whose resolved tree may differ from
+	 * `previous`. When supplied with a full-document previous resolution, pages
+	 * outside this set retain their resolved records without another tree pass.
+	 */
+	readonly dirtyPageIds?: readonly string[];
+	/**
+	 * Conservative node/constraint closure inside {@link dirtyPageIds}. A node
+	 * in this set bypasses the signature warm path even when its geometry-only
+	 * signature is unchanged (for example, a paint-only node update).
+	 */
+	readonly dirtyNodeIds?: readonly string[];
+	/**
+	 * Optional, content-free observer for the two expensive resolution phases.
+	 * Observer failures are isolated from document resolution.
+	 */
+	readonly onPhaseMeasured?: CanvasDocumentResolutionPhaseObserver;
 }
+
+export type CanvasDocumentResolutionPhase = "resolve" | "layout";
+
+export interface CanvasDocumentResolutionPhaseMeasurement {
+	readonly phase: CanvasDocumentResolutionPhase;
+	readonly durationMs: number;
+}
+
+export type CanvasDocumentResolutionPhaseObserver = (
+	measurement: CanvasDocumentResolutionPhaseMeasurement,
+) => void;
 
 /**
  * `CanvasResolvedDocument` plus the component diagnostics of the expansion
@@ -72,6 +100,40 @@ function pageHasInstance(page: CanvasPage): boolean {
 	return false;
 }
 
+function collectNodeIds(node: CanvasNode, target: Set<string>): void {
+	target.add(node.id);
+	if (!isContainerNode(node)) return;
+	for (const child of node.children) collectNodeIds(child, target);
+}
+
+function monotonicNow(): number {
+	return globalThis.performance?.now() ?? Date.now();
+}
+
+function reportPhase(
+	observer: CanvasDocumentResolutionPhaseObserver | undefined,
+	phase: CanvasDocumentResolutionPhase,
+	startedAt: number,
+): void {
+	if (!observer) return;
+	try {
+		observer({ phase, durationMs: Math.max(0, monotonicNow() - startedAt) });
+	} catch {
+		// Performance observation is diagnostic only and must never make layout
+		// or editing fail.
+	}
+}
+
+function resolveLayoutMeasured(
+	ir: CanvasIR,
+	options: CanvasComponentResolveOptions,
+): CanvasResolvedDocument {
+	const startedAt = monotonicNow();
+	const resolved = resolveCanvasLayout(ir, options);
+	reportPhase(options.onPhaseMeasured, "layout", startedAt);
+	return resolved;
+}
+
 /**
  * Resolve a document END TO END: expand every component instance into its
  * virtual subtree, then run the Auto Layout solver over the expanded
@@ -84,16 +146,57 @@ export function resolveCanvasDocument(
 	ir: CanvasIR,
 	options: CanvasComponentResolveOptions = {},
 ): CanvasResolvedComponentDocument {
+	const resolveStartedAt = monotonicNow();
 	const registry = ir.components;
-	const pages = options.pageIds
+	const requestedPages = options.pageIds
 		? ir.pages.filter((p) => options.pageIds?.includes(p.id))
 		: ir.pages;
-	const anyInstances = pages.some(pageHasInstance);
+	const previousComponentDocument = options.previous as
+		| CanvasResolvedComponentDocument
+		| undefined;
+	const canReuseUndirtyPages =
+		options.pageIds === undefined &&
+		options.dirtyPageIds !== undefined &&
+		previousComponentDocument !== undefined &&
+		previousComponentDocument.source.id === ir.id &&
+		previousComponentDocument.componentIssues.length === 0;
+	const dirtyPageIds = canReuseUndirtyPages
+		? new Set(options.dirtyPageIds)
+		: undefined;
+	const previousPages = canReuseUndirtyPages
+		? new Map(options.previous?.source.pages.map((page) => [page.id, page]))
+		: undefined;
+	const pagesToExpand = dirtyPageIds
+		? requestedPages.filter(
+				(page) => dirtyPageIds.has(page.id) || !previousPages?.has(page.id),
+			)
+		: requestedPages;
+	const anyInstances = pagesToExpand.some(pageHasInstance);
+	const layoutOptions = canReuseUndirtyPages
+		? options
+		: (() => {
+				const fullOptions = { ...options };
+				delete fullOptions.dirtyPageIds;
+				return fullOptions;
+			})();
+
+	const reuseOrKeepPage = (page: CanvasPage): CanvasPage => {
+		if (!dirtyPageIds || dirtyPageIds.has(page.id)) return page;
+		const previousPage = previousPages?.get(page.id);
+		return previousPage && previousPage.root !== page.root
+			? { ...page, root: previousPage.root }
+			: page;
+	};
 
 	// Component-free fast path: the layout result IS the result, identical
 	// object modulo the (empty) componentIssues field.
 	if (!anyInstances) {
-		const resolved = resolveCanvasLayout(ir, options);
+		const reusedPages = dirtyPageIds ? ir.pages.map(reuseOrKeepPage) : ir.pages;
+		const effectiveIr = reusedPages.some((page, index) => page !== ir.pages[index])
+			? { ...ir, pages: reusedPages }
+			: ir;
+		reportPhase(options.onPhaseMeasured, "resolve", resolveStartedAt);
+		const resolved = resolveLayoutMeasured(effectiveIr, layoutOptions);
 		return withResolutionState(resolved, { ...resolved, componentIssues: [] });
 	}
 
@@ -101,6 +204,7 @@ export function resolveCanvasDocument(
 	const graph = buildComponentGraph(registry ?? {});
 	const issues: CanvasComponentIssue[] = [];
 	const origins = new Map<string, CanvasResolvedComponentOrigin>();
+	const expandedDirtyNodeIds = new Set(options.dirtyNodeIds ?? []);
 	const budgetCap =
 		options.maxExpandedNodes ?? MAX_COMPONENT_EXPANDED_NODES_PER_RESOLUTION;
 	let expanded = 0;
@@ -125,6 +229,9 @@ export function resolveCanvasDocument(
 				},
 			);
 			expanded += result.expandedNodeCount;
+			if (expandedDirtyNodeIds.has(node.id)) {
+				collectNodeIds(result.root, expandedDirtyNodeIds);
+			}
 			issues.push(...result.issues);
 			for (const [id, origin] of result.origins) origins.set(id, origin);
 			return result.root;
@@ -141,6 +248,7 @@ export function resolveCanvasDocument(
 
 	const expandedPages = ir.pages.map((page) => {
 		if (options.pageIds && !options.pageIds.includes(page.id)) return page;
+		if (dirtyPageIds && !dirtyPageIds.has(page.id)) return reuseOrKeepPage(page);
 		const root = expandTree(page.root);
 		return root === page.root
 			? page
@@ -148,7 +256,11 @@ export function resolveCanvasDocument(
 	});
 	const expandedIr: CanvasIR = { ...ir, pages: expandedPages };
 
-	const resolved = resolveCanvasLayout(expandedIr, options);
+	reportPhase(options.onPhaseMeasured, "resolve", resolveStartedAt);
+	const resolved = resolveLayoutMeasured(expandedIr, {
+		...layoutOptions,
+		dirtyNodeIds: [...expandedDirtyNodeIds],
+	});
 
 	if (origins.size === 0) {
 		return withResolutionState(resolved, {

@@ -34,6 +34,9 @@ export { resolveCanvasLayout } from "./resolve.js";
 // before layout. The only path component-bearing documents may use.
 export {
 	type CanvasComponentResolveOptions,
+	type CanvasDocumentResolutionPhase,
+	type CanvasDocumentResolutionPhaseMeasurement,
+	type CanvasDocumentResolutionPhaseObserver,
 	type CanvasResolvedComponentDocument,
 	resolveCanvasDocument,
 } from "./resolve-document.js";

@@ -8,10 +8,11 @@ import {
 	createComponentInstance,
 	createFrame,
 	createGroup,
+	createPage,
 	createRect,
 	createText,
 } from "../../ir/builders.js";
-import { insertNode } from "../../ir/mutations.js";
+import { insertNode, updateNode } from "../../ir/mutations.js";
 import type {
 	CanvasComponentDefinition,
 	CanvasComponentOverrideMap,
@@ -108,6 +109,28 @@ function docWithInstance(overrides?: CanvasComponentOverrideMap): CanvasIR {
 }
 
 describe("resolveCanvasDocument (M2-06)", () => {
+	it("reports resolve and layout timings without making the observer load-bearing", () => {
+		const phases: string[] = [];
+		const resolved = resolveCanvasDocument(docWithInstance(), {
+			measurement: { measureText: charMeasurer },
+			onPhaseMeasured(measurement) {
+				phases.push(measurement.phase);
+				expect(measurement.durationMs).toBeGreaterThanOrEqual(0);
+			},
+		});
+		expect(resolved.records.size).toBeGreaterThan(0);
+		expect(phases).toEqual(["resolve", "layout"]);
+
+		expect(() =>
+			resolveCanvasDocument(docWithInstance(), {
+				measurement: { measureText: charMeasurer },
+				onPhaseMeasured() {
+					throw new Error("observer failed");
+				},
+			}),
+		).not.toThrow();
+	});
+
 	it("is byte-identical to resolveCanvasLayout for a component-free document", () => {
 		let ir = createCanvasIR({ id: "plain", now: NOW });
 		ir = insertNode(ir, {
@@ -266,5 +289,116 @@ describe("resolveCanvasDocument warm-path identity (M4-03)", () => {
 			previous: first,
 		});
 		expect(reusedSubtreeCount(second)).toBe(0);
+	});
+});
+
+describe("resolveCanvasDocument dirty-subtree resolution (PLAN-0039 E4-T3)", () => {
+	function twoPageDocument(): CanvasIR {
+		return createCanvasIR({
+			id: "dirty-doc",
+			now: NOW,
+			pages: [
+				createPage({
+					id: "p1",
+					root: createGroup({
+						id: "root-p1",
+						children: [
+							createRect({
+								id: "r1",
+								fill: "#ff0000",
+								bounds: { width: 10, height: 10 },
+							}),
+						],
+					}),
+				}),
+				createPage({
+					id: "p2",
+					root: createGroup({
+						id: "root-p2",
+						children: [
+							createRect({
+								id: "r2",
+								bounds: { width: 20, height: 20 },
+							}),
+						],
+					}),
+				}),
+			],
+		});
+	}
+
+	it("updates only the dirty page while retaining untouched page records", () => {
+		const ir = twoPageDocument();
+		const first = resolveCanvasDocument(ir, {});
+		const updated = updateNode(ir, {
+			id: "r1",
+			patch: { fill: "#0000ff" },
+			now: NOW,
+		});
+		const second = resolveCanvasDocument(updated, {
+			previous: first,
+			dirtyPageIds: ["p1"],
+			dirtyNodeIds: ["root-p1", "r1"],
+		});
+
+		expect(second.records.get(toResolvedNodeId("r1"))).not.toBe(
+			first.records.get(toResolvedNodeId("r1")),
+		);
+		expect(second.records.get(toResolvedNodeId("r1"))?.node).toMatchObject({
+			fill: "#0000ff",
+		});
+		expect(second.records.get(toResolvedNodeId("r2"))).toBe(
+			first.records.get(toResolvedNodeId("r2")),
+		);
+		expect(second.pageRoots.get("p2")).toBe(first.pageRoots.get("p2"));
+	});
+
+	it("drops records belonging to a removed dirty page", () => {
+		const ir = twoPageDocument();
+		const first = resolveCanvasDocument(ir, {});
+		const withoutSecondPage = { ...ir, pages: ir.pages.slice(0, 1) };
+		const second = resolveCanvasDocument(withoutSecondPage, {
+			previous: first,
+			dirtyPageIds: ["p2"],
+			dirtyNodeIds: ["root-p2", "r2"],
+		});
+
+		expect(second.pageRoots.has("p2")).toBe(false);
+		expect(second.records.has(toResolvedNodeId("root-p2"))).toBe(false);
+		expect(second.records.has(toResolvedNodeId("r2"))).toBe(false);
+	});
+
+	it("retains expanded component provenance on an untouched page", () => {
+		const componentDocument = docWithInstance();
+		const plainPage = createPage({
+			id: "plain-page",
+			root: createGroup({ id: "plain-root" }),
+		});
+		const ir = {
+			...componentDocument,
+			pages: [...componentDocument.pages, plainPage],
+		};
+		const first = resolveCanvasDocument(ir, {
+			measurement: { measureText: charMeasurer },
+		});
+		const updatedPlainPage = {
+			...plainPage,
+			background: { kind: "solid" as const, value: "#f5f5f5" },
+		};
+		const second = resolveCanvasDocument(
+			{ ...ir, pages: [ir.pages[0] as (typeof ir.pages)[number], updatedPlainPage] },
+			{
+				measurement: { measureText: charMeasurer },
+				previous: first,
+				dirtyPageIds: ["plain-page"],
+				dirtyNodeIds: [],
+			},
+		);
+
+		const instanceId = toResolvedNodeId("inst-1");
+		expect(second.records.get(instanceId)).toBe(first.records.get(instanceId));
+		expect(second.records.get(instanceId)?.component?.componentId).toBe(
+			"cmp-hug",
+		);
 	});
 });
