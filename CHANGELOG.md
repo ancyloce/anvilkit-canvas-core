@@ -34,6 +34,14 @@ does anything:
 
 ## Unreleased
 
+### AI image workflow contracts (PLAN-0039 E7)
+
+- Added provider-neutral capability discovery, normalized input limits, job
+  progress, idempotent cancellation, retry, stable error categories, safety
+  outcomes, cost details, and result metadata.
+- Added selected image asset identity to `AiLayerContext` so a host can build
+  editing requests and verify an accepted replacement against the live node.
+
 ### Collaboration anchors (PLAN-0039 E6)
 
 - Added versioned document anchors alongside page, coordinate, node, and
