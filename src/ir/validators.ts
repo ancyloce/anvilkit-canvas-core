@@ -1095,7 +1095,7 @@ export function buildCanvasExternalSnapshotRegistrySchema(
 	 * Keys are validated against the RAW input, before `z.record` ever sees it.
 	 *
 	 * `z.record` silently drops a `__proto__` key — it never even runs the key
-	 * schema on it (verified against zod@4.4.3). Dropping is the safe direction,
+	 * schema on it (verified against zod@4.5.4). Dropping is the safe direction,
 	 * but it is silent: a document carrying such a key would load "successfully"
 	 * minus that snapshot, and the instance referencing it would then render as an
 	 * unexplained missing component. Checking the raw own-property names first

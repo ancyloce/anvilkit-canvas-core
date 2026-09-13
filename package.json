@@ -60,7 +60,7 @@
 	},
 	"dependencies": {
 		"pdf-lib": "^1.17.1",
-		"zod": "^4.4.3"
+		"zod": "^4.5.4"
 	},
 	"scripts": {
 		"build": "rslib build --lib esm && rslib build --lib cjs --no-clean",
@@ -96,15 +96,15 @@
 		"@anvilkit/biome-config": "workspace:*",
 		"@anvilkit/typescript-config": "workspace:*",
 		"@anvilkit/vitest-config": "workspace:*",
-		"@rslib/core": "^0.23.2",
-		"@types/node": "^26.2.0",
-		"esbuild": "^0.28.1",
+		"@rslib/core": "^1.0.0",
+		"@types/node": "^26.4.1",
+		"esbuild": "^0.28.2",
 		"fast-check": "^4.9.0",
 		"madge": "^8.0.0",
 		"publint": "^0.3.23",
 		"typedoc": "^0.28.20",
 		"typedoc-plugin-markdown": "^4.12.0",
 		"typescript": "7.0.2",
-		"vitest": "^4.1.10"
+		"vitest": "^5.0.0"
 	}
 }
