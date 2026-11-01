@@ -31,9 +31,13 @@ import {
 } from "../walkers.js";
 
 let counter = 0;
+// UTC days from 2026-01-02, so the sequence is the same in every runner
+// timezone and the first tick always differs from sampleIR()'s fixed
+// 2026-01-01T00:00:00.000Z (a local-time `new Date(2026, 0, counter)` equalled
+// it exactly under TZ=UTC, the CI runner's zone).
 function tick(): string {
 	counter++;
-	return new Date(2026, 0, counter).toISOString();
+	return new Date(Date.UTC(2026, 0, 1 + counter)).toISOString();
 }
 
 beforeEach(() => {

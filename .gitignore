@@ -49,7 +49,12 @@ next-env.d.ts
 # `bench/**/*.bench.ts`, and `bench/REFERENCE-ENVIRONMENT.md` is the recorded
 # performance reference environment that the p95 targets are defined against
 # (OQ-1). A blanket `/bench` ignored both, so neither survived a fresh clone
-# and CI could never run the benchmark it was configured to run.
+# and CI could never run the benchmark it was configured to run. The same holds
+# for the modules the benches import (`harness.ts`, `reference-suite.ts`,
+# `fixtures/`, `baselines/`), which `src/__tests__/reference-suite.test.ts`
+# also imports: re-include every source file, not only `*.bench.ts`.
 /bench/*
-!/bench/*.bench.ts
+!/bench/*.ts
 !/bench/*.md
+!/bench/fixtures/
+!/bench/baselines/
